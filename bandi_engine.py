@@ -937,7 +937,13 @@ def cerca_bandi_web(keyword="", stato="aperto", livello="", regione="", provinci
         "tutti":    ["Bandi aperti", "Bandi prossima apertura"],
     }
     stato_vals = stato_map.get(stato, ["Bandi aperti"])
-    filters    = build_filters(stato_vals, livello, regione, provincia)
+    livello_map = {
+        "europeo":   "Bandi europei",
+        "nazionale": "Bandi nazionali",
+        "regionale": "Bandi regionali",
+    }
+    livello_mapped = livello_map.get(livello, livello)
+    filters    = build_filters(stato_vals, livello_mapped, regione, provincia)
     log        = lambda m: None
     stop       = lambda: False
     hits, totale = query_algolia(filters, keyword, log, stop, max_hits=max_hits)
