@@ -1,7 +1,7 @@
 """
 bandi_engine.py — ItalBandi
-Logica estratta da schede_gui.py (invariata).
-Rimosso solo: tkinter, percorsi Windows, auto-install pip.
+Logica estratta da schede_gui.py — IDENTICA, solo Tkinter rimosso.
+Motore PDF: schede_engine.py (non energelia_scheda_engine.py)
 """
 import requests, os, re, sys, json, time
 from datetime import datetime
@@ -25,12 +25,6 @@ ALGOLIA_HEADERS = {
     "Content-Type":             "application/json",
 }
 
-REGIONI = [
-    "Abruzzo","Basilicata","Calabria","Campania","Emilia-Romagna",
-    "Friuli-Venezia-Giulia","Lazio","Liguria","Lombardia","Marche",
-    "Molise","Piemonte","Puglia","Sardegna","Sicilia","Toscana",
-    "Trentino-Alto-Adige","Umbria","Valle d'Aosta","Veneto",
-]
 PROVINCE = {
     "Liguria":    ["Provincia di Genova","Provincia di Imperia","Provincia di La-Spezia","Provincia di Savona"],
     "Lombardia":  ["Provincia di Bergamo","Provincia di Brescia","Provincia di Como","Provincia di Cremona","Provincia di Lecco","Provincia di Lodi","Provincia di Mantova","Provincia di Milano","Provincia di Monza-Brianza","Provincia di Pavia","Provincia di Sondrio","Provincia di Varese"],
@@ -63,9 +57,15 @@ UFFICIALI_KEYWORDS = [
 
 _session = requests.Session()
 _session.headers.update({
-    "User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
     "Accept-Language": "it-IT,it;q=0.9",
 })
+
+JUNK_VALUES = {
+    "null", "none", "", "n/a", "nd", "n.d.", "non specificato",
+    "non disponibile", "vedi bando", "da definire", "da verificare",
+    "non indicato", "non presente", "vedere bando", "—", "-",
+}
 
 def _is_ufficiale(url):
     url_l = url.lower()
@@ -926,40 +926,38 @@ def _suggerisci_con_claude(bandi, log_fn=None):
 
 
 # =============================================================================
-#  WRAPPER PER IL WEB — chiamate senza callback Tkinter
+#  WRAPPER WEB — identico a genera_scheda_da_hit ma senza callback Tkinter
 # =============================================================================
 
 def cerca_bandi_web(keyword="", stato="aperto", livello="", regione="", provincia="", max_hits=50):
-    """Wrapper di query_algolia per uso web (senza stop_fn e log_fn Tkinter)."""
+    """Identico alla GUI: build_filters + query_algolia."""
     stato_map = {
         "aperto":   ["Bandi aperti"],
         "prossimo": ["Bandi prossima apertura"],
         "tutti":    ["Bandi aperti", "Bandi prossima apertura"],
     }
-    stato_vals = stato_map.get(stato, ["Bandi aperti"])
+    # Mappa frontend → valori esatti attesi da build_filters (come nella GUI)
     livello_map = {
         "europeo":   "Bandi europei",
         "nazionale": "Bandi nazionali",
         "regionale": "Bandi regionali",
     }
+    stato_vals     = stato_map.get(stato, ["Bandi aperti"])
     livello_mapped = livello_map.get(livello, livello)
-    filters    = build_filters(stato_vals, livello_mapped, regione, provincia)
-    log        = lambda m: None
-    stop       = lambda: False
+    filters        = build_filters(stato_vals, livello_mapped, regione, provincia)
+    log  = lambda m: None
+    stop = lambda: False
     hits, totale = query_algolia(filters, keyword, log, stop, max_hits=max_hits)
     return hits, totale
 
+
 def hit_to_card(hit):
-    """Converte un hit Algolia in dict per il frontend."""
+    """Converte hit Algolia in dict per il frontend."""
     sc_str, _ = _scadenza_da_hit(hit)
-    taxh  = hit.get("taxonomies_hierarchical", {})
-    ag    = (taxh.get("area_geografica") or {})
-    lvl0  = (ag.get("lvl0") or [""])[0]
-    lvl1  = (ag.get("lvl1") or [""])[0]
     dotaz = _dotazione_da_hit(hit) or "—"
     stato = hit.get("scadenza_testo", "—")
     ben   = beneficiari_da_hit(hit) or "—"
-    link  = hit.get("link") or hit.get("url") or hit.get("permalink") or ""
+    link  = hit.get("permalink") or hit.get("link") or hit.get("url") or ""
     return {
         "id":          hit.get("objectID", ""),
         "titolo":      hit.get("post_title") or hit.get("title") or "—",
@@ -972,14 +970,40 @@ def hit_to_card(hit):
         "_hit":        hit,
     }
 
-def get_testo_bando(hit):
-    """Recupera il testo del bando dalla pagina ContributiEuropa."""
-    link_ce = hit.get("link") or hit.get("url") or hit.get("permalink") or ""
-    if not link_ce:
-        return "", ""
-    url, testo = _cerca_fonte_pagina_ce(link_ce, log_fn=None)
-    return url, testo
 
-def build_content_web(titolo, hit, testo_ufficiale, fonte_url):
-    """Chiama build_content senza log_fn."""
-    return build_content(titolo, hit, testo_ufficiale, fonte_url, log_fn=None)
+def genera_scheda_web(hit):
+    """
+    Identico a genera_scheda_da_hit nella GUI.
+    Restituisce (content_dict, titolo) pronti per schede_engine.generate().
+    """
+    log = lambda m: None
+
+    titolo  = hit.get("post_title", "Bando senza titolo")
+    link_ce = hit.get("permalink", "") or hit.get("link", "") or hit.get("url", "")
+
+    # 1. Leggi pagina ContributiEuropa
+    testo_ce_pag = ""
+    if link_ce:
+        testo_ce_pag = _fetch_text(link_ce, log)
+
+    # 2. Cerca link ufficiali dalla pagina CE
+    url_uff, testo_uff = "", ""
+    if link_ce:
+        url_uff, testo_uff = _cerca_fonte_pagina_ce(link_ce, log)
+
+    # 3. Assembla testo totale (identico alla GUI)
+    parti = []
+    if testo_ce_pag:
+        parti.append(f"=== CONTRIBUTIEUROPA ===\n{testo_ce_pag}")
+    if testo_uff and testo_uff != testo_ce_pag:
+        parti.append(f"=== FONTE UFFICIALE ===\n{testo_uff}")
+    testo_bando = "\n\n".join(parti)
+    url_finale  = url_uff or link_ce or "contributieuropa.com"
+
+    # 4. Build content con Claude (identico alla GUI)
+    content = build_content(
+        titolo=titolo, hit=hit,
+        testo_ufficiale=testo_bando, fonte_url=url_finale,
+        mese_anno=datetime.now().strftime("%B %Y"), log_fn=log,
+    )
+    return content, titolo
