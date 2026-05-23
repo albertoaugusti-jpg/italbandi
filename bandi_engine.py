@@ -1,16 +1,14 @@
 """
 bandi_engine.py — ItalBandi
-Logica estratta da schede_gui.py — IDENTICA, solo Tkinter rimosso.
-Motore PDF: schede_engine.py (non energelia_scheda_engine.py)
+Flusso pulito:
+  1. Titolo bando da Algolia (già nel browser)
+  2. Claude cerca il bando su Google con web_search
+  3. Se trova link ufficiale (decreto/PDF/.gov) lo legge
+  4. Genera JSON con il prompt Energelia
+  5. Restituisce content dict per schede_engine.generate()
 """
-import requests, os, re, sys, json, time
+import requests, os, re, json, time
 from datetime import datetime
-from pathlib import Path
-
-try:
-    from pypdf import PdfReader
-except ImportError:
-    PdfReader = None
 
 # ── Credenziali ───────────────────────────────────────────────────────────────
 ANTHROPIC_API_KEY = os.environ.get("CLAUDE_API_KEY") or os.environ.get("ANTHROPIC_API_KEY", "")
@@ -48,51 +46,7 @@ PROVINCE = {
     "Valle d'Aosta": ["Provincia di Aosta"],
 }
 
-UFFICIALI_KEYWORDS = [
-    ".gov.it", ".regione.", ".provincia.", ".comune.", ".mise.gov",
-    ".mef.gov", ".mimit.gov", ".mur.gov", ".invitalia.", ".finlombarda.",
-    ".simest.", ".camcom.", "gazzettaufficiale", "normattiva",
-    ".inail.", ".anci.", ".agriligurianet.",
-]
-
-_session = requests.Session()
-_session.headers.update({
-    "User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    "Accept-Language": "it-IT,it;q=0.9",
-})
-
-JUNK_VALUES = {
-    "null", "none", "", "n/a", "nd", "n.d.", "non specificato",
-    "non disponibile", "vedi bando", "da definire", "da verificare",
-    "non indicato", "non presente", "vedere bando", "—", "-",
-}
-
-def _is_ufficiale(url):
-    url_l = url.lower()
-    return any(k in url_l for k in UFFICIALI_KEYWORDS)
-
-
-def fmt_date(val):
-    if not val:
-        return "", None
-    if isinstance(val, (int, float)):
-        try:
-            dt = datetime.fromtimestamp(val)
-            return dt.strftime("%d/%m/%Y"), dt
-        except Exception:
-            return str(val), None
-    for fmt in ["%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"]:
-        try:
-            dt = datetime.strptime(str(val).strip(), fmt)
-            return dt.strftime("%d/%m/%Y"), dt
-        except Exception:
-            pass
-    # Stringa già leggibile (es. "Fino ad esaurimento fondi")
-    s = str(val).strip()
-    if len(s) > 3:
-        return s, None
-    return "", None
-
+# ── Algolia helpers ───────────────────────────────────────────────────────────
 
 def build_filters(scadenza_vals, livello, regione, provincia):
     parts = []
@@ -111,833 +65,12 @@ def build_filters(scadenza_vals, livello, regione, provincia):
     return " AND ".join(parts)
 
 
-def query_algolia(filters, keyword, log_fn, stop_fn, max_hits=500, restrict_attrs=None):
-    all_hits, page, total = [], 0, 0
-    while True:
-        if stop_fn():
-            break
-        payload = {"query": keyword, "hitsPerPage": 100, "page": page,
-                   "filters": filters, "attributesToRetrieve": ["*"]}
-        if restrict_attrs:
-            payload["restrictSearchableAttributes"] = restrict_attrs
-        r = requests.post(ALGOLIA_URL, headers=ALGOLIA_HEADERS, json=payload, timeout=15)
-        r.raise_for_status()
-        data     = r.json()
-        hits     = data.get("hits", [])
-        all_hits.extend(hits)
-        total    = data.get("nbHits", 0)
-        nb_pages = data.get("nbPages", 1)
-        log_fn(f"  Pagina {page+1}/{nb_pages} — {len(all_hits)}/{total} bandi")
-        if page + 1 >= nb_pages or len(all_hits) >= max_hits:
-            break
-        page += 1
-    return all_hits, total
-
-
-# =============================================================================
-#  ESTRAZIONE DATI DALL'HIT ALGOLIA
-# =============================================================================
-
-def _scadenza_da_hit(hit):
-    for campo in ("scadenza", "data_scadenza", "deadline", "data_chiusura",
-                  "fine", "data_fine", "end_date", "scadenza_data"):
-        val = hit.get(campo)
-        if val:
-            s, dt = fmt_date(val)
-            if s:
-                return s, dt
-    return "", None
-
-
-def _dotazione_da_hit(hit):
-    for campo in ("dotazione", "dotazione_finanziaria", "budget", "importo",
-                  "importo_totale", "risorse", "finanziamento", "stanziamento",
-                  "fondo", "contributo_massimo"):
-        val = hit.get(campo)
-        if val and str(val).strip() not in ("0", "0.0", "", "[]", "{}"):
-            v = str(val).strip()
-            try:
-                n = float(v.replace(",", ".").replace(".", "").replace(" ", ""))
-                if n > 0:
-                    if n >= 1_000_000:
-                        return f"EUR {n/1_000_000:,.1f} MLN".replace(",", ".")
-                    return f"EUR {int(n):,}".replace(",", ".")
-            except ValueError:
-                if any(c.isdigit() for c in v):
-                    return v[:50]
-    return None
-
-
-def beneficiari_da_hit(hit):
-    for chiave in ("beneficiari", "destinatari", "soggetti_ammissibili",
-                   "soggetti", "tipo_beneficiario"):
-        val = hit.get(chiave)
-        if val:
-            if isinstance(val, list):
-                puliti = [str(v).split("/")[0].strip() for v in val[:3]]
-                return ", ".join(p for p in puliti if p)
-            if isinstance(val, str) and val.strip():
-                return val.strip()[:120]
-    return ""
-
-
-def livello_da_hit(hit):
-    taxh = hit.get("taxonomies_hierarchical", {})
-    ag   = taxh.get("area_geografica", {}) or {}
-    lvl0 = ag.get("lvl0") or []
-    lvl1 = ag.get("lvl1") or []
-    if not lvl0:
-        return "—"
-    area = lvl0[0]
-    if "Europei" in area:
-        return "Europeo"
-    if "Nazionali" in area:
-        return "Nazionale"
-    geo = lvl1[0].replace("Provincia di ", "") if lvl1 else area
-    return f"Regionale  {geo}"
-
-
-# =============================================================================
-#  MOTORE DI RICERCA — Claude API con web_search
-# =============================================================================
-
-def _fetch_text(url, log_fn=None):
-    """Scarica una pagina e restituisce il testo pulito."""
-    try:
-        r     = _session.get(url, timeout=15, allow_redirects=True)
-        r.raise_for_status()
-        html  = r.text
-        html  = re.sub(r'<script[^>]*>.*?</script>', ' ', html,  flags=re.DOTALL | re.IGNORECASE)
-        html  = re.sub(r'<style[^>]*>.*?</style>',   ' ', html,  flags=re.DOTALL | re.IGNORECASE)
-        testo = re.sub(r'<[^>]+>', ' ', html)
-        testo = re.sub(r'\s+',     ' ', testo).strip()
-        return testo
-    except Exception as e:
-        if log_fn:
-            log_fn(f"  Fetch error {url[:60]}: {e}")
-        return ""
-
-
-def _fetch_text_pdf(pdf_path):
-    try:
-        reader = PdfReader(pdf_path)
-        return " ".join(p.extract_text() or "" for p in reader.pages)
-    except Exception:
-        return ""
-
-
-def _estrai_links_da_html(html):
-    return re.findall(r'href=[\'"]?(https?://[^\'">\s]+)[\'"]?', html)
-
-
-def _cerca_bando_con_claude(titolo, log_fn=None):
-    """Usa Claude API + web_search. Retry automatico su rate limit 429."""
-    def log(m):
-        if log_fn: log_fn(m)
-
-    if not ANTHROPIC_API_KEY:
-        log("  [!] ANTHROPIC_API_KEY non configurata")
-        return "", ""
-
-    log(f"  [Claude] Ricerca: {titolo[:65]}...")
-    prompt = (
-        f'Cerca informazioni sul bando italiano: "{titolo}"\n\n'
-        "Trova e riporta con valori NUMERICI ESATTI:\n"
-        "1. Dotazione finanziaria totale (importo del fondo)\n"
-        "2. Intensita del contributo (% o importo max per beneficiario)\n"
-        "3. Scadenza presentazione domande\n"
-        "4. Apertura sportello\n"
-        "5. Chi puo partecipare (beneficiari)\n"
-        "6. Spese ammissibili\n"
-        "7. Come presentare la domanda (portale/piattaforma)\n"
-        "8. URL sito ufficiale\n\n"
-        "Riporta i dati trovati in modo diretto e preciso."
-    )
-
-    for tentativo in range(3):
-        try:
-            resp = requests.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={"x-api-key": ANTHROPIC_API_KEY,
-                         "anthropic-version": "2023-06-01",
-                         "content-type": "application/json"},
-                json={"model": "claude-haiku-4-5-20251001",
-                      "max_tokens": 1500,
-                      "tools": [{"type": "web_search_20250305", "name": "web_search"}],
-                      "messages": [{"role": "user", "content": prompt}]},
-                timeout=90,
-            )
-            if resp.status_code == 429:
-                wait = (tentativo + 1) * 8
-                log(f"  Rate limit — attendo {wait}s (tentativo {tentativo+1}/3)...")
-                time.sleep(wait)
-                continue
-            if resp.status_code != 200:
-                log(f"  API error {resp.status_code}: {resp.text[:120]}")
-                return "", ""
-
-            content = resp.json().get("content", [])
-            testo   = "\n".join(b.get("text","") for b in content if b.get("type")=="text").strip()
-            url_uff = ""
-            for u in re.findall(r'https?://[^\s<>]+', testo):
-                if _is_ufficiale(u):
-                    url_uff = u.rstrip(".,)")
-                    break
-            log(f"  [Claude] OK — {len(testo)} caratteri")
-            if url_uff:
-                log(f"  [Claude] Fonte: {url_uff[:70]}")
-            return testo, url_uff
-
-        except Exception as e:
-            log(f"  [Claude] Errore: {e}")
-            return "", ""
-
-    log("  [Claude] Tutti i tentativi falliti")
-    return "", ""
-
-
-def _cerca_fonte_pagina_ce(link_ce, log_fn=None):
-    """Fallback: scarica la pagina CE e cerca link ufficiali."""
-    def log(m):
-        if log_fn: log_fn(m)
-
-    if not link_ce:
-        return "", ""
-    try:
-        r    = _session.get(link_ce, timeout=12)
-        html = r.text
-        links_uff = list(dict.fromkeys(
-            l for l in _estrai_links_da_html(html)
-            if _is_ufficiale(l) and "contributieuropa" not in l
-        ))
-        log(f"  Pagina CE: {len(links_uff)} link ufficiali")
-        for link in links_uff[:3]:
-            testo = _fetch_text(link, log_fn)
-            if testo and len(testo) > 300:
-                return link, testo
-        # Testo della pagina CE come ultimo fallback
-        testo_ce = re.sub(r'<[^>]+>', ' ', html)
-        testo_ce = re.sub(r'\s+', ' ', testo_ce).strip()
-        return link_ce, testo_ce
-    except Exception as e:
-        log(f"  Errore CE: {e}")
-        return "", ""
-
-
-# =============================================================================
-#  ESTRAZIONE DATI STRUTTURATI DAL TESTO
-# =============================================================================
-
-JUNK_VALUES = {
-    "null", "none", "", "n/a", "nd", "n.d.", "non specificato",
-    "non disponibile", "vedi bando", "da definire", "da verificare",
-    "non indicato", "non presente", "vedere bando", "—", "-",
-}
-
-
-def _sintetizza_metrica(campo, valore):
-    """
-    Riduce il valore per i box metriche (colpo d'occhio).
-    intensita  → "50%"  o  "EUR 50.000"
-    dotazione  → "EUR 10 MLN"  o  "EUR 500.000"
-    scadenza   → "15/07/2026"
-    stato      → "Aperto" / "Pross. apertura" / "Chiuso"
-    """
-    if not valore or str(valore).strip() in ("—", "-", ""):
-        return "—"
-    v = str(valore).strip()
-    c = campo.lower()
-
-    if "intensit" in c or "contributo" in c:
-        m2 = re.search(r'(\d{1,3})\s*%[^0-9]{0,15}(\d{1,3})\s*%', v)
-        if m2:
-            return f"{m2.group(1)}%-{m2.group(2)}%"
-        m = re.search(r'(\d{1,3})\s*%', v)
-        if m:
-            return f"{m.group(1)}%"
-        m = re.search(r'(?:eur(?:o)?\s*|€\s*)([\d][\d\.,]+)', v, re.IGNORECASE)
-        if m:
-            return f"EUR {m.group(1)}"[:16]
-        return v[:15]
-
-    if "dotaz" in c or "fondo" in c or "risorse" in c:
-        m = re.search(r'([\d]+(?:[,\.][\d]+)?)\s*(?:milion[ei]|mln)\b', v, re.IGNORECASE)
-        if m:
-            try:
-                n = float(m.group(1).replace(",", "."))
-                return f"EUR {n:g} MLN"
-            except ValueError:
-                return f"EUR {m.group(1)} MLN"
-        for raw in re.findall(r'[\d][\d\.,]+', v):
-            try:
-                n = float(raw.replace(".", "").replace(",", "."))
-                if n >= 1_000_000:
-                    return f"EUR {n/1_000_000:g} MLN"
-                if n >= 1_000:
-                    return f"EUR {int(n):,}".replace(",", ".")
-            except ValueError:
-                continue
-        return v[:18]
-
-    if "scad" in c or "apertura" in c or "data" in c:
-        m = re.search(r'\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{2,4}', v)
-        if m:
-            return m.group(0).replace("-", "/").replace(".", "/")
-        return v[:18]
-
-    if "stato" in c:
-        vl = v.lower()
-        if "prossima" in vl:                   return "Pross. apertura"
-        if "aperto" in vl or "aperti" in vl:   return "Aperto"
-        if "chiuso" in vl:                      return "Chiuso"
-        return v[:15]
-
-    return v[:18]
-
-
-def _pulisci(val):
-    """Restituisce val se significativo, None se è un placeholder."""
-    if not val:
-        return None
-    if str(val).strip().lower() in JUNK_VALUES:
-        return None
-    return str(val).strip()
-
-
-def _estrai_dati_con_ia(testo, titolo, log_fn=None):
-    """
-    Estrae dati strutturati dal testo.
-    Se API key configurata: usa Claude per parsing JSON.
-    Altrimenti: regex calibrati.
-    """
-    def log(m):
-        if log_fn: log_fn(m)
-
-    if not testo or len(testo) < 80:
-        return {}
-
-    # ── Claude API per parsing strutturato ───────────────────────────────
-    if ANTHROPIC_API_KEY:
-        prompt = (
-            "Dal testo seguente estrai i dati del bando in JSON.\n"
-            "Campi: dotazione (importo totale fondo), intensita (% o EUR max per beneficiario), "
-            "scadenza (DD/MM/YYYY), apertura (DD/MM/YYYY), beneficiari (chi partecipa, max 100 car.), "
-            "spese (cosa si finanzia, max 150 car.), procedura (come presentare domanda, max 100 car.), "
-            "note_critiche (vincoli principali, max 150 car.).\n"
-            "USA null SE il dato NON E' NEL TESTO. NON scrivere mai 'vedi bando' o 'non specificato'.\n\n"
-            f"Titolo: {titolo}\nTesto:\n{testo[:4000]}\n\n"
-            'Rispondi SOLO con JSON valido.'
-        )
-        try:
-            resp = requests.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={"x-api-key": ANTHROPIC_API_KEY,
-                         "anthropic-version": "2023-06-01",
-                         "content-type": "application/json"},
-                json={"model": "claude-haiku-4-5-20251001", "max_tokens": 600,
-                      "messages": [{"role": "user", "content": prompt}]},
-                timeout=25,
-            )
-            raw  = resp.json()["content"][0]["text"].strip()
-            raw  = re.sub(r'^```(?:json)?\s*|\s*```$', '', raw, flags=re.MULTILINE).strip()
-            data = json.loads(raw)
-            puliti = {k: _pulisci(v) for k, v in data.items()}
-            puliti = {k: v for k, v in puliti.items() if v}
-            log(f"  AI parsing: {list(puliti.keys())}")
-            if puliti:
-                return puliti
-        except Exception as e:
-            log(f"  AI parsing error: {e}")
-
-    # ── Regex fallback ────────────────────────────────────────────────────
-    log("  Regex extraction...")
-    result = {}
-
-    for pat in [
-        r'dotazione\s+(?:finanziaria\s+)?(?:di|pari\s+a)\s*(?:euro\s+|eur\s+|€\s*)?([\d][\d\.\s]*(?:milion[ei]|mln)?(?:\s*(?:di\s*)?(?:euro|€))?)',
-        r'(?:risorse|stanziamento|budget|fondo)\s+(?:di|pari\s+a)\s*(?:€\s*)?([\d][\d\.\s]*(?:milion[ei]|mln)?)',
-        r'([\d][\d\.]*)\s*(?:milion[ei]|mln)\s*(?:di\s*)?(?:euro|€)',
-    ]:
-        m = re.search(pat, testo, re.IGNORECASE)
-        if m:
-            result["dotazione"] = m.group(1).strip().rstrip(".,")[:50]
-            break
-
-    for pat in [
-        r'(?:contributo|agevolazione|fondo\s+perduto)[^%\.]{0,80}?(\d{1,3})\s*%',
-        r'(?:fino\s+(?:al|a)|pari\s+al)\s+(\d{1,3})\s*%',
-        r'(\d{1,3})\s*%\s+(?:delle?\s+)?(?:spese|costi|investiment)',
-    ]:
-        m = re.search(pat, testo, re.IGNORECASE)
-        if m:
-            result["intensita"] = f"{m.group(1)}%"
-            break
-
-    for pat in [
-        r'(?:scadenza|termine|chiusura|entro\s+il)[^\d]{0,20}(\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{2,4})',
-        r'(\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{4})',
-    ]:
-        m = re.search(pat, testo, re.IGNORECASE)
-        if m:
-            result["scadenza"] = m.group(1).replace("-", "/").replace(".", "/")
-            break
-
-    log(f"  Regex: {list(result.keys())}")
-    return result
-
-
-# =============================================================================
-#  BUILD CONTENT — assembla il dict per l'engine PDF
-# =============================================================================
-
-def _nome_file_sicuro(titolo):
-    s  = re.sub(r'[^\w\s\-]', '', titolo)
-    s  = re.sub(r'\s+', '_', s.strip())
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return f"Scheda_{s[:50]}_{ts}.pdf"
-
-
-def _ente_da_area(area):
-    if not area:
-        return "Ente erogatore"
-    a = area.lower()
-    if "europ" in a:
-        return "Commissione Europea / Fondi UE"
-    if "naz" in a:
-        return "Ministero / Ente nazionale"
-    return f"Regione / Ente locale · {area}"
-
-
-def _cta_da_stato(stato):
-    if not stato:
-        return "Contattaci per valutare la tua candidatura!"
-    s = stato.lower()
-    if "prossima" in s:
-        return "Bando in arrivo: preparati ora con Energelia!"
-    if "aperto" in s or "aperti" in s:
-        return "Bando aperto: agisci ora, siamo a disposizione!"
-    return "Contattaci per valutare la tua candidatura!"
-
-
-def _sintetizza(val, max_len=20):
-    """
-    Riduce un valore al dato essenziale per il box metrica.
-    Es: "50% delle spese ammissibili per..." -> "50%"
-        "EUR 2.000.000 complessivi" -> "EUR 2.000.000"
-        "Fino a EUR 50.000 per impresa" -> "Fino a EUR 50.000"
-    """
-    import re as _re
-    if not val or val == "—":
-        return "—"
-    v = str(val).strip()
-
-    # Estrai solo percentuale se presente all'inizio
-    m = _re.match(r'^(\d{1,3}\s*%)', v)
-    if m:
-        return m.group(1).strip()
-
-    # "X% delle/del/di..." → "X%"
-    m = _re.match(r'^((?:fino\s+(?:al|a)\s+)?\d{1,3}\s*%)', v, _re.IGNORECASE)
-    if m:
-        return m.group(1).strip()
-
-    # "EUR X" o "€ X" o "X milioni/mln" → tieni solo la parte numerica+unità
-    m = _re.match(r'^((?:EUR|€|euro)\s*[\d\.\,]+(?:\s*(?:MLN|MLD|milion\w+))?)', v, _re.IGNORECASE)
-    if m:
-        return m.group(1).strip()
-    m = _re.match(r'^([\d\.\,]+\s*(?:MLN|MLD|milion\w+|miliard\w+)?\s*(?:EUR|€|euro)?)', v, _re.IGNORECASE)
-    if m:
-        candidate = m.group(1).strip()
-        if len(candidate) <= max_len:
-            return candidate
-
-    # Tronca con "..." se troppo lungo
-    if len(v) > max_len:
-        return v[:max_len].rstrip() + "…"
-    return v
-
-
-def _build_metriche(dotazione, intensita, stato_metrica, stato_bg, data_label, data_val):
-    return [
-        {"label": "DOTAZIONE",
-         "valore": _sintetizza_metrica("dotazione", dotazione),
-         "bg": "blue"},
-        {"label": "INTENSITA'",
-         "valore": _sintetizza_metrica("intensita", intensita),
-         "bg": "green"},
-        {"label": "STATO",
-         "valore": _sintetizza_metrica("stato", stato_metrica),
-         "bg": stato_bg},
-        {"label": data_label or "SCADENZA",
-         "valore": _sintetizza_metrica("scadenza", data_val),
-         "bg": "blue"},
-    ]
-
-
-def _genera_scheda_con_claude(titolo, testo_bando, log_fn=None):
-    """
-    Cuore del sistema: Claude legge il testo del bando e genera TUTTE
-    le sezioni della scheda come JSON strutturato.
-    """
-    def log(m):
-        if log_fn: log_fn(m)
-
-    if not ANTHROPIC_API_KEY:
-        log("  [!] ANTHROPIC_API_KEY non configurata")
-        return {}
-
-    log("  [Claude] Generazione contenuti scheda...")
-
-    prompt = (
-        f'Sei un esperto di finanza agevolata italiana che lavora per Energelia S.r.l.\n\n'
-        f'Analizza il seguente testo di un bando di finanziamento. '
-        f'Se mancano dati numerici chiave (importi, percentuali, date), cercali online.\n\n'
-        f'TITOLO BANDO: "{titolo}"\n\n'
-        f'TESTO DISPONIBILE:\n{testo_bando[:6000]}\n\n'
-        f'Genera i contenuti per la scheda Energelia in formato JSON con questa struttura ESATTA.\n'
-        f'Ogni bullet deve contenere dati REALI e SPECIFICI estratti dal bando — mai placeholder.\n\n'
-        f'{{\n'
-        f'  "dotazione": "importo totale fondo (es. EUR 10 MLN) o null se non trovato",\n'
-        f'  "intensita": "percentuale e tipo (es. 40% fondo perduto) o null",\n'
-        f'  "contributo_max": "importo massimo per beneficiario in euro o null",\n'
-        f'  "investimento_min": "investimento minimo ammissibile in euro o null",\n'
-        f'  "scadenza": "DD/MM/YYYY o null",\n'
-        f'  "apertura": "DD/MM/YYYY o null",\n'
-        f'  "ente_finalita": ["Nome ente erogatore", "Obiettivo specifico del bando", "Contesto programmatico"],\n'
-        f'  "chi_partecipa": ["Tipologia soggetti ammessi", "Requisiti soggettivi chiave", "Eventuali esclusioni"],\n'
-        f'  "cosa_finanziabile": ["Tipologie di investimento ammissibili", "Voci di spesa con eventuali % max", "Spese speciali o premiali"],\n'
-        f'  "spese_non_ammissibili": ["Spese escluse esplicitamente", "IVA (salvo casi specifici)", "Spese ante-ammissione"],\n'
-        f'  "contributo_voci": ["Intensita con valori numerici esatti", "Contributo massimo per beneficiario", "Scaglioni o fasce per dimensione"],\n'
-        f'  "criteri_valutazione": ["Tipo procedura: valutativa/sportello", "Criteri principali con punteggi", "Documentazione richiesta"],\n'
-        f'  "fasi_tempi": ["Apertura: data o stato", "Scadenza: data", "Istruttoria e rendicontazione"],\n'
-        f'  "come_presentare": ["Portale o piattaforma specifica", "Credenziali richieste (SPID, CNS)", "Allegati principali obbligatori"],\n'
-        f'  "perche_interessante": ["Punto di forza 1 concreto", "Punto di forza 2 concreto", "Punto di forza 3 concreto"],\n'
-        f'  "criticita": ["Vincolo operativo reale", "Attenzione su requisiti o esclusioni", "Scadenze da rispettare"]\n'
-        f'}}\n\n'
-        f'Rispondi SOLO con il JSON valido. Nessun testo prima o dopo. Solo JSON puro.'
-    )
-
-    for tentativo in range(3):
-        try:
-            resp = requests.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={"x-api-key": ANTHROPIC_API_KEY,
-                         "anthropic-version": "2023-06-01",
-                         "content-type": "application/json"},
-                json={"model": "claude-haiku-4-5-20251001",
-                      "max_tokens": 2000,
-                      "tools": [{"type": "web_search_20250305", "name": "web_search"}],
-                      "messages": [{"role": "user", "content": prompt}]},
-                timeout=120,
-            )
-            if resp.status_code == 429:
-                wait = (tentativo + 1) * 8
-                log(f"  Rate limit — attendo {wait}s...")
-                time.sleep(wait)
-                continue
-            if resp.status_code != 200:
-                log(f"  API error {resp.status_code}: {resp.text[:120]}")
-                return {}
-
-            blocks = resp.json().get("content", [])
-            testo  = "\n".join(b.get("text","") for b in blocks if b.get("type")=="text").strip()
-            if not testo:
-                log("  Risposta vuota da Claude")
-                return {}
-
-            # Rimuovi fence ```json e tag spurii, poi estrai {…}
-            raw = re.sub(r'```(?:json)?\s*', '', testo)
-            raw = re.sub(r'```', '', raw)
-            raw = re.sub(r'</?[a-zA-Z:][^>]*>', '', raw).strip()
-            start = raw.find('{')
-            end   = raw.rfind('}')
-            if start == -1 or end == -1:
-                log(f"  Nessun JSON (len={len(testo)})")
-                log(f"  Anteprima: {testo[:200]}")
-                return {}
-            data = json.loads(raw[start:end+1])
-            log(f"  [Claude] Scheda generata — {len(data)} sezioni")
-            return data
-
-        except json.JSONDecodeError as e:
-            log(f"  JSON decode error: {e}")
-            return {}
-        except Exception as e:
-            log(f"  [Claude] Errore: {e}")
-            return {}
-
-    return {}
-
-
-def build_content(titolo, hit, testo_ufficiale, fonte_url, mese_anno=None, log_fn=None):
-    hit       = hit or {}
-    mese_anno = mese_anno or datetime.now().strftime("%B %Y")
-    stato     = hit.get("scadenza_testo", "")
-
-    sc_alg, _ = _scadenza_da_hit(hit)
-    taxh  = hit.get("taxonomies_hierarchical", {})
-    areas = (taxh.get("area_geografica") or {}).get("lvl0") or []
-    area  = areas[0] if areas else ""
-    ente_alg = _ente_da_area(area)
-
-    # ── Claude genera tutte le sezioni dal testo del bando ────────────────
-    # Se il testo è vuoto (scraping fallito su server), Claude usa web_search
-    cl = {}
-    testo_per_claude = testo_ufficiale or f"Bando: {titolo}. Cerca online informazioni complete su questo bando italiano."
-    cl = _genera_scheda_con_claude(titolo, testo_per_claude, log_fn)
-
-    def cv(key, fallback=None):
-        v = cl.get(key)
-        if isinstance(v, list):
-            return [x for x in v if x and str(x).strip()] or (fallback if isinstance(fallback, list) else [])
-        if v and str(v).strip() not in ("null", "None", "", "—", "-"):
-            return str(v).strip()
-        return fallback
-
-    dotazione   = cv("dotazione",   _dotazione_da_hit(hit))
-    intensita   = cv("intensita")
-    contrib_max = cv("contributo_max")
-    scadenza    = cv("scadenza",    sc_alg)
-    apertura    = cv("apertura")
-
-    # ── Verifica se la scadenza è già passata (correzione stato errato da CE) ──
-    _, sc_dt = fmt_date(scadenza) if scadenza else (None, None)
-    if sc_dt and sc_dt < datetime.now() and "prossima" in stato.lower():
-        stato = "Bandi chiusi"  # CE non ha aggiornato il tag — correggiamo
-
-    if apertura and scadenza:
-        data_label, data_val = "SCADENZA", scadenza
-    elif scadenza:
-        data_label, data_val = "SCADENZA", scadenza
-    elif apertura:
-        data_label, data_val = "APERTURA", apertura
-    else:
-        data_label, data_val = "SCADENZA", None
-
-    stato_bg = "blue" if "prossima" in stato.lower() else "orange"
-
-    def sezione(key, fallback_voci):
-        voci = cv(key, [])
-        return voci if voci else fallback_voci
-
-    ente_voci   = sezione("ente_finalita",        [ente_alg, f"Area: {area}"] if area else [ente_alg])
-    ben_voci    = sezione("chi_partecipa",         [beneficiari_da_hit(hit) or "Verificare requisiti sul bando"])
-    fin_voci    = sezione("cosa_finanziabile",     ["Verificare spese ammissibili sul bando"])
-    nonamm_voci = sezione("spese_non_ammissibili", ["IVA (salvo casi specifici)", "Spese ante-ammissione", "Oneri finanziari"])
-    contrib_voci= sezione("contributo_voci",       [f"Intensita\': {intensita}" if intensita else "Verificare sul bando"])
-    crit_val    = sezione("criteri_valutazione",   ["Verificare procedura e criteri sul bando"])
-    tempi_voci  = sezione("fasi_tempi", [f"<b>Apertura:</b> {apertura}" if apertura else None,
-                                          f"<b>Scadenza:</b> {scadenza}" if scadenza else None])
-    come_voci   = sezione("come_presentare",       ["Verificare allegati obbligatori", "Contatta Energelia per supporto"])
-    punti_forza = sezione("perche_interessante",   [f"Contributo: {intensita}" if intensita else None,
-                                                    f"Scadenza: {scadenza}" if scadenza else None])
-    criticita   = sezione("criticita", ["Verificare requisiti soggettivi prima di candidarsi",
-                                         "Controllare cumulabilita\' con altri contributi ricevuti",
-                                         "Rispettare le scadenze di presentazione e rendicontazione"])
-
-    def pulisci_lista(lst):
-        return [str(x).strip() for x in lst if x and str(x).strip() not in ("None","null","—","-","")]
-
-    return {
-        "titolo":      titolo.upper(),
-        "sottotitolo": " · ".join(v for v in [ente_alg, area, stato] if v),
-        "metriche":    _build_metriche(dotazione or contrib_max, intensita,
-                                        stato or "Aperto", stato_bg, data_label, data_val),
-        "sinistra": [
-            {"titolo": "ENTE / FINALITA'",      "voci": pulisci_lista(ente_voci)},
-            {"titolo": "CHI PUO' PARTECIPARE",  "voci": pulisci_lista(ben_voci)},
-            {"titolo": "COSA E' FINANZIABILE",  "voci": pulisci_lista(fin_voci)},
-            {"titolo": "SPESE NON AMMISSIBILI", "voci": pulisci_lista(nonamm_voci)},
-        ],
-        "tabella_contributi": None,
-        "destra": [
-            {"titolo": "CONTRIBUTO / INTENSITA'", "voci": pulisci_lista(contrib_voci)},
-            {"titolo": "CRITERI / VALUTAZIONE",    "voci": pulisci_lista(crit_val)},
-            {"titolo": "FASI E TEMPI",             "voci": pulisci_lista(tempi_voci)},
-            {"titolo": "COME PRESENTARE",          "voci": pulisci_lista(come_voci)},
-        ],
-        "punti_forza": pulisci_lista(punti_forza),
-        "criticita":   pulisci_lista(criticita),
-        "cta_testo":   _cta_da_stato(stato),
-        "cta_tel":     "Tel. 010 8078800",
-        "cta_email":   "a.augusti@energelia.it",
-        "fonte":       f"Elaborato da Energelia S.r.l. · {datetime.now().strftime('%B %Y')}",
-        "mese_anno":   mese_anno,
-    }
-
-
-def _cerca_fonte_pagina_ce(link_ce, log_fn=None):
-    """Scarica la pagina CE, segue i link ufficiali e restituisce (url, testo)."""
-    def log(m):
-        if log_fn: log_fn(m)
-    if not link_ce:
-        return "", ""
-    try:
-        r    = _session.get(link_ce, timeout=12)
-        html = r.text
-        links_uff = list(dict.fromkeys(
-            l for l in _estrai_links_da_html(html)
-            if _is_ufficiale(l) and "contributieuropa" not in l
-        ))
-        log(f"  Pagina CE: {len(links_uff)} link ufficiali trovati")
-        for link in links_uff[:3]:
-            testo = _fetch_text(link, log_fn)
-            if testo and len(testo) > 300:
-                return link, testo
-        testo_ce = re.sub(r'<[^>]+>', ' ', html)
-        testo_ce = re.sub(r'\s+', ' ', testo_ce).strip()
-        return link_ce, testo_ce
-    except Exception as e:
-        log(f"  Errore CE: {e}")
-        return "", ""
-
-
-# =============================================================================
-#  FLUSSO GENERAZIONE SCHEDA
-# =============================================================================
-
-def genera_scheda_da_hit(hit, log_fn, done_fn, error_fn):
-    """
-    1. Leggi pagina CE + link ufficiali
-    2. Claude legge il testo e genera tutte le sezioni
-    3. Genera PDF
-    """
-    titolo  = hit.get("post_title", "Bando senza titolo")
-    link_ce = hit.get("permalink", "")
-
-    log_fn(f">> {titolo[:80]}")
-    log_fn("-" * 55)
-
-    testo_ce_pag = ""
-    if link_ce:
-        log_fn("  [1] Lettura pagina contributieuropa.com...")
-        testo_ce_pag = _fetch_text(link_ce, log_fn)
-        if testo_ce_pag:
-            log_fn(f"      {len(testo_ce_pag)} caratteri")
-
-    url_uff, testo_uff = "", ""
-    if link_ce:
-        log_fn("  [2] Link ufficiali dalla pagina CE...")
-        url_uff, testo_uff = _cerca_fonte_pagina_ce(link_ce, log_fn)
-
-    parti = []
-    if testo_ce_pag:
-        parti.append(f"=== CONTRIBUTIEUROPA ===\n{testo_ce_pag}")
-    if testo_uff and testo_uff != testo_ce_pag:
-        parti.append(f"=== FONTE UFFICIALE ===\n{testo_uff}")
-    testo_bando = "\n\n".join(parti)
-    url_finale  = url_uff or link_ce or "contributieuropa.com"
-
-    log_fn("-" * 55)
-    log_fn("  Elaborazione e generazione PDF...")
-
-    content = build_content(
-        titolo=titolo, hit=hit,
-        testo_ufficiale=testo_bando, fonte_url=url_finale,
-        mese_anno=datetime.now().strftime("%B %Y"), log_fn=log_fn,
-    )
-    nome_file   = _nome_file_sicuro(titolo)
-    output_path = str(OUTPUT_DIR / nome_file)
-    try:
-        ENGINE.generate(content, output_path, LOGO_PATH)
-        done_fn(output_path)
-    except Exception as e:
-        error_fn(f"Errore generazione PDF:\n{e}")
-
-
-def genera_scheda_da_pdf(pdf_path, log_fn, done_fn, error_fn):
-    """Genera scheda da PDF caricato dall'utente."""
-    log_fn(f">> Lettura PDF: {Path(pdf_path).name}")
-    testo = _fetch_text_pdf(pdf_path)
-    if not testo or len(testo) < 50:
-        error_fn("Impossibile estrarre testo.\nVerifica che non sia un PDF scansionato.")
-        return
-
-    righe  = [r.strip() for r in testo.split('\n') if len(r.strip()) > 15]
-    titolo = righe[0][:120] if righe else Path(pdf_path).stem
-    log_fn(f"  Titolo: {titolo[:70]}")
-
-    testo_claude, url_claude = _cerca_bando_con_claude(titolo, "", testo[:3000], log_fn)
-    testo_finale = testo_claude or testo
-    url_finale   = url_claude or f"PDF: {Path(pdf_path).name}"
-
-    content = build_content(
-        titolo=titolo, hit={},
-        testo_ufficiale=testo_finale, fonte_url=url_finale,
-        mese_anno=datetime.now().strftime("%B %Y"), log_fn=log_fn,
-    )
-    nome_file   = _nome_file_sicuro(Path(pdf_path).stem)
-    output_path = str(OUTPUT_DIR / nome_file)
-    try:
-        ENGINE.generate(content, output_path, LOGO_PATH)
-        done_fn(output_path)
-    except Exception as e:
-        error_fn(f"Errore generazione PDF:\n{e}")
-
-
-
-def _suggerisci_con_claude(bandi, log_fn=None):
-    def log(m):
-        if log_fn: log_fn(m)
-    if not ANTHROPIC_API_KEY:
-        log("API key mancante"); return {}
-    righe = []
-    for i, h in enumerate(bandi[:80]):
-        titolo = h.get("post_title","")[:100]
-        ben    = beneficiari_da_hit(h) or ""
-        taxh   = h.get("taxonomies_hierarchical",{})
-        areas  = (taxh.get("area_geografica") or {}).get("lvl0") or []
-        area   = areas[0] if areas else "Nazionale"
-        righe.append(f"{i+1}. [{area}] {titolo} | Beneficiari: {ben}")
-    prompt = (
-        "Sei un esperto di finanza agevolata italiana. "
-        "Classifica i seguenti bandi in base alla PLATEA DI POTENZIALI FRUITORI.\n"
-        "Considera solo imprese private, cooperative, professionisti — escludi Comuni e PA.\n\n"
-        "PLATEA AMPIA = categorie molto diffuse (PMI, ristoratori, commercianti, ecc.)\n"
-        "NICCHIA = categorie specifiche (imprese ittiche, tartufo, tessile storico, ecc.)\n\n"
-        f"BANDI:\n{chr(10).join(righe)}\n\n"
-        'Rispondi SOLO con JSON: {"ampia":[{"titolo":"titolo esatto","platea":"stima","motivo":"1 riga"}],'
-        '"nicchia":[{"titolo":"titolo esatto","platea":"stima","motivo":"1 riga"}]}\n'
-        "5 elementi per lista. Solo JSON."
-    )
-    try:
-        resp = requests.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={"x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-            json={"model": "claude-haiku-4-5-20251001", "max_tokens": 1500,
-                  "messages": [{"role": "user", "content": prompt}]},
-            timeout=60,
-        )
-        if resp.status_code != 200:
-            log(f"API error {resp.status_code}"); return {}
-        blocks = resp.json().get("content", [])
-        testo  = "\n".join(b.get("text","") for b in blocks if b.get("type")=="text").strip()
-        if not testo: return {}
-        raw = re.sub(r'```(?:json)?\s*', '', testo)
-        raw = re.sub(r'```', '', raw).strip()
-        start = raw.find('{'); end = raw.rfind('}')
-        if start == -1 or end == -1: return {}
-        data = json.loads(raw[start:end+1])
-        log(f"✓ {len(data.get('ampia',[]))} ampia + {len(data.get('nicchia',[]))} nicchia")
-        return data
-    except Exception as e:
-        log(f"Errore: {e}"); return {}
-
-
-
-
-# =============================================================================
-#  WRAPPER WEB — identico a genera_scheda_da_hit ma senza callback Tkinter
-# =============================================================================
-
 def cerca_bandi_web(keyword="", stato="aperto", livello="", regione="", provincia="", max_hits=50):
-    """Identico alla GUI: build_filters + query_algolia."""
     stato_map = {
         "aperto":   ["Bandi aperti"],
         "prossimo": ["Bandi prossima apertura"],
         "tutti":    ["Bandi aperti", "Bandi prossima apertura"],
     }
-    # Mappa frontend → valori esatti attesi da build_filters (come nella GUI)
     livello_map = {
         "europeo":   "Bandi europei",
         "nazionale": "Bandi nazionali",
@@ -946,65 +79,305 @@ def cerca_bandi_web(keyword="", stato="aperto", livello="", regione="", provinci
     stato_vals     = stato_map.get(stato, ["Bandi aperti"])
     livello_mapped = livello_map.get(livello, livello)
     filters        = build_filters(stato_vals, livello_mapped, regione, provincia)
-    log  = lambda m: None
-    stop = lambda: False
-    hits, totale = query_algolia(filters, keyword, log, stop, max_hits=max_hits)
-    return hits, totale
+
+    payload = {"query": keyword, "hitsPerPage": max_hits, "page": 0,
+               "filters": filters, "attributesToRetrieve": ["*"]}
+    r = requests.post(ALGOLIA_URL, headers=ALGOLIA_HEADERS, json=payload, timeout=15)
+    r.raise_for_status()
+    data = r.json()
+    return data.get("hits", []), data.get("nbHits", 0)
+
+
+# ── Hit → card per il frontend ────────────────────────────────────────────────
+
+def _fmt_date(val):
+    if not val:
+        return "", None
+    if isinstance(val, (int, float)):
+        try:
+            dt = datetime.fromtimestamp(val)
+            return dt.strftime("%d/%m/%Y"), dt
+        except Exception:
+            return str(val), None
+    for fmt in ["%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"]:
+        try:
+            dt = datetime.strptime(str(val).strip(), fmt)
+            return dt.strftime("%d/%m/%Y"), dt
+        except Exception:
+            pass
+    s = str(val).strip()
+    return (s, None) if len(s) > 3 else ("", None)
+
+
+def _scadenza_da_hit(hit):
+    for campo in ("scadenza", "data_scadenza", "deadline", "data_chiusura", "fine", "end_date"):
+        val = hit.get(campo)
+        if val:
+            s, dt = _fmt_date(val)
+            if s:
+                return s, dt
+    return "", None
+
+
+def _dotazione_da_hit(hit):
+    for campo in ("dotazione", "dotazione_finanziaria", "budget", "importo",
+                  "importo_totale", "risorse", "finanziamento", "stanziamento"):
+        val = hit.get(campo)
+        if val and str(val).strip() not in ("0", "0.0", "", "[]", "{}"):
+            v = str(val).strip()
+            try:
+                n = float(v.replace(",", ".").replace(".", "").replace(" ", ""))
+                if n > 0:
+                    return f"EUR {n/1_000_000:,.1f} MLN".replace(",", ".") if n >= 1_000_000 \
+                           else f"EUR {int(n):,}".replace(",", ".")
+            except ValueError:
+                if any(c.isdigit() for c in v):
+                    return v[:50]
+    return None
+
+
+def _beneficiari_da_hit(hit):
+    for k in ("beneficiari", "destinatari", "soggetti_ammissibili"):
+        val = hit.get(k)
+        if val:
+            if isinstance(val, list):
+                return ", ".join(str(x).split("/")[0].strip() for x in val[:3])
+            if isinstance(val, str) and val.strip():
+                return val.strip()[:120]
+    return ""
+
+
+def _livello_da_hit(hit):
+    taxh = hit.get("taxonomies_hierarchical", {})
+    ag   = taxh.get("area_geografica", {}) or {}
+    lvl0 = (ag.get("lvl0") or [])
+    lvl1 = (ag.get("lvl1") or [])
+    if not lvl0:
+        return "—"
+    area = lvl0[0]
+    if "Europei" in area:   return "Europeo"
+    if "Nazionali" in area: return "Nazionale"
+    geo = lvl1[0].replace("Provincia di ", "") if lvl1 else area
+    return f"Regionale · {geo}"
 
 
 def hit_to_card(hit):
-    """Converte hit Algolia in dict per il frontend."""
     sc_str, _ = _scadenza_da_hit(hit)
-    dotaz = _dotazione_da_hit(hit) or "—"
-    stato = hit.get("scadenza_testo", "—")
-    ben   = beneficiari_da_hit(hit) or "—"
-    link  = hit.get("permalink") or hit.get("link") or hit.get("url") or ""
     return {
         "id":          hit.get("objectID", ""),
         "titolo":      hit.get("post_title") or hit.get("title") or "—",
-        "stato":       stato,
-        "livello":     livello_da_hit(hit),
-        "dotazione":   dotaz,
+        "stato":       hit.get("scadenza_testo", "—"),
+        "livello":     _livello_da_hit(hit),
+        "dotazione":   _dotazione_da_hit(hit) or "—",
         "scadenza":    sc_str or "—",
-        "beneficiari": ben,
-        "link_ce":     link,
+        "beneficiari": _beneficiari_da_hit(hit) or "—",
         "_hit":        hit,
     }
 
 
+# ── CUORE: Claude cerca il bando e genera la scheda ──────────────────────────
+
+def _genera_con_claude(titolo, stato_bando):
+    """
+    Claude cerca il bando su Google, legge le fonti ufficiali se disponibili,
+    e genera tutte le sezioni della scheda in JSON.
+    """
+    if not ANTHROPIC_API_KEY:
+        return {}
+
+    stato_cta = "prossima apertura" if "prossima" in stato_bando.lower() else "aperto"
+
+    prompt = f"""Sei un esperto di finanza agevolata italiana che lavora per Energelia S.r.l.
+
+Devi creare la scheda informativa del seguente bando:
+
+TITOLO BANDO: "{titolo}"
+STATO: {stato_bando}
+
+ISTRUZIONI:
+1. Cerca informazioni complete su questo bando usando web_search
+2. Se trovi un link a decreto ufficiale, PDF ministeriale o sito .gov.it/.regione.it, leggilo
+3. Usa SOLO dati reali trovati — mai placeholder come "verificare sul bando"
+4. Genera la scheda in formato JSON con questa struttura ESATTA:
+
+{{
+  "sottotitolo": "Ente erogatore · riferimento normativo · tipo contributo · stato",
+  "dotazione": "importo totale fondo es. EUR 5 MLN oppure null",
+  "intensita": "es. 60% fondo perduto oppure null",
+  "contributo_max": "es. EUR 150.000 oppure null",
+  "investimento_range": "es. 60k - 500k oppure null",
+  "data_metrica": "es. scadenza 15/12/2026 oppure prossima apertura",
+  "label_data": "SCADENZA oppure APERTURA",
+  "ente_finalita": ["Ente erogatore preciso", "Obiettivo del bando", "Contesto normativo"],
+  "chi_partecipa": ["Tipologia beneficiari", "Requisiti chiave", "Eventuali esclusioni"],
+  "cosa_finanziabile": ["Intervento 1", "Intervento 2", "Intervento 3"],
+  "spese_ammissibili": ["Spesa 1", "Spesa 2", "Spesa 3", "Spesa 4"],
+  "struttura_agevolazione": [["Voce", "Valore"], ["Intensita fondo perduto", "X%"], ["Contributo massimo", "EUR X"]],
+  "criteri_valutazione": ["Tipo procedura", "Criterio 1", "Criterio 2"],
+  "fasi_tempi": ["Apertura: data", "Scadenza: data", "Rendicontazione: tempi"],
+  "come_presentare": ["Portale specifico", "Credenziali richieste", "Allegati obbligatori"],
+  "perche_interessante": ["Punto forza 1 concreto", "Punto forza 2 concreto", "Punto forza 3 concreto"],
+  "criticita": ["Vincolo 1 reale", "Vincolo 2 reale", "Vincolo 3 reale"],
+  "cta_testo": "Frase CTA personalizzata per questo bando",
+  "fonte": "Fonte: ente/decreto/riferimento ufficiale trovato"
+}}
+
+Rispondi SOLO con JSON valido. Nessun testo prima o dopo."""
+
+    for tentativo in range(3):
+        try:
+            resp = requests.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key":         ANTHROPIC_API_KEY,
+                    "anthropic-version": "2023-06-01",
+                    "content-type":      "application/json",
+                },
+                json={
+                    "model":      "claude-haiku-4-5-20251001",
+                    "max_tokens": 2500,
+                    "tools":      [{"type": "web_search_20250305", "name": "web_search"}],
+                    "messages":   [{"role": "user", "content": prompt}],
+                },
+                timeout=120,
+            )
+
+            if resp.status_code == 429:
+                time.sleep((tentativo + 1) * 10)
+                continue
+            if resp.status_code != 200:
+                return {}
+
+            blocks = resp.json().get("content", [])
+            testo  = "\n".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
+            if not testo:
+                return {}
+
+            raw   = re.sub(r'```(?:json)?\s*', '', testo)
+            raw   = re.sub(r'```', '', raw).strip()
+            start = raw.find('{')
+            end   = raw.rfind('}')
+            if start == -1 or end == -1:
+                return {}
+
+            return json.loads(raw[start:end+1])
+
+        except (json.JSONDecodeError, Exception):
+            return {}
+
+    return {}
+
+
+# ── Costruisce il CONTENT dict per schede_engine ─────────────────────────────
+
+def _pulisci(lst):
+    return [str(x).strip() for x in (lst or [])
+            if x and str(x).strip() not in ("", "None", "null", "—", "-")]
+
+
+def _sintetizza(val, max_len=16):
+    if not val or str(val).strip() in ("—", "-", "", "null", "None"):
+        return "—"
+    v = str(val).strip()
+    if len(v) <= max_len:
+        return v
+    return v[:max_len].rstrip() + "…"
+
+
 def genera_scheda_web(hit):
     """
-    Identico a genera_scheda_da_hit nella GUI.
-    Restituisce (content_dict, titolo) pronti per schede_engine.generate().
+    Punto di ingresso principale per la generazione scheda dal web.
+    Restituisce (content_dict, titolo).
     """
-    log = lambda m: None
+    titolo      = hit.get("post_title", "") or hit.get("title", "") or "Bando"
+    stato_bando = hit.get("scadenza_testo", "Bandi aperti")
+    sc_str, _   = _scadenza_da_hit(hit)
+    dotaz_hit   = _dotazione_da_hit(hit)
 
-    titolo  = hit.get("post_title", "Bando senza titolo")
-    link_ce = hit.get("permalink", "") or hit.get("link", "") or hit.get("url", "")
+    # Estrai area geografica
+    taxh  = hit.get("taxonomies_hierarchical", {})
+    ag    = taxh.get("area_geografica", {}) or {}
+    lvl0  = (ag.get("lvl0") or [""])[0]
+    lvl1  = (ag.get("lvl1") or [""])[0]
+    area  = lvl1 or lvl0 or ""
 
-    # 1. Leggi pagina ContributiEuropa
-    testo_ce_pag = ""
-    if link_ce:
-        testo_ce_pag = _fetch_text(link_ce, log)
+    # Claude cerca e popola
+    cl = _genera_con_claude(titolo, stato_bando)
 
-    # 2. Cerca link ufficiali dalla pagina CE
-    url_uff, testo_uff = "", ""
-    if link_ce:
-        url_uff, testo_uff = _cerca_fonte_pagina_ce(link_ce, log)
+    def cv(key, fallback=None):
+        v = cl.get(key)
+        if isinstance(v, list):
+            return v if v else (fallback or [])
+        if v and str(v).strip() not in ("", "None", "null", "—", "-"):
+            return str(v).strip()
+        return fallback
 
-    # 3. Assembla testo totale (identico alla GUI)
-    parti = []
-    if testo_ce_pag:
-        parti.append(f"=== CONTRIBUTIEUROPA ===\n{testo_ce_pag}")
-    if testo_uff and testo_uff != testo_ce_pag:
-        parti.append(f"=== FONTE UFFICIALE ===\n{testo_uff}")
-    testo_bando = "\n\n".join(parti)
-    url_finale  = url_uff or link_ce or "contributieuropa.com"
+    # Metriche
+    dotazione  = cv("dotazione",       dotaz_hit or "—")
+    intensita  = cv("intensita",       "—")
+    contr_max  = cv("contributo_max",  "—")
+    inv_range  = cv("investimento_range", "—")
+    data_val   = cv("data_metrica",    sc_str or "—")
+    label_data = cv("label_data",      "SCADENZA")
 
-    # 4. Build content con Claude (identico alla GUI)
-    content = build_content(
-        titolo=titolo, hit=hit,
-        testo_ufficiale=testo_bando, fonte_url=url_finale,
-        mese_anno=datetime.now().strftime("%B %Y"), log_fn=log,
-    )
+    # Usa contributo_max come seconda metrica se intensita non disponibile
+    met2_label = "CONTRIBUTO MAX" if contr_max != "—" else "INTENSITA'"
+    met2_val   = contr_max if contr_max != "—" else intensita
+    met3_label = "INVESTIMENTO"
+    met3_val   = inv_range if inv_range != "—" else intensita
+
+    metriche = [
+        {"label": "DOTAZIONE",  "valore": _sintetizza(dotazione),  "bg": "blue"},
+        {"label": met2_label,   "valore": _sintetizza(met2_val),   "bg": "orange"},
+        {"label": met3_label,   "valore": _sintetizza(met3_val),   "bg": "green"},
+        {"label": label_data,   "valore": _sintetizza(data_val),   "bg": "blue"},
+    ]
+
+    # Sezioni
+    sottotitolo = cv("sottotitolo", f"{area} · {stato_bando}" if area else stato_bando)
+    
+    # Tabella contributi se disponibile
+    tab_contrib = cv("struttura_agevolazione")
+    tabella = None
+    if isinstance(tab_contrib, list) and len(tab_contrib) > 1:
+        tabella = tab_contrib
+
+    # Sinistra
+    sinistra = [
+        {"titolo": "ENTE / FINALITA'",      "voci": _pulisci(cv("ente_finalita", []))},
+        {"titolo": "CHI PUO' PARTECIPARE",  "voci": _pulisci(cv("chi_partecipa", []))},
+        {"titolo": "COSA E' FINANZIABILE",  "voci": _pulisci(cv("cosa_finanziabile", []))},
+        {"titolo": "SPESE AMMISSIBILI",     "voci": _pulisci(cv("spese_ammissibili", []))},
+    ]
+
+    # Destra
+    destra = [
+        {"titolo": "CRITERI / VALUTAZIONE", "voci": _pulisci(cv("criteri_valutazione", []))},
+        {"titolo": "FASI E TEMPI",          "voci": _pulisci(cv("fasi_tempi", []))},
+        {"titolo": "COME PRESENTARE",       "voci": _pulisci(cv("come_presentare", []))},
+    ]
+
+    # CTA personalizzata
+    cta_testo = cv("cta_testo",
+        "Bando aperto: agisci ora, siamo a disposizione!" if "aperto" in stato_bando.lower()
+        else "Bando in arrivo: preparati ora con Energelia!")
+
+    fonte = cv("fonte", f"Elaborato da Energelia S.r.l. · {datetime.now().strftime('%B %Y')}")
+
+    content = {
+        "titolo":             titolo.upper(),
+        "sottotitolo":        sottotitolo,
+        "metriche":           metriche,
+        "sinistra":           sinistra,
+        "tabella_contributi": tabella,
+        "destra":             destra,
+        "punti_forza":        _pulisci(cv("perche_interessante", [])),
+        "criticita":          _pulisci(cv("criticita", [])),
+        "cta_testo":          cta_testo,
+        "cta_tel":            "Tel. 010 8078800",
+        "cta_email":          "a.augusti@energelia.it",
+        "fonte":              fonte,
+        "mese_anno":          datetime.now().strftime("%B %Y"),
+    }
+
     return content, titolo
