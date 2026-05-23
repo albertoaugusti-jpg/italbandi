@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 import uvicorn
 
 import bandi_engine as be
-import schede_engine as ENGINE
+import energelia_scheda_engine as ENGINE
 
 LOGO_PATH = None  # nessun logo su Render — il motore lo gestisce
 
@@ -122,8 +122,12 @@ const PROVINCE = {
 let _hits = {};
 
 function aggiornaProvince() {
-  const livello = document.getElementById('livello').value;
   const regione = document.getElementById('regione').value;
+  // Se l'utente sceglie una regione, imposta automaticamente livello = regionale
+  if (regione) {
+    document.getElementById('livello').value = 'regionale';
+  }
+  const livello = document.getElementById('livello').value;
   const wrap    = document.getElementById('provincia-wrap');
   const sel     = document.getElementById('provincia');
   if (livello === 'regionale' && regione && PROVINCE[regione]) {
