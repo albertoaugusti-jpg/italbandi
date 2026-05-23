@@ -257,7 +257,8 @@ async def genera_scheda(bando_id: str, body: dict):
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
             tmp_path = tmp.name
 
-        ENGINE.generate(content, tmp_path, LOGO_PATH)
+        ENGINE.CONTENT = content
+        ENGINE.generate(output_path=tmp_path, verbose=False)
 
         nome_file = f"Scheda_{bando_id[:30]}_{datetime.now().strftime('%Y%m%d')}.pdf"
         return FileResponse(path=tmp_path, media_type="application/pdf", filename=nome_file)
