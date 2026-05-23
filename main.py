@@ -66,23 +66,25 @@ footer { text-align: center; font-size: 0.75rem; color: #9CA3AF; margin-top: 40p
     <option value="prossimo">Prossima apertura</option>
     <option value="tutti">Tutti</option>
   </select>
-  <select id="livello" onchange="aggiornaProvince()">
-    <option value="">Tutti i livelli</option>
+  <select id="livello" onchange="aggiornaFiltri()">
+    <option value="">Tutti i bandi</option>
     <option value="europeo">Europeo</option>
     <option value="nazionale">Nazionale</option>
     <option value="regionale">Regionale</option>
   </select>
-  <select id="regione" onchange="aggiornaProvince()">
-    <option value="">Tutte le regioni</option>
-    <option>Abruzzo</option><option>Basilicata</option><option>Calabria</option>
-    <option>Campania</option><option>Emilia-Romagna</option><option>Friuli-Venezia-Giulia</option>
-    <option>Lazio</option><option>Liguria</option><option>Lombardia</option>
-    <option>Marche</option><option>Molise</option><option>Piemonte</option>
-    <option>Puglia</option><option>Sardegna</option><option>Sicilia</option>
-    <option>Toscana</option><option>Trentino-Alto-Adige</option><option>Umbria</option>
-    <option>Valle d'Aosta</option><option>Veneto</option>
-  </select>
-  <span id="provincia-wrap">
+  <span id="regione-wrap" style="display:none">
+    <select id="regione" onchange="aggiornaProvince()">
+      <option value="">-- Scegli regione --</option>
+      <option>Abruzzo</option><option>Basilicata</option><option>Calabria</option>
+      <option>Campania</option><option>Emilia-Romagna</option><option>Friuli-Venezia-Giulia</option>
+      <option>Lazio</option><option>Liguria</option><option>Lombardia</option>
+      <option>Marche</option><option>Molise</option><option>Piemonte</option>
+      <option>Puglia</option><option>Sardegna</option><option>Sicilia</option>
+      <option>Toscana</option><option>Trentino-Alto-Adige</option><option>Umbria</option>
+      <option>Valle d'Aosta</option><option>Veneto</option>
+    </select>
+  </span>
+  <span id="provincia-wrap" style="display:none">
     <select id="provincia"><option value="">(tutte le province)</option></select>
   </span>
   <button class="btn-cerca" onclick="cerca()">🔍 Cerca</button>
@@ -121,16 +123,25 @@ const PROVINCE = {
 
 let _hits = {};
 
+function aggiornaFiltri() {
+  const livello = document.getElementById('livello').value;
+  const regioneWrap = document.getElementById('regione-wrap');
+  const provinciaWrap = document.getElementById('provincia-wrap');
+  if (livello === 'regionale') {
+    regioneWrap.style.display = 'inline';
+  } else {
+    regioneWrap.style.display = 'none';
+    provinciaWrap.style.display = 'none';
+    document.getElementById('regione').value = '';
+    document.getElementById('provincia').value = '';
+  }
+}
+
 function aggiornaProvince() {
   const regione = document.getElementById('regione').value;
-  // Se l'utente sceglie una regione, imposta automaticamente livello = regionale
-  if (regione) {
-    document.getElementById('livello').value = 'regionale';
-  }
-  const livello = document.getElementById('livello').value;
   const wrap    = document.getElementById('provincia-wrap');
   const sel     = document.getElementById('provincia');
-  if (livello === 'regionale' && regione && PROVINCE[regione]) {
+  if (regione && PROVINCE[regione]) {
     sel.innerHTML = '<option value="">(tutte le province)</option>' +
       PROVINCE[regione].map(p => `<option value="${p}">${p}</option>`).join('');
     wrap.style.display = 'inline';
