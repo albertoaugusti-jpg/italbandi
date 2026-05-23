@@ -572,7 +572,7 @@ COOKIE_HTML = f"""<!DOCTYPE html><html lang="it"><head>
 async def index(session_id: str = Cookie(default=None)):
     user = get_session(session_id)
     if not user:
-        return RedirectResponse("/login")
+        return HTMLResponse(LANDING_HTML())
     return index_page(user)
 
 @app.get("/login", response_class=HTMLResponse)
@@ -630,6 +630,226 @@ async def privacy():
 @app.get("/cookie", response_class=HTMLResponse)
 async def cookie_policy():
     return COOKIE_HTML
+
+@app.get("/chi-siamo", response_class=HTMLResponse)
+async def chi_siamo(session_id: str = Cookie(default=None)):
+    user = get_session(session_id)
+    nav = NAVBAR_LOGGED(user) if user else f"""
+<nav class="navbar">
+  <a href="/" style="display:flex;align-items:center;gap:12px;text-decoration:none">
+    <img src="/logo" alt="ItalBandi" style="height:44px;width:44px;object-fit:cover;border-radius:4px">
+    <span class="navbar-brand">ITAL<span>BANDI</span></span>
+  </a>
+  <div class="navbar-links">
+    <a href="/chi-siamo">Chi siamo</a>
+    <a href="/login">Accedi</a>
+    <a href="/registrati" style="background:#C9A84C;color:#0A1628;padding:7px 18px;border-radius:5px;font-weight:700">Registrati gratis</a>
+  </div>
+</nav>"""
+    return f"""<!DOCTYPE html><html lang="it"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chi Siamo — ItalBandi | Energelia S.r.l.</title>{CSS_BASE}</head><body>
+{nav}
+<div style="background:linear-gradient(135deg,#0A1628 0%,#1A2F4E 100%);padding:48px 40px;text-align:center;border-bottom:1px solid #1E3A5F">
+  <h1 style="font-size:2rem;color:#C9A84C;font-weight:800;letter-spacing:1px;margin-bottom:12px">
+    Dal 2006 al fianco delle imprese italiane
+  </h1>
+  <p style="color:#8899AA;font-size:1.05rem;max-width:600px;margin:0 auto;line-height:1.7">
+    Energelia accompagna le aziende nell'accesso ai bandi pubblici, alla finanza agevolata
+    e agli incentivi nazionali ed europei. ItalBandi è il nostro strumento digitale aperto a tutti.
+  </p>
+</div>
+
+<div class="page-wrap">
+
+  <h2 style="color:#C9A84C;border-left:4px solid #C9A84C;padding-left:12px;margin-bottom:20px">La nostra missione</h2>
+  <p>Aiutiamo le aziende a non perdere le opportunità di crescita che lo Stato e l'Europa mettono a disposizione.
+  Lo facciamo con un metodo strutturato, fonti verificate, e seguendo il cliente in ogni fase:
+  dalla ricerca del bando giusto, alla presentazione della domanda, fino alla rendicontazione dei finanziamenti ottenuti.</p>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin:32px 0">
+    <div style="background:#0F2035;border:1px solid #1E3A5F;border-left:3px solid #C9A84C;border-radius:8px;padding:20px">
+      <div style="font-size:1.4rem;margin-bottom:8px">🔍</div>
+      <strong style="color:#D4E8FF">Ricerca mirata</strong>
+      <p style="margin-top:6px">Selezioniamo solo i bandi davvero applicabili alla tua azienda, evitando di farti perdere tempo su opportunità non compatibili.</p>
+    </div>
+    <div style="background:#0F2035;border:1px solid #1E3A5F;border-left:3px solid #C9A84C;border-radius:8px;padding:20px">
+      <div style="font-size:1.4rem;margin-bottom:8px">📋</div>
+      <strong style="color:#D4E8FF">Gestione pratica</strong>
+      <p style="margin-top:6px">Compiliamo, presentiamo e seguiamo per te la domanda. Niente moduli incomprensibili, niente scadenze perse.</p>
+    </div>
+    <div style="background:#0F2035;border:1px solid #1E3A5F;border-left:3px solid #C9A84C;border-radius:8px;padding:20px">
+      <div style="font-size:1.4rem;margin-bottom:8px">🤝</div>
+      <strong style="color:#D4E8FF">Consulenza dedicata</strong>
+      <p style="margin-top:6px">Un referente per ogni cliente, sempre raggiungibile per chiarimenti, aggiornamenti e nuove opportunità.</p>
+    </div>
+    <div style="background:#0F2035;border:1px solid #1E3A5F;border-left:3px solid #C9A84C;border-radius:8px;padding:20px">
+      <div style="font-size:1.4rem;margin-bottom:8px">✅</div>
+      <strong style="color:#D4E8FF">Rendicontazione</strong>
+      <p style="margin-top:6px">Ti seguiamo anche dopo l'approvazione: rendicontiamo le spese secondo le regole del bando, in tempo, senza errori.</p>
+    </div>
+  </div>
+
+  <h2 style="color:#C9A84C;border-left:4px solid #C9A84C;padding-left:12px;margin:32px 0 20px">Il nostro team</h2>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-bottom:40px">
+    <div style="background:#0F2035;border:1px solid #1E3A5F;border-radius:8px;padding:24px;text-align:center">
+      <div style="width:64px;height:64px;background:#1A3A5A;border-radius:50%;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;font-size:1.6rem">👔</div>
+      <strong style="color:#C9A84C;display:block;margin-bottom:4px">Bruno Massimo Legger</strong>
+      <span style="font-size:0.78rem;color:#5A7A9A;text-transform:uppercase;letter-spacing:0.05em">Amministratore Unico</span>
+      <p style="margin-top:10px;font-size:0.82rem">Laurea in Scienze Politiche. Carriera internazionale tra cosmetica (Estée Lauder, Shiseido) e settore energetico. Dal 2014 guida Energelia.</p>
+    </div>
+    <div style="background:#0F2035;border:1px solid #1E3A5F;border-radius:8px;padding:24px;text-align:center">
+      <div style="width:64px;height:64px;background:#1A3A5A;border-radius:50%;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;font-size:1.6rem">🚀</div>
+      <strong style="color:#C9A84C;display:block;margin-bottom:4px">Alberto Augusti</strong>
+      <span style="font-size:0.78rem;color:#5A7A9A;text-transform:uppercase;letter-spacing:0.05em">Responsabile Business Development</span>
+      <p style="margin-top:10px;font-size:0.82rem">Laurea in Scienze Internazionali, Master Sole 24 Ore. Fondatore di Generelia, esperto certificato Bureau Veritas. Giovane Imprenditore Ligure 2011.</p>
+    </div>
+    <div style="background:#0F2035;border:1px solid #1E3A5F;border-radius:8px;padding:24px;text-align:center">
+      <div style="width:64px;height:64px;background:#1A3A5A;border-radius:50%;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;font-size:1.6rem">📞</div>
+      <strong style="color:#C9A84C;display:block;margin-bottom:4px">Antonio Castagnaro</strong>
+      <span style="font-size:0.78rem;color:#5A7A9A;text-transform:uppercase;letter-spacing:0.05em">Responsabile Commerciale</span>
+      <p style="margin-top:10px;font-size:0.82rem">Diplomato classico, fondatore di AC Eventi Genova. Oggi dedica tutta la sua attività allo sviluppo commerciale di Energelia.</p>
+    </div>
+  </div>
+
+  <div style="background:#0F2035;border:1px solid #C9A84C;border-radius:10px;padding:32px;text-align:center">
+    <h2 style="color:#C9A84C;font-size:1.3rem;margin-bottom:12px">Vuoi sapere se la tua azienda può accedere a un bando?</h2>
+    <p style="color:#8899AA;margin-bottom:24px">Registrati gratis su ItalBandi, cerca tra i bandi disponibili e scarica la scheda PDF professionale.<br>I nostri consulenti sono a disposizione per una valutazione gratuita.</p>
+    <div style="display:flex;justify-content:center;gap:16px;flex-wrap:wrap">
+      <a href="/registrati" style="background:#C9A84C;color:#0A1628;padding:12px 32px;border-radius:6px;font-weight:700;font-size:1rem">Registrati gratis</a>
+      <a href="tel:+390108078800" style="background:transparent;color:#C9A84C;border:1px solid #C9A84C;padding:12px 32px;border-radius:6px;font-weight:700;font-size:1rem">📞 010 8078800</a>
+    </div>
+  </div>
+
+</div>
+{FOOTER_HTML}
+</body></html>"""
+
+
+LANDING_HTML = lambda: f"""<!DOCTYPE html><html lang="it"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ItalBandi — Trova i bandi giusti per la tua impresa</title>{CSS_BASE}
+<style>
+.hero-landing {{
+  min-height: calc(100vh - 64px);
+  background: linear-gradient(160deg, #0A1628 0%, #0F2035 50%, #0A1628 100%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; padding: 60px 20px;
+  position: relative; overflow: hidden;
+}}
+.hero-landing::before {{
+  content: '';
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 50% 40%, rgba(201,168,76,0.08) 0%, transparent 60%);
+}}
+.hero-logo {{ width: 120px; height: 120px; object-fit: cover; border-radius: 12px; margin-bottom: 32px; box-shadow: 0 0 40px rgba(201,168,76,0.3); }}
+.hero-title {{ font-size: 3rem; font-weight: 900; color: #FFFFFF; letter-spacing: -1px; line-height: 1.1; margin-bottom: 16px; }}
+.hero-title span {{ color: #C9A84C; }}
+.hero-sub {{ font-size: 1.15rem; color: #8899AA; max-width: 560px; line-height: 1.7; margin-bottom: 40px; }}
+.hero-cta {{ display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }}
+.btn-cta-primary {{ padding: 16px 40px; background: #C9A84C; color: #0A1628; border: none; border-radius: 8px; font-size: 1.05rem; font-weight: 800; cursor: pointer; text-decoration: none; letter-spacing: 0.5px; }}
+.btn-cta-primary:hover {{ background: #E0BF6A; text-decoration: none; }}
+.btn-cta-secondary {{ padding: 16px 40px; background: transparent; color: #C9A84C; border: 2px solid #C9A84C; border-radius: 8px; font-size: 1.05rem; font-weight: 700; text-decoration: none; }}
+.btn-cta-secondary:hover {{ background: rgba(201,168,76,0.1); text-decoration: none; }}
+.features {{ display: grid; grid-template-columns: repeat(3,1fr); gap: 24px; max-width: 900px; margin: 60px auto 0; padding: 0 20px; }}
+.feature {{ background: #0F2035; border: 1px solid #1E3A5F; border-top: 3px solid #C9A84C; border-radius: 8px; padding: 28px 24px; text-align: left; }}
+.feature-icon {{ font-size: 2rem; margin-bottom: 12px; }}
+.feature h3 {{ color: #D4E8FF; font-size: 1rem; margin-bottom: 8px; }}
+.feature p {{ color: #6A8AA8; font-size: 0.85rem; line-height: 1.6; }}
+.section-how {{ background: #0A1628; padding: 80px 20px; border-top: 1px solid #1E3A5F; }}
+.section-how h2 {{ text-align: center; color: #C9A84C; font-size: 1.8rem; margin-bottom: 48px; }}
+.steps {{ display: flex; gap: 0; max-width: 800px; margin: 0 auto; position: relative; }}
+.step {{ flex: 1; text-align: center; padding: 0 20px; }}
+.step-num {{ width: 44px; height: 44px; background: #C9A84C; color: #0A1628; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 1.1rem; margin: 0 auto 16px; }}
+.step h4 {{ color: #D4E8FF; font-size: 0.95rem; margin-bottom: 8px; }}
+.step p  {{ color: #6A8AA8; font-size: 0.82rem; line-height: 1.6; }}
+.section-cta {{ background: linear-gradient(135deg,#0F2035,#1A3A5E); padding: 80px 20px; text-align: center; border-top: 1px solid #1E3A5F; }}
+.section-cta h2 {{ color: #FFFFFF; font-size: 1.8rem; margin-bottom: 16px; }}
+.section-cta p {{ color: #8899AA; font-size: 1rem; margin-bottom: 32px; }}
+</style>
+</head><body>
+<nav class="navbar">
+  <a href="/" style="display:flex;align-items:center;gap:12px;text-decoration:none">
+    <img src="/logo" alt="ItalBandi" style="height:44px;width:44px;object-fit:cover;border-radius:4px">
+    <span class="navbar-brand">ITAL<span>BANDI</span></span>
+  </a>
+  <div class="navbar-links">
+    <a href="/chi-siamo">Chi siamo</a>
+    <a href="/login">Accedi</a>
+    <a href="/registrati" style="background:#C9A84C;color:#0A1628;padding:7px 18px;border-radius:5px;font-weight:700">Registrati gratis</a>
+  </div>
+</nav>
+
+<div class="hero-landing">
+  <img src="/logo" class="hero-logo" alt="ItalBandi">
+  <h1 class="hero-title">Trova il bando.<br><span>Trova il consulente.</span></h1>
+  <p class="hero-sub">ItalBandi raccoglie tutti i bandi italiani ed europei in un unico posto.
+  Registrati gratis, cerca le opportunità per la tua impresa e scarica la scheda PDF professionale.
+  I nostri consulenti sono pronti ad aiutarti.</p>
+  <div class="hero-cta">
+    <a href="/registrati" class="btn-cta-primary">Registrati gratis →</a>
+    <a href="/chi-siamo" class="btn-cta-secondary">Chi siamo</a>
+  </div>
+</div>
+
+<div class="features">
+  <div class="feature">
+    <div class="feature-icon">🗂️</div>
+    <h3>Tutti i bandi in un posto</h3>
+    <p>Bandi europei, nazionali e regionali sempre aggiornati. Filtri per regione, settore e stato del bando.</p>
+  </div>
+  <div class="feature">
+    <div class="feature-icon">📄</div>
+    <h3>Schede PDF professionali</h3>
+    <p>Per ogni bando generiamo una scheda sintetica professionale pronta da condividere con il tuo commercialista o cliente.</p>
+  </div>
+  <div class="feature">
+    <div class="feature-icon">🤝</div>
+    <h3>Consulenti qualificati</h3>
+    <p>Dietro ItalBandi c'è Energelia S.r.l., dal 2006 specializzata in finanza agevolata. Siamo a tua disposizione.</p>
+  </div>
+</div>
+
+<div class="section-how">
+  <h2>Come funziona</h2>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <h4>Registrati</h4>
+      <p>Crea il tuo account gratuito in 30 secondi. Solo nome, email e password.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <h4>Cerca</h4>
+      <p>Filtra per regione, livello e parola chiave. Trova i bandi pertinenti alla tua impresa.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <h4>Scarica la scheda</h4>
+      <p>Genera e scarica la scheda PDF professionale del bando che ti interessa.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <h4>Contattaci</h4>
+      <p>I nostri consulenti valutano gratuitamente la tua candidatura al bando.</p>
+    </div>
+  </div>
+</div>
+
+<div class="section-cta">
+  <h2>È completamente gratuito</h2>
+  <p>Registrarsi, cercare bandi e scaricare schede PDF non costa nulla.<br>
+  Il nostro guadagno è aiutarti concretamente a ottenere finanziamenti.</p>
+  <a href="/registrati" class="btn-cta-primary">Inizia adesso →</a>
+  <p style="margin-top:24px;font-size:0.85rem;color:#4A6A8A">
+    Hai già un account? <a href="/login">Accedi qui</a>
+  </p>
+</div>
+
+{FOOTER_HTML}
+</body></html>"""
+
 
 @app.get("/api/cerca")
 async def cerca(
