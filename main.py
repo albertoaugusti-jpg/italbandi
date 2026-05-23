@@ -1,87 +1,101 @@
 """
 ItalBandi — main.py
-Web app FastAPI: form HTML → genera scheda PDF Energelia → download browser
+Portale web: ricerca bandi Algolia → genera scheda PDF con Claude
 """
-import io
-import os
-import sys
-import tempfile
+import os, tempfile, traceback
 from datetime import datetime
-from pathlib import Path
-
-from fastapi import FastAPI, Form, Request
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi import FastAPI, Query
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 import uvicorn
 
-# Importa il motore PDF esistente
+import bandi_engine as be
 import energelia_scheda_engine as engine
 
 app = FastAPI(title="ItalBandi")
 
-# ── HTML del form ─────────────────────────────────────────────────────────────
-FORM_HTML = """<!DOCTYPE html>
+REGIONI = [
+    "Abruzzo","Basilicata","Calabria","Campania","Emilia-Romagna",
+    "Friuli-Venezia-Giulia","Lazio","Liguria","Lombardia","Marche",
+    "Molise","Piemonte","Puglia","Sardegna","Sicilia","Toscana",
+    "Trentino-Alto-Adige","Umbria","Valle d'Aosta","Veneto",
+]
+
+# ── Pagina principale ─────────────────────────────────────────────────────────
+INDEX_HTML = """<!DOCTYPE html>
 <html lang="it">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ItalBandi — Genera Scheda</title>
+<title>ItalBandi — Bandi e Incentivi per le Imprese</title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Segoe UI', Arial, sans-serif; background: #F0F4F8; color: #1F2937; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', Arial, sans-serif; background: #F0F4F8; color: #1F2937; }
 
-  header {
-    background: #1F4E79; color: white; padding: 20px 40px;
-    display: flex; align-items: center; gap: 16px;
-  }
-  header h1 { font-size: 1.6rem; font-weight: 700; }
-  header p  { font-size: 0.85rem; opacity: 0.8; margin-top: 2px; }
+header { background: #1F4E79; color: white; padding: 18px 40px; display: flex; align-items: center; gap: 16px; }
+header h1 { font-size: 1.7rem; font-weight: 800; letter-spacing: -0.5px; }
+header p  { font-size: 0.85rem; opacity: 0.75; margin-top: 3px; }
 
-  .container { max-width: 860px; margin: 40px auto; padding: 0 20px 60px; }
+.search-bar {
+  background: #2E75B6; padding: 24px 40px; display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end;
+}
+.search-bar input, .search-bar select {
+  padding: 10px 14px; border: none; border-radius: 6px;
+  font-size: 0.92rem; color: #1F2937;
+}
+.search-bar input { flex: 1; min-width: 200px; }
+.search-bar select { min-width: 150px; }
+.btn-cerca {
+  padding: 10px 28px; background: #F59E0B; color: #1F2937;
+  border: none; border-radius: 6px; font-weight: 700; font-size: 0.95rem; cursor: pointer;
+}
+.btn-cerca:hover { background: #FBBF24; }
 
-  .card {
-    background: white; border-radius: 10px; padding: 32px;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.08); margin-bottom: 24px;
-  }
-  .card h2 {
-    font-size: 1rem; font-weight: 700; color: #1F4E79;
-    border-left: 4px solid #2E75B6; padding-left: 10px;
-    margin-bottom: 20px;
-  }
+.container { max-width: 1000px; margin: 32px auto; padding: 0 20px 60px; }
 
-  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
-  .full   { grid-column: 1 / -1; }
+.risultati-header {
+  font-size: 0.85rem; color: #6B7280; margin-bottom: 16px; font-weight: 600;
+}
 
-  label { display: block; font-size: 0.78rem; font-weight: 600;
-          color: #6B7280; text-transform: uppercase; letter-spacing: 0.04em;
-          margin-bottom: 5px; }
-  input, select, textarea {
-    width: 100%; padding: 10px 12px; border: 1.5px solid #D1D5DB;
-    border-radius: 6px; font-size: 0.92rem; color: #1F2937;
-    transition: border-color 0.2s;
-  }
-  input:focus, select:focus, textarea:focus {
-    outline: none; border-color: #2E75B6;
-  }
-  textarea { resize: vertical; min-height: 80px; }
+.bando-card {
+  background: white; border-radius: 10px; padding: 20px 24px;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.07); margin-bottom: 14px;
+  border-left: 4px solid #2E75B6;
+}
+.bando-card:hover { box-shadow: 0 3px 14px rgba(0,0,0,0.12); }
 
-  .btn-genera {
-    display: block; width: 100%; padding: 16px;
-    background: #1F4E79; color: white; border: none;
-    border-radius: 8px; font-size: 1.05rem; font-weight: 700;
-    cursor: pointer; transition: background 0.2s; margin-top: 8px;
-  }
-  .btn-genera:hover { background: #2E75B6; }
+.card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.card-titolo {
+  font-size: 0.95rem; font-weight: 700; color: #1F4E79;
+  cursor: pointer; flex: 1; line-height: 1.4;
+}
+.card-titolo:hover { color: #2E75B6; text-decoration: underline; }
 
-  .note {
-    font-size: 0.78rem; color: #9CA3AF; text-align: center;
-    margin-top: 12px;
-  }
+.badge {
+  font-size: 0.7rem; font-weight: 700; padding: 3px 10px; border-radius: 20px;
+  white-space: nowrap;
+}
+.badge-aperto   { background: #D1FAE5; color: #065F46; }
+.badge-prossimo { background: #DBEAFE; color: #1E40AF; }
 
-  footer {
-    text-align: center; font-size: 0.75rem; color: #9CA3AF;
-    margin-top: 40px;
-  }
+.card-meta { display: flex; gap: 24px; margin-top: 10px; flex-wrap: wrap; }
+.meta-item label { display: block; font-size: 0.68rem; font-weight: 700; color: #9CA3AF;
+                   text-transform: uppercase; letter-spacing: 0.04em; }
+.meta-item span  { font-size: 0.82rem; color: #374151; font-weight: 500; }
+
+.btn-scheda {
+  display: inline-block; margin-top: 14px;
+  padding: 8px 20px; background: #1F4E79; color: white;
+  border: none; border-radius: 6px; font-size: 0.85rem; font-weight: 700;
+  cursor: pointer; text-decoration: none;
+}
+.btn-scheda:hover { background: #2E75B6; }
+.btn-scheda:disabled { background: #9CA3AF; cursor: not-allowed; }
+
+.spinner { display: none; margin-left: 10px; font-size: 0.8rem; color: #6B7280; }
+
+footer { text-align: center; font-size: 0.75rem; color: #9CA3AF; margin-top: 40px; }
+
+.loader { text-align: center; padding: 40px; color: #6B7280; }
 </style>
 </head>
 <body>
@@ -89,233 +103,195 @@ FORM_HTML = """<!DOCTYPE html>
 <header>
   <div>
     <h1>ItalBandi</h1>
-    <p>Energelia S.r.l. — Generatore Schede Bandi</p>
+    <p>Energelia S.r.l. — Trova il bando giusto, scarica la scheda PDF professionale</p>
   </div>
 </header>
 
-<div class="container">
-
-  <form method="POST" action="/genera">
-
-    <!-- METRICHE -->
-    <div class="card">
-      <h2>Dati principali</h2>
-      <div class="grid-3">
-        <div>
-          <label>Dotazione</label>
-          <input name="dotazione" placeholder="es. EUR 5.000.000" required>
-        </div>
-        <div>
-          <label>Intensità contributo</label>
-          <input name="intensita" placeholder="es. 50%">
-        </div>
-        <div>
-          <label>Stato bando</label>
-          <select name="stato">
-            <option value="Aperto">Aperto</option>
-            <option value="Prossima\napertura">Prossima apertura</option>
-          </select>
-        </div>
-        <div class="full">
-          <label>Apertura / Scadenza</label>
-          <input name="apertura_scadenza" placeholder="es. 01/06/2026 — 31/12/2026">
-        </div>
-      </div>
-    </div>
-
-    <!-- INTESTAZIONE -->
-    <div class="card">
-      <h2>Intestazione bando</h2>
-      <div style="display:grid; gap:16px;">
-        <div>
-          <label>Titolo bando *</label>
-          <input name="titolo" placeholder="Titolo completo del bando" required>
-        </div>
-        <div class="grid-2">
-          <div>
-            <label>Livello geografico</label>
-            <input name="livello" placeholder="es. Regione / Ente locale · Lombardia">
-          </div>
-          <div>
-            <label>Stato bando (etichetta)</label>
-            <input name="stato_label" placeholder="es. Bandi aperti · Bandi prossima apertura">
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- CONTENUTO SINISTRO -->
-    <div class="card">
-      <h2>Colonna sinistra</h2>
-      <div style="display:grid; gap:16px;">
-        <div>
-          <label>Ente / Finalità</label>
-          <textarea name="ente_finalita" placeholder="Un punto per riga. Es:&#10;Camera di Commercio di Bergamo&#10;Finalità del bando..."></textarea>
-        </div>
-        <div>
-          <label>Chi può partecipare</label>
-          <textarea name="chi_partecipa" placeholder="Un punto per riga"></textarea>
-        </div>
-        <div>
-          <label>Cosa è finanziabile</label>
-          <textarea name="cosa_finanziabile" placeholder="Un punto per riga"></textarea>
-        </div>
-        <div>
-          <label>Spese non ammissibili</label>
-          <textarea name="spese_non_ammissibili" placeholder="Un punto per riga"></textarea>
-        </div>
-      </div>
-    </div>
-
-    <!-- CONTENUTO DESTRO -->
-    <div class="card">
-      <h2>Colonna destra</h2>
-      <div style="display:grid; gap:16px;">
-        <div>
-          <label>Contributo / Intensità (dettaglio)</label>
-          <textarea name="contributo_dettaglio" placeholder="Un punto per riga"></textarea>
-        </div>
-        <div>
-          <label>Criteri / Valutazione</label>
-          <textarea name="criteri" placeholder="Un punto per riga"></textarea>
-        </div>
-        <div>
-          <label>Fasi e Tempi</label>
-          <textarea name="fasi_tempi" placeholder="Un punto per riga"></textarea>
-        </div>
-        <div>
-          <label>Come presentare</label>
-          <textarea name="come_presentare" placeholder="Un punto per riga"></textarea>
-        </div>
-      </div>
-    </div>
-
-    <!-- BOX FINALI -->
-    <div class="card">
-      <h2>Box finali</h2>
-      <div style="display:grid; gap:16px;">
-        <div>
-          <label>✅ Perché è interessante (punti di forza)</label>
-          <textarea name="punti_forza" placeholder="Un punto per riga"></textarea>
-        </div>
-        <div>
-          <label>⚠️ Criticità e attenzioni</label>
-          <textarea name="criticita" placeholder="Un punto per riga"></textarea>
-        </div>
-        <div>
-          <label>Fonte URL (opzionale)</label>
-          <input name="fonte_url" placeholder="https://www.contributieuropa.com/bandi/...">
-        </div>
-      </div>
-    </div>
-
-    <button type="submit" class="btn-genera">📄 Genera Scheda PDF</button>
-    <p class="note">Il PDF verrà scaricato automaticamente nel tuo browser.</p>
-
-  </form>
+<div class="search-bar">
+  <input id="keyword" type="text" placeholder="Parola chiave (es. formazione, energia, PMI...)">
+  <select id="stato">
+    <option value="aperto">Bandi aperti</option>
+    <option value="prossimo">Prossima apertura</option>
+    <option value="tutti">Tutti</option>
+  </select>
+  <select id="livello">
+    <option value="">Tutti i livelli</option>
+    <option value="europeo">Europeo</option>
+    <option value="nazionale">Nazionale</option>
+    <option value="regionale">Regionale</option>
+  </select>
+  <select id="regione">
+    <option value="">Tutte le regioni</option>
+    <option>Abruzzo</option><option>Basilicata</option><option>Calabria</option>
+    <option>Campania</option><option>Emilia-Romagna</option><option>Friuli-Venezia-Giulia</option>
+    <option>Lazio</option><option>Liguria</option><option>Lombardia</option>
+    <option>Marche</option><option>Molise</option><option>Piemonte</option>
+    <option>Puglia</option><option>Sardegna</option><option>Sicilia</option>
+    <option>Toscana</option><option>Trentino-Alto-Adige</option><option>Umbria</option>
+    <option>Valle d'Aosta</option><option>Veneto</option>
+  </select>
+  <button class="btn-cerca" onclick="cerca()">🔍 Cerca</button>
 </div>
 
-<footer>
-  Energelia S.r.l. · Largo XII Ottobre 1/3, Torre WTC · 16121 Genova · www.energelia.it
-</footer>
+<div class="container">
+  <div id="risultati-header" class="risultati-header"></div>
+  <div id="risultati"></div>
+</div>
 
+<footer>Energelia S.r.l. · Largo XII Ottobre 1/3, Torre WTC · 16121 Genova · Tel. 010 8078800 · www.energelia.it</footer>
+
+<script>
+let _hits = {};
+
+async function cerca() {
+  const kw      = document.getElementById('keyword').value;
+  const stato   = document.getElementById('stato').value;
+  const livello = document.getElementById('livello').value;
+  const regione = document.getElementById('regione').value;
+
+  document.getElementById('risultati').innerHTML = '<div class="loader">Ricerca in corso...</div>';
+  document.getElementById('risultati-header').textContent = '';
+
+  const params = new URLSearchParams({keyword: kw, stato, livello, regione});
+  const resp   = await fetch('/api/cerca?' + params);
+  const data   = await resp.json();
+
+  if (data.error) {
+    document.getElementById('risultati').innerHTML = `<p style="color:red">${data.error}</p>`;
+    return;
+  }
+
+  document.getElementById('risultati-header').textContent =
+    `${data.totale} bandi trovati — clicca il titolo per i dettagli, poi scarica la scheda PDF`;
+
+  _hits = {};
+  data.bandi.forEach(b => { _hits[b.id] = b._hit; });
+
+  document.getElementById('risultati').innerHTML = data.bandi.map(b => `
+    <div class="bando-card">
+      <div class="card-top">
+        <div class="card-titolo" onclick="toggleDettaglio('${b.id}')">${b.titolo}</div>
+        <span class="badge ${b.stato.includes('prossima') ? 'badge-prossimo' : 'badge-aperto'}">${b.stato}</span>
+      </div>
+      <div class="card-meta">
+        <div class="meta-item"><label>Livello</label><span>${b.livello}</span></div>
+        <div class="meta-item"><label>Dotazione</label><span>${b.dotazione}</span></div>
+        <div class="meta-item"><label>Scadenza</label><span>${b.scadenza}</span></div>
+        <div class="meta-item"><label>Destinatari</label><span>${b.beneficiari.substring(0,60)}</span></div>
+      </div>
+      <div id="det-${b.id}" style="display:none; margin-top:14px; padding-top:12px; border-top:1px solid #E5E7EB;">
+        <p style="font-size:0.82rem; color:#6B7280;">Clicca il pulsante per generare la scheda PDF completa.</p>
+      </div>
+      <div style="display:flex; align-items:center; gap:12px; margin-top:12px;">
+        <button class="btn-scheda" id="btn-${b.id}" onclick="generaScheda('${b.id}', '${escapeTitle(b.titolo)}')">
+          📄 Genera Scheda PDF
+        </button>
+        <span class="spinner" id="sp-${b.id}">⏳ Generazione in corso (30-60 sec)...</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function escapeTitle(t) {
+  return t.replace(/'/g, "\\'").replace(/"/g, '&quot;').substring(0, 80);
+}
+
+function toggleDettaglio(id) {
+  const det = document.getElementById('det-' + id);
+  det.style.display = det.style.display === 'none' ? 'block' : 'none';
+}
+
+async function generaScheda(id, titolo) {
+  const btn = document.getElementById('btn-' + id);
+  const sp  = document.getElementById('sp-'  + id);
+  btn.disabled = true;
+  sp.style.display = 'inline';
+
+  try {
+    const resp = await fetch('/api/scheda/' + encodeURIComponent(id), {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({hit: _hits[id]})
+    });
+
+    if (!resp.ok) {
+      const err = await resp.text();
+      alert('Errore generazione: ' + err.substring(0, 200));
+      return;
+    }
+
+    const blob = await resp.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = 'Scheda_' + id + '.pdf';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch(e) {
+    alert('Errore: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    sp.style.display = 'none';
+  }
+}
+
+// Cerca subito al caricamento con i bandi aperti
+window.onload = cerca;
+</script>
 </body>
 </html>"""
 
 
-def _split(text: str) -> list:
-    """Converte testo multiriga in lista di bullet."""
-    if not text or not text.strip():
-        return []
-    return [line.strip() for line in text.strip().splitlines() if line.strip()]
-
-
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    return FORM_HTML
+    return INDEX_HTML
 
 
-@app.post("/genera")
-async def genera(
-    titolo:                str = Form(""),
-    livello:               str = Form(""),
-    stato_label:           str = Form(""),
-    dotazione:             str = Form(""),
-    intensita:             str = Form(""),
-    stato:                 str = Form("Aperto"),
-    apertura_scadenza:     str = Form(""),
-    ente_finalita:         str = Form(""),
-    chi_partecipa:         str = Form(""),
-    cosa_finanziabile:     str = Form(""),
-    spese_non_ammissibili: str = Form(""),
-    contributo_dettaglio:  str = Form(""),
-    criteri:               str = Form(""),
-    fasi_tempi:            str = Form(""),
-    come_presentare:       str = Form(""),
-    punti_forza:           str = Form(""),
-    criticita:             str = Form(""),
-    fonte_url:             str = Form(""),
+@app.get("/api/cerca")
+async def cerca(
+    keyword: str = Query(""),
+    stato:   str = Query("aperto"),
+    livello: str = Query(""),
+    regione: str = Query(""),
+    provincia: str = Query(""),
 ):
-    # Costruisce il dizionario CONTENT compatibile con il motore
-    stato_bg = "blue" if "prossima" in stato.lower() else "orange"
-    mese_anno = datetime.now().strftime("%B %Y").capitalize()
+    try:
+        hits, totale = be.cerca_bandi(
+            keyword=keyword, stato=stato,
+            livello=livello, regione=regione,
+            provincia=provincia, max_hits=50
+        )
+        bandi = [be.hit_to_card(h) for h in hits]
+        return JSONResponse({"bandi": bandi, "totale": totale})
+    except Exception as e:
+        return JSONResponse({"error": str(e), "bandi": [], "totale": 0})
 
-    content = {
-        "titolo":      titolo.upper(),
-        "sottotitolo": f"{livello or 'Regione / Ente locale'} · {stato_label or ('Bandi aperti' if stato == 'Aperto' else 'Bandi prossima apertura')}",
 
-        "metriche": [
-            {"label": "DOTAZIONE",             "valore": dotazione or "—",         "bg": "blue"},
-            {"label": "INTENSITÀ CONTRIBUTO",  "valore": intensita or "—",         "bg": "orange"},
-            {"label": "STATO",                 "valore": stato,                    "bg": stato_bg},
-            {"label": "APERTURA / SCADENZA",   "valore": apertura_scadenza or "—", "bg": "blue"},
-        ],
+@app.post("/api/scheda/{bando_id}")
+async def genera_scheda(bando_id: str, body: dict):
+    try:
+        hit    = body.get("hit", {})
+        titolo = hit.get("post_title") or hit.get("title") or bando_id
 
-        "sinistra": [
-            {"titolo": "ENTE / FINALITÀ",        "voci": _split(ente_finalita)      or ["—"]},
-            {"titolo": "CHI PUÒ PARTECIPARE",    "voci": _split(chi_partecipa)      or ["—"]},
-            {"titolo": "COSA È FINANZIABILE",    "voci": _split(cosa_finanziabile)  or ["—"]},
-            {"titolo": "SPESE NON AMMISSIBILI",  "voci": _split(spese_non_ammissibili) or ["—"]},
-        ],
+        # Recupera testo dalla pagina ContributiEuropa
+        fonte_url, testo = be.get_testo_bando(hit)
 
-        "tabella_contributi": None,
+        # Costruisce il CONTENT con Claude
+        content = be.build_content(titolo, hit, testo, fonte_url)
 
-        "destra": [
-            {"titolo": "CONTRIBUTO / INTENSITÀ", "voci": _split(contributo_dettaglio) or ["—"]},
-            {"titolo": "CRITERI / VALUTAZIONE",  "voci": _split(criteri)            or ["—"]},
-            {"titolo": "FASI E TEMPI",           "voci": _split(fasi_tempi)         or ["—"]},
-            {"titolo": "COME PRESENTARE",        "voci": _split(come_presentare)    or ["—"]},
-        ],
+        # Genera il PDF
+        engine.CONTENT = content
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            tmp_path = tmp.name
+        engine.generate(output_path=tmp_path, verbose=False)
 
-        "punti_forza": _split(punti_forza) or ["Da definire"],
-        "criticita":   _split(criticita)   or ["Da definire"],
+        nome_file = f"Scheda_{bando_id[:30]}_{datetime.now().strftime('%Y%m%d')}.pdf"
+        return FileResponse(path=tmp_path, media_type="application/pdf", filename=nome_file)
 
-        "cta_testo": f"Questo bando fa al caso tuo? Contattaci ora!",
-        "cta_tel":   "Tel. 010 8078800",
-        "cta_email": "a.augusti@energelia.it",
-
-        "fonte":     f"Fonte: {fonte_url}" if fonte_url else f"Fonte: Energelia S.r.l.",
-        "mese_anno": mese_anno,
-    }
-
-    # Inietta CONTENT nel motore e genera il PDF in un file temporaneo
-    engine.CONTENT = content
-
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-        tmp_path = tmp.name
-
-    engine.generate(output_path=tmp_path, verbose=False)
-
-    # Nome file pulito dal titolo
-    nome_file = titolo[:50].strip().replace(" ", "_").replace("/", "-") or "scheda_bando"
-    nome_file = f"Scheda_{nome_file}_{datetime.now().strftime('%Y%m%d')}.pdf"
-
-    return FileResponse(
-        path=tmp_path,
-        media_type="application/pdf",
-        filename=nome_file,
-        background=None,
-    )
+    except Exception as e:
+        return JSONResponse({"error": traceback.format_exc()}, status_code=500)
 
 
 if __name__ == "__main__":
