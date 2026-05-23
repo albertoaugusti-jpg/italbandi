@@ -681,9 +681,10 @@ def build_content(titolo, hit, testo_ufficiale, fonte_url, mese_anno=None, log_f
     ente_alg = _ente_da_area(area)
 
     # ── Claude genera tutte le sezioni dal testo del bando ────────────────
+    # Se il testo è vuoto (scraping fallito su server), Claude usa web_search
     cl = {}
-    if testo_ufficiale:
-        cl = _genera_scheda_con_claude(titolo, testo_ufficiale, log_fn)
+    testo_per_claude = testo_ufficiale or f"Bando: {titolo}. Cerca online informazioni complete su questo bando italiano."
+    cl = _genera_scheda_con_claude(titolo, testo_per_claude, log_fn)
 
     def cv(key, fallback=None):
         v = cl.get(key)
@@ -760,7 +761,7 @@ def build_content(titolo, hit, testo_ufficiale, fonte_url, mese_anno=None, log_f
         "cta_testo":   _cta_da_stato(stato),
         "cta_tel":     "Tel. 010 8078800",
         "cta_email":   "a.augusti@energelia.it",
-        "fonte":       f"Fonte: {fonte_url[:80]}" if fonte_url else "Fonte: bando ufficiale",
+        "fonte":       f"Elaborato da Energelia S.r.l. · {datetime.now().strftime('%B %Y')}",
         "mese_anno":   mese_anno,
     }
 
