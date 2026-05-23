@@ -13,7 +13,7 @@ except ImportError:
     PdfReader = None
 
 # ── Credenziali ───────────────────────────────────────────────────────────────
-ANTHROPIC_API_KEY = os.environ.get("CLAUDE_API_KEY", "")
+ANTHROPIC_API_KEY = os.environ.get("CLAUDE_API_KEY") or os.environ.get("ANTHROPIC_API_KEY", "")
 
 ALGOLIA_APP_ID  = "LHI8XKBFMN"
 ALGOLIA_API_KEY = "f55131344ae840ea7f27c6dcb0782654"
