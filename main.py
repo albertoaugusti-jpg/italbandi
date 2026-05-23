@@ -258,7 +258,7 @@ async def cerca(
     provincia: str = Query(""),
 ):
     try:
-        hits, totale = be.cerca_bandi(
+        hits, totale = be.cerca_bandi_web(
             keyword=keyword, stato=stato,
             livello=livello, regione=regione,
             provincia=provincia, max_hits=50
@@ -279,7 +279,7 @@ async def genera_scheda(bando_id: str, body: dict):
         fonte_url, testo = be.get_testo_bando(hit)
 
         # Costruisce il CONTENT con Claude
-        content = be.build_content(titolo, hit, testo, fonte_url)
+        content = be.build_content_web(titolo, hit, testo, fonte_url)
 
         # Genera il PDF
         engine.CONTENT = content
