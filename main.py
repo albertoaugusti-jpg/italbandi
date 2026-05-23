@@ -6,13 +6,21 @@ Proprietà: Energelia S.r.l. — Responsabile privacy: Bruno Massimo Legger
 import os, tempfile, traceback, sqlite3, hashlib, secrets, json
 from datetime import datetime, timedelta
 from fastapi import FastAPI, Query, Request, Form, Cookie
-from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, RedirectResponse, Response
 import uvicorn
 
 import bandi_engine as be
 import energelia_scheda_engine as ENGINE
 
+LOGO_PATH = os.path.join(os.path.dirname(__file__), "logo_italbandi.png")
+
 app = FastAPI(title="ItalBandi")
+
+@app.get("/logo")
+async def serve_logo():
+    if os.path.exists(LOGO_PATH):
+        return FileResponse(LOGO_PATH, media_type="image/png")
+    return Response(status_code=404)
 
 DB_PATH  = "/tmp/italbandi.db"
 SESSIONS = {}  # session_id → {user_id, username, is_admin}
@@ -224,7 +232,10 @@ footer.site-footer a { color: #6A8AA8; }
 
 NAVBAR_LOGGED = lambda user: f"""
 <nav class="navbar">
-  <span class="navbar-brand">ITAL<span>BANDI</span></span>
+  <a href="/" style="display:flex;align-items:center;gap:12px;text-decoration:none">
+    <img src="/logo" alt="ItalBandi" style="height:44px;width:44px;object-fit:cover;border-radius:4px">
+    <span class="navbar-brand">ITAL<span>BANDI</span></span>
+  </a>
   <div class="navbar-links">
     <span style="color:#6A8AA8;font-size:0.82rem">Ciao, {user['nome']}</span>
     <a href="/privacy">Privacy</a>
@@ -274,7 +285,10 @@ def login_page(error=""):
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ItalBandi — Accedi</title>{CSS_BASE}</head><body>
 <nav class="navbar">
-  <span class="navbar-brand">ITAL<span>BANDI</span></span>
+  <a href="/" style="display:flex;align-items:center;gap:12px;text-decoration:none">
+    <img src="/logo" alt="ItalBandi" style="height:44px;width:44px;object-fit:cover;border-radius:4px">
+    <span class="navbar-brand">ITAL<span>BANDI</span></span>
+  </a>
   <div class="navbar-links">
     <a href="/registrati">Registrati</a>
   </div>
@@ -305,7 +319,10 @@ def registrati_page(error="", ok=""):
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ItalBandi — Registrati</title>{CSS_BASE}</head><body>
 <nav class="navbar">
-  <span class="navbar-brand">ITAL<span>BANDI</span></span>
+  <a href="/" style="display:flex;align-items:center;gap:12px;text-decoration:none">
+    <img src="/logo" alt="ItalBandi" style="height:44px;width:44px;object-fit:cover;border-radius:4px">
+    <span class="navbar-brand">ITAL<span>BANDI</span></span>
+  </a>
   <div class="navbar-links"><a href="/login">Accedi</a></div>
 </nav>
 <div class="auth-wrap">
