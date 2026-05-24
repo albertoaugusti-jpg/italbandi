@@ -494,7 +494,7 @@ async function cerca() {{
         <p style="font-size:0.78rem;color:#5A7A9A;margin-top:10px">👆 Clicca "Genera Scheda PDF" per la scheda completa con tutti i dettagli del bando.</p>
       </div>
       <div style="display:flex;align-items:center;gap:12px;margin-top:12px">
-        <button class="btn-scheda" id="btn-${{b.id}}" onclick="generaScheda('${{b.id}}','${{b.titolo.replace(/'/g,\\"\\\\'\\")}}'  )">📄 Genera Scheda PDF</button>
+        <button class="btn-scheda" id="btn-${{b.id}}" onclick="generaScheda('${{b.id}}')">📄 Genera Scheda PDF</button>
         <span class="spinner" id="sp-${{b.id}}">⏳ Generazione in corso (30-60 sec)...</span>
       </div>
     </div>`).join('');
@@ -503,9 +503,10 @@ function togglePreview(id) {{
   const el = document.getElementById('preview-' + id);
   el.style.display = el.style.display === 'none' ? 'block' : 'none';
 }}
-async function generaScheda(id, titolo) {{
-  const btn = document.getElementById('btn-' + id);
-  const sp  = document.getElementById('sp-'  + id);
+async function generaScheda(id) {{
+  const btn   = document.getElementById('btn-' + id);
+  const sp    = document.getElementById('sp-'  + id);
+  const titolo = (_hits[id] && (_hits[id].post_title || _hits[id].title)) || id;
   btn.disabled = true; sp.style.display = 'inline';
   try {{
     const resp = await fetch('/api/scheda/' + encodeURIComponent(id), {{
@@ -516,9 +517,8 @@ async function generaScheda(id, titolo) {{
     const blob = await resp.blob();
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
-    a.href = url;
-    // Nome file: Energelia + titolo sintetico
-    const nomeFile = 'Energelia_' + (titolo||id).substring(0,40).replace(/[^a-zA-Z0-9]/g,'_') + '.pdf';
+    a.href     = url;
+    const nomeFile = 'Energelia_' + titolo.substring(0,40).replace(/[^a-zA-Z0-9]/g,'_') + '.pdf';
     a.download = nomeFile;
     document.body.appendChild(a); a.click(); a.remove();
     URL.revokeObjectURL(url);
