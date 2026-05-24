@@ -555,13 +555,26 @@ async function generaScheda(id) {{
   const sp  = document.getElementById('sp-'  + id);
   btn.disabled = true;
   sp.style.display = 'inline';
+  sp.textContent = '⏳ Lettura bando...';
+
+  // Leggi pagina CE prima di avviare il job
+  const hit = _hits[id];
+  const urlCE = (hit && (hit.permalink || hit.link || hit.url)) || '';
+  let testoCE = '';
+  if (urlCE) {{
+    try {{
+      const rt = await fetch('/api/fetch-testo?url=' + encodeURIComponent(urlCE));
+      if (rt.ok) {{ const dt = await rt.json(); testoCE = dt.testo || ''; }}
+    }} catch(e) {{}}
+  }}
+
   sp.textContent = '⏳ Avvio elaborazione...';
 
   try {{
     // 1. Avvia job
     const r1 = await fetch('/api/scheda/' + encodeURIComponent(id), {{
       method: 'POST', headers: {{'Content-Type':'application/json'}},
-      body: JSON.stringify({{hit: _hits[id]}})
+      body: JSON.stringify({{hit: hit, testo_ce: testoCE}})
     }});
     const j1 = await r1.json();
     if (!j1.job_id) {{ alert('Errore avvio: ' + JSON.stringify(j1)); return; }}
@@ -952,6 +965,31 @@ LANDING_HTML = lambda: f"""<!DOCTYPE html><html lang="it"><head>
 </body></html>"""
 
 
+@app.get("/api/fetch-testo")
+async def fetch_testo(url: str = Query(""), session_id: str = Cookie(default=None)):
+    if not get_session(session_id):
+        return JSONResponse({"testo": ""})
+    if not url:
+        return JSONResponse({"testo": ""})
+    try:
+        import requests as req
+        r = req.get(url, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept-Language": "it-IT,it;q=0.9",
+            "Referer": "https://www.contributieuropa.com/",
+        }, timeout=15)
+        html = r.text
+        html = re.sub(r'<script[^>]*>.*?</script>', ' ', html, flags=re.DOTALL|re.IGNORECASE)
+        html = re.sub(r'<style[^>]*>.*?</style>', ' ', html, flags=re.DOTALL|re.IGNORECASE)
+        testo = re.sub(r'<[^>]+>', ' ', html)
+        testo = re.sub(r'\s+', ' ', testo).strip()
+        print(f"[FETCH] {url[:60]} — {len(testo)} chars", flush=True)
+        return JSONResponse({"testo": testo[:12000]})
+    except Exception as e:
+        print(f"[FETCH] error: {e}", flush=True)
+        return JSONResponse({"testo": ""})
+
+
 @app.get("/api/cerca")
 async def cerca(
     request: Request,
@@ -975,20 +1013,21 @@ async def cerca(
 # ── Job system asincrono ─────────────────────────────────────────────────────
 JOBS = {}
 
-def _esegui_job(job_id, hit):
+def _esegui_job(job_id, hit, testo_ce=""):
     try:
         object_id = hit.get("objectID", "")
 
-        # 1. Cerca testo in cache locale
-        testo_cache = leggi_da_cache(object_id) if object_id else None
-
-        if testo_cache:
-            print(f"[CACHE HIT] {object_id}", flush=True)
-            # Usa testo dalla cache — chiama Claude SENZA web_search
-            content, titolo = be.genera_scheda_da_testo(hit, testo_cache)
+        if testo_ce and len(testo_ce) > 200:
+            print(f"[TESTO CE] {object_id} — {len(testo_ce)} chars", flush=True)
+            content, titolo = be.genera_scheda_da_testo(hit, testo_ce)
         else:
-            print(f"[CACHE MISS] {object_id} — uso web_search", flush=True)
-            content, titolo = be.genera_scheda_web(hit)
+            testo_cache = leggi_da_cache(object_id) if object_id else None
+            if testo_cache and len(testo_cache) > 200 and "allowlist" not in testo_cache:
+                print(f"[CACHE HIT] {object_id}", flush=True)
+                content, titolo = be.genera_scheda_da_testo(hit, testo_cache)
+            else:
+                print(f"[CACHE MISS] {object_id} — uso web_search", flush=True)
+                content, titolo = be.genera_scheda_web(hit)
 
         api_error = content.pop("_api_error", "")
         if api_error:
@@ -1197,10 +1236,11 @@ async def cache_status(session_id: str = Cookie(default=None)):
 async def genera_scheda(bando_id: str, body: dict, session_id: str = Cookie(default=None)):
     if not get_session(session_id):
         return JSONResponse({"error": "Non autenticato"}, status_code=401)
-    hit    = body.get("hit", {})
-    job_id = secrets.token_hex(8)
+    hit      = body.get("hit", {})
+    testo_ce = body.get("testo_ce", "")
+    job_id   = secrets.token_hex(8)
     JOBS[job_id] = {"status": "pending"}
-    threading.Thread(target=_esegui_job, args=(job_id, hit), daemon=True).start()
+    threading.Thread(target=_esegui_job, args=(job_id, hit, testo_ce), daemon=True).start()
     return JSONResponse({"job_id": job_id})
 
 
