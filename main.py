@@ -1013,7 +1013,7 @@ async def fetch_testo(url: str = Query(""), session_id: str = Cookie(default=Non
         testo = re.sub(r'<[^>]+>', ' ', html)
         testo = re.sub(r'\s+', ' ', testo).strip()
         print(f"[FETCH] {url[:60]} — {len(testo)} chars", flush=True)
-        return JSONResponse({"testo": testo[:12000]})
+        return JSONResponse({"testo": testo[:20000]})
     except Exception as e:
         print(f"[FETCH] error: {e}", flush=True)
         return JSONResponse({"testo": ""})
