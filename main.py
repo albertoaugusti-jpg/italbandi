@@ -597,19 +597,39 @@ async function cerca() {{
   document.getElementById('risultati-header').textContent = `${{data.totale}} bandi trovati`;
   _hits = {{}};
   data.bandi.forEach(b => {{ _hits[b.id] = b._hit; }});
-  // Foto tematiche per categoria
-  const foto = [
-    'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=600&q=80', // edifici
-    'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=600&q=80', // lavoro
-    'https://images.unsplash.com/photo-1565514020179-026b92b84bb6?w=600&q=80', // industria
-    'https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=600&q=80', // ufficio
-    'https://images.unsplash.com/photo-1509391366360-2e959784a276?w=600&q=80', // energie
-    'https://images.unsplash.com/photo-1542744173-8e7e53415bb0?w=600&q=80', // business
-    'https://images.unsplash.com/photo-1464938050520-ef2270bb8ce8?w=600&q=80', // agricoltura
-    'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=600&q=80', // città
-  ];
+
+  function getFotoUrl(titolo) {{
+    const t = (titolo || '').toLowerCase();
+    if (/agric|rurale|biologica|benessere animale|zootec|bovino|suino|ovino|avicol|vitivinic|vino|olio|ortofrutta|pac |csr |sra/.test(t))
+      return 'https://images.unsplash.com/photo-1464938050520-ef2270bb8ce8?w=600&q=80';
+    if (/energia|rinnovabil|fotovoltaic|efficienza energetica|solare|eolico|idrogeno|green/.test(t))
+      return 'https://images.unsplash.com/photo-1509391366360-2e959784a276?w=600&q=80';
+    if (/turismo|albergo|hotel|agriturismo|ristoran|hospitality|ricettiv/.test(t))
+      return 'https://images.unsplash.com/photo-1571896349842-33c89424de2d?w=600&q=80';
+    if (/digital|tecnolog|software|innovaz|startup|ricerca|sviluppo|intelligenza|cloud|cyber/.test(t))
+      return 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=600&q=80';
+    if (/macchinari|impianti|manifattur|industria|produzione|artigian|metalmeccan|tessile|moda/.test(t))
+      return 'https://images.unsplash.com/photo-1565514020179-026b92b84bb6?w=600&q=80';
+    if (/commercio|negozio|bottega|retail|distribuzione|mercato|fiera/.test(t))
+      return 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=600&q=80';
+    if (/formazione|lavoro|occupazione|welfare|dipendenti|risorse umane|personale|stage/.test(t))
+      return 'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=600&q=80';
+    if (/internazionaliz|export|estero|mercati internazionali|paesi terzi/.test(t))
+      return 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600&q=80';
+    if (/sociale|terzo settore|onlus|cooperativa|comunità|inclusione|disabil/.test(t))
+      return 'https://images.unsplash.com/photo-1559027615-cd4628902d4a?w=600&q=80';
+    if (/edilizia|riqualificaz|ristrutturaz|immobil|edifici|patrimonio/.test(t))
+      return 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=600&q=80';
+    if (/cultura|arte|musei|spettacolo|cinema|musica|patrimonio culturale/.test(t))
+      return 'https://images.unsplash.com/photo-1499781350541-7783f6c6a0c8?w=600&q=80';
+    if (/pesca|mare|acquacoltura|marina|portuale/.test(t))
+      return 'https://images.unsplash.com/photo-1504309092620-4d0ec726efa4?w=600&q=80';
+    // Default: business generico
+    return 'https://images.unsplash.com/photo-1542744173-8e7e53415bb0?w=600&q=80';
+  }}
+
   document.getElementById('risultati').innerHTML = data.bandi.map((b, i) => {{
-    const imgUrl = foto[i % foto.length];
+    const imgUrl = getFotoUrl(b.titolo);
     return `
     <div class="bando-card">
       <div class="card-img" style="background-image:url('${{imgUrl}}')">
