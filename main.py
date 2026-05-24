@@ -170,7 +170,10 @@ def get_session(session_id: str = None):
 CSS_BASE = """
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'Segoe UI', Arial, sans-serif; background: #F4F6FA; color: #1A2A3A; min-height: 100vh; }
+body { font-family: 'Segoe UI', Arial, sans-serif; background: #E8EEF7; color: #1A2A3A; min-height: 100vh;
+  background-image: radial-gradient(circle at 20% 50%, rgba(201,168,76,0.06) 0%, transparent 50%),
+                    radial-gradient(circle at 80% 20%, rgba(26,42,74,0.08) 0%, transparent 50%);
+}
 a { color: #1A3A6A; text-decoration: none; }
 a:hover { text-decoration: underline; }
 
@@ -228,45 +231,28 @@ a:hover { text-decoration: underline; }
 .container { max-width: 1000px; margin: 28px auto; padding: 0 20px 60px; }
 .risultati-header { font-size: 0.8rem; color: #6A8AA8; margin-bottom: 14px; font-weight: 600; letter-spacing: 0.5px; }
 
-/* Card stile A+F */
+/* Card stile D — minimal, alta densità */
 .bando-card {
-  border-radius: 10px;
-  overflow: hidden;
-  margin-bottom: 14px;
   background: #FFFFFF;
-  border: 1px solid #D8E2EE;
-  box-shadow: 0 2px 8px rgba(26,42,74,0.07);
-  transition: transform 0.2s, box-shadow 0.2s;
+  border: 1px solid #D0DCF0;
+  border-left: 4px solid #D0DCF0;
+  border-radius: 8px;
+  padding: 16px 20px 14px;
+  margin-bottom: 10px;
+  transition: border-left-color 0.2s, box-shadow 0.2s;
+  box-shadow: 0 1px 4px rgba(26,42,74,0.06);
 }
-.bando-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(26,42,74,0.13); }
-.card-img {
-  height: 90px;
-  background-size: cover;
-  background-position: center;
-  position: relative;
-}
-.card-cat-header {
-  position: absolute; inset: 0;
-  background: linear-gradient(to bottom, rgba(26,42,74,0.65) 0%, rgba(26,42,74,0.1) 50%, rgba(26,42,74,0.75) 100%);
-  display: flex; flex-direction: column;
-  justify-content: space-between; padding: 8px 12px;
-}
-.card-cat-label {
-  font-size: 9px; font-weight: 800;
-  letter-spacing: 0.12em; text-transform: uppercase;
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 3px 8px; border-radius: 20px;
-}
-.card-badges { display: flex; gap: 6px; }
-.card-body { padding: 12px 16px 14px; }
-.card-titolo { font-size: 0.86rem; font-weight: 700; color: #1A2A3A; line-height: 1.4; margin-bottom: 10px; }
-.card-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 10px; }
-.card-metric { background: #F4F6FA; border: 1px solid #E0E8F0; border-radius: 5px; padding: 6px 10px; }
-.card-metric-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: #8899AA; margin-bottom: 2px; }
-.card-metric-val { font-size: 11px; font-weight: 700; color: #1A2A3A; }
+.bando-card:hover { border-left-color: #C9A84C; box-shadow: 0 3px 12px rgba(26,42,74,0.12); }
+.card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.card-cat-tag { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+.card-titolo { font-size: 0.88rem; font-weight: 700; color: #1A2A3A; line-height: 1.45; margin-bottom: 8px; }
+.card-info { display: flex; gap: 18px; margin-bottom: 10px; flex-wrap: wrap; }
+.card-info-item { font-size: 0.78rem; color: #6A8AA8; display: flex; align-items: center; gap: 4px; }
+.card-info-item strong { color: #2A4A6A; font-weight: 600; }
+.card-divider { border: none; border-top: 1px solid #EEF2F8; margin: 10px 0; }
 .card-actions { display: flex; gap: 8px; align-items: center; }
 .btn-scheda {
-  padding: 7px 16px;
+  padding: 7px 18px;
   background: #1A2A4A; color: #FFFFFF;
   border: none; border-radius: 5px;
   font-size: 0.8rem; font-weight: 700; cursor: pointer;
@@ -274,20 +260,20 @@ a:hover { text-decoration: underline; }
 .btn-scheda:hover { background: #C9A84C; }
 .btn-scheda:disabled { background: #C8D4E4; color: #8899AA; cursor: not-allowed; }
 .btn-preview {
-  padding: 7px 12px; background: none; color: #1A3A6A;
-  border: 1px solid #C8D4E4; border-radius: 5px;
+  padding: 7px 12px; background: none; color: #5A7A9A;
+  border: 1px solid #D0DCF0; border-radius: 5px;
   font-size: 0.73rem; font-weight: 700; cursor: pointer;
 }
 .btn-preview:hover { border-color: #C9A84C; color: #C9A84C; }
 .badge { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 20px; white-space: nowrap; }
-.badge-aperto   { background: rgba(22,163,74,0.1); color: #15803D; border: 1px solid rgba(22,163,74,0.3); }
-.badge-prossimo { background: rgba(37,99,235,0.1); color: #1D4ED8; border: 1px solid rgba(37,99,235,0.3); }
+.badge-aperto   { background: rgba(22,163,74,0.08); color: #15803D; border: 1px solid rgba(22,163,74,0.25); }
+.badge-prossimo { background: rgba(37,99,235,0.08); color: #1D4ED8; border: 1px solid rgba(37,99,235,0.25); }
 .spinner { display: none; font-size: 0.75rem; color: #8899AA; white-space: nowrap; }
 .loader  { text-align: center; padding: 40px; color: #8899AA; }
 .preview-panel {
-  display: none; margin: 0 0 10px;
-  padding: 12px 14px; background: #F4F6FA;
-  border: 1px solid #D8E2EE; border-radius: 6px;
+  display: none; margin-bottom: 10px;
+  padding: 12px 14px; background: #F4F7FC;
+  border: 1px solid #D0DCF0; border-radius: 6px;
   font-size: 0.8rem; color: #3A5A7A; line-height: 1.6;
 }
 .preview-loading { color: #8899AA; font-style: italic; }
@@ -595,21 +581,21 @@ async function cerca() {{
   data.bandi.forEach(b => {{ _hits[b.id] = b._hit; }});
 
   const CATS = {{
-    agric:    {{ r:/agric|rurale|biolog|animale|zootec|bovino|suino|ovino|avicol|vitivin|vino|olio|ortofrut|pac |csr |sra|forest/, foto:'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=700&q=80', c:'#1E3A1A', t:'#6FCF5A', i:'🌿', l:'Agricoltura' }},
-    energy:   {{ r:/energia|rinnovab|fotovolt|efficienza energet|solare|eolico|idrogeno|green|feeri/, foto:'https://images.unsplash.com/photo-1548337138-e87d889cc369?w=700&q=80', c:'#0D2240', t:'#60A5FA', i:'⚡', l:'Energia' }},
-    turismo:  {{ r:/turismo|albergo|hotel|agriturismo|ristorant|hospitality|ricettiv|ospital/, foto:'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?w=700&q=80', c:'#2A1520', t:'#F9A8D4', i:'🏨', l:'Turismo' }},
-    digital:  {{ r:/digital|tecnolog|software|innovaz|startup|ricerca|sviluppo|intelligen|cloud|cyber|ict/, foto:'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=700&q=80', c:'#0D0D30', t:'#C4B5FD', i:'💻', l:'Digitale' }},
-    industria:{{ r:/macchin|impianti|manifattur|industria|produzion|artigian|metalmecc|tessile|moda|terz/, foto:'https://images.unsplash.com/photo-1581091226033-d5c48150dbaa?w=700&q=80', c:'#2A1A00', t:'#FCD34D', i:'🏭', l:'Industria' }},
-    commercio:{{ r:/commercio|negozio|bottega|retail|distribuz|mercato|fiera|duc|centro urban/, foto:'https://images.unsplash.com/photo-1555529669-e69e7aa0ba9a?w=700&q=80', c:'#0A2A0A', t:'#4ADE80', i:'🏪', l:'Commercio' }},
-    lavoro:   {{ r:/formazion|lavoro|occupaz|welfare|dipendenti|risorse umane|personal|stage|gol|par /, foto:'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=700&q=80', c:'#0A1A30', t:'#93C5FD', i:'👥', l:'Formazione' }},
-    intl:     {{ r:/internazion|export|estero|mercati intern|paesi terzi|simest/, foto:'https://images.unsplash.com/photo-1578575437130-527eed3abbec?w=700&q=80', c:'#0A0A2A', t:'#C4B5FD', i:'🌍', l:'Export' }},
-    sociale:  {{ r:/sociale|terzo settore|onlus|cooperat|comunit|inclusione|disabil|volont/, foto:'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=700&q=80', c:'#0A2A15', t:'#4ADE80', i:'🤝', l:'Sociale' }},
-    edilizia: {{ r:/edilizia|riqualif|ristruttur|immobil|edifici|patrimonio|sismica|cappotto/, foto:'https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=700&q=80', c:'#2A1500', t:'#FCD34D', i:'🏗️', l:'Edilizia' }},
-    cultura:  {{ r:/cultura|arte|musei|spettacolo|cinema|musica|patrimonio cultur|editoria/, foto:'https://images.unsplash.com/photo-1544967082-d9d25d867d66?w=700&q=80', c:'#2A001A', t:'#F9A8D4', i:'🎨', l:'Cultura' }},
-    pesca:    {{ r:/pesca|mare|acquacolt|marina|portuale|ittico/, foto:'https://images.unsplash.com/photo-1519614483-c6d3001943d8?w=700&q=80', c:'#001A30', t:'#93C5FD', i:'🐟', l:'Pesca' }},
-    export:   {{ r:/voucher|certificaz|competenz|digitale|under 35|giovani|disoccupat/, foto:'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=700&q=80', c:'#1A0A2A', t:'#C4B5FD', i:'🎓', l:'Formazione' }},
+    agric:    {{ r:/agric|rurale|biolog|animale|zootec|bovino|suino|ovino|avicol|vitivin|vino|olio|ortofrut|pac |csr |sra|forest/, t2:'#166534', i:'&#127807;', l:'Agricoltura' }},
+    energy:   {{ r:/energia|rinnovab|fotovolt|efficienza energet|solare|eolico|idrogeno|green|feeri/, t2:'#1D4ED8', i:'&#9889;', l:'Energia' }},
+    turismo:  {{ r:/turismo|albergo|hotel|agriturismo|ristorant|hospitality|ricettiv|ospital/, t2:'#9D174D', i:'&#127976;', l:'Turismo' }},
+    digital:  {{ r:/digital|tecnolog|software|innovaz|startup|ricerca|sviluppo|intelligen|cloud|cyber|ict/, t2:'#5B21B6', i:'&#128187;', l:'Digitale' }},
+    industria:{{ r:/macchin|impianti|manifattur|industria|produzion|artigian|metalmecc|tessile|moda|terz/, t2:'#92400E', i:'&#127981;', l:'Industria' }},
+    commercio:{{ r:/commercio|negozio|bottega|retail|distribuz|mercato|fiera|duc|centro urban/, t2:'#065F46', i:'&#127978;', l:'Commercio' }},
+    lavoro:   {{ r:/formazion|lavoro|occupaz|welfare|dipendenti|risorse umane|personal|stage|gol|par /, t2:'#1E40AF', i:'&#128101;', l:'Formazione' }},
+    intl:     {{ r:/internazion|export|estero|mercati intern|paesi terzi|simest/, t2:'#4C1D95', i:'&#127757;', l:'Export' }},
+    sociale:  {{ r:/sociale|terzo settore|onlus|cooperat|comunit|inclusione|disabil|volont/, t2:'#064E3B', i:'&#129309;', l:'Sociale' }},
+    edilizia: {{ r:/edilizia|riqualif|ristruttur|immobil|edifici|patrimonio|sismica|cappotto/, t2:'#7C2D12', i:'&#127959;', l:'Edilizia' }},
+    cultura:  {{ r:/cultura|arte|musei|spettacolo|cinema|musica|patrimonio cultur|editoria/, t2:'#831843', i:'&#127912;', l:'Cultura' }},
+    pesca:    {{ r:/pesca|mare|acquacolt|marina|portuale|ittico/, t2:'#0C4A6E', i:'&#128031;', l:'Pesca' }},
+    export:   {{ r:/voucher|certificaz|competenz|digitale|under 35|giovani|disoccupat/, t2:'#3730A3', i:'&#127891;', l:'Formazione' }},
   }};
-  const DEFCAT = {{ foto:'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=700&q=80', c:'#0A1628', t:'#A8C8E8', i:'📋', l:'Finanza Agevolata' }};
+  const DEFCAT = {{ t2:'#1A2A4A', i:'&#128203;', l:'Finanza Agevolata' }};
   function getCat(titolo) {{
     const t = (titolo||'').toLowerCase();
     for (const v of Object.values(CATS)) {{ if (v.r.test(t)) return v; }}
@@ -620,29 +606,26 @@ async function cerca() {{
     const cat = getCat(b.titolo);
     const aperto = !b.stato.includes('prossima');
     return `<div class="bando-card">
-      <div class="card-img" style="background-image:url('${{cat.foto}}')">
-        <div class="card-cat-header">
-          <div class="card-cat-label" style="color:${{cat.t}};background:${{cat.c}}">${{cat.i}} ${{cat.l}}</div>
-          <div class="card-badges">
-            <span class="badge ${{aperto ? 'badge-aperto' : 'badge-prossimo'}}">${{b.stato}}</span>
-          </div>
+      <div class="card-top">
+        <span class="card-cat-tag" style="color:${{cat.t2}}">${{cat.i}} ${{cat.l}}</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span class="badge ${{aperto ? 'badge-aperto' : 'badge-prossimo'}}">${{b.stato}}</span>
+          <span style="font-size:10px;color:#8899AA">${{b.livello}}</span>
         </div>
       </div>
-      <div class="card-body">
-        <div class="card-titolo">${{b.titolo}}</div>
-        <div class="card-metrics">
-          <div class="card-metric"><div class="card-metric-label">Scadenza</div><div class="card-metric-val">${{b.scadenza}}</div></div>
-          <div class="card-metric"><div class="card-metric-label">Livello</div><div class="card-metric-val">${{b.livello}}</div></div>
-          <div class="card-metric" style="grid-column:1/-1"><div class="card-metric-label">Destinatari</div><div class="card-metric-val">${{(b.beneficiari||'—').substring(0,60)}}</div></div>
-        </div>
-        <div class="preview-panel" id="preview-${{b.id}}">
-          <span class="preview-loading" id="prev-msg-${{b.id}}">Clicca Preview per scoprire se questo bando fa per te...</span>
-        </div>
-        <div class="card-actions">
-          <button class="btn-scheda" id="btn-${{b.id}}" onclick="generaScheda('${{b.id}}')">Genera Scheda PDF</button>
-          <button class="btn-preview" id="arrow-${{b.id}}" onclick="togglePreview('${{b.id}}')">PREVIEW</button>
-          <span class="spinner" id="sp-${{b.id}}">elaborazione...</span>
-        </div>
+      <div class="card-titolo">${{b.titolo}}</div>
+      <div class="card-info">
+        <div class="card-info-item">&#128197; <strong>${{b.scadenza}}</strong></div>
+        <div class="card-info-item">&#128100; <strong>${{(b.beneficiari||'—').substring(0,50)}}</strong></div>
+      </div>
+      <hr class="card-divider">
+      <div class="preview-panel" id="preview-${{b.id}}">
+        <span class="preview-loading" id="prev-msg-${{b.id}}">Clicca Preview per scoprire se questo bando fa per te...</span>
+      </div>
+      <div class="card-actions">
+        <button class="btn-scheda" id="btn-${{b.id}}" onclick="generaScheda('${{b.id}}')">Genera Scheda PDF</button>
+        <button class="btn-preview" id="arrow-${{b.id}}" onclick="togglePreview('${{b.id}}')">PREVIEW</button>
+        <span class="spinner" id="sp-${{b.id}}">elaborazione...</span>
       </div>
     </div>`;
   }}).join('');
