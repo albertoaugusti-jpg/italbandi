@@ -1077,12 +1077,15 @@ def _esegui_job(job_id, hit, testo_ce=""):
 
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
             tmp_path = tmp.name
+        print(f"[PDF] generazione avviata — logo: {logo_energelia}", flush=True)
         ENGINE.generate(content, tmp_path, logo_energelia)
+        print(f"[PDF] generazione completata", flush=True)
 
         titolo_corto = re.sub(r'[^\w\s]', '', titolo)[:40].strip().replace(' ', '_')
         nome_file = f"Energelia_{titolo_corto}_{datetime.now().strftime('%Y%m%d')}.pdf"
         JOBS[job_id] = {"status": "ready", "path": tmp_path, "nome": nome_file}
     except Exception as e:
+        print(f"[PDF] ERRORE: {traceback.format_exc()}", flush=True)
         JOBS[job_id] = {"status": "error", "error": traceback.format_exc()}
 
 
