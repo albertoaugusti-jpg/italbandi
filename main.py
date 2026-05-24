@@ -603,6 +603,8 @@ async function generaScheda(id) {{
           URL.revokeObjectURL(url);
           sp.style.display = 'none';
           btn.disabled = false;
+          // 4. Popup CTA post-download
+          setTimeout(() => mostraCtaDownload(), 800);
         }} else if (j2.status === 'error') {{
           clearInterval(poll);
           alert('Errore generazione scheda. Riprova.');
@@ -623,8 +625,32 @@ async function generaScheda(id) {{
     sp.style.display = 'none';
   }}
 }}
+function mostraCtaDownload() {{
+  document.getElementById('cta-modal').style.display = 'flex';
+}}
+function chiudiCta() {{
+  document.getElementById('cta-modal').style.display = 'none';
+}}
 window.onload = cerca;
 </script>
+
+<div id="cta-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:#0F2035;border:1px solid #C9A84C;border-radius:12px;padding:36px 40px;max-width:480px;width:90%;text-align:center;position:relative">
+    <button onclick="chiudiCta()" style="position:absolute;top:12px;right:16px;background:none;border:none;color:#6A8AA8;font-size:1.2rem;cursor:pointer">✕</button>
+    <div style="font-size:2rem;margin-bottom:12px">📋</div>
+    <h3 style="color:#C9A84C;font-size:1.2rem;margin-bottom:12px">Hai trovato un bando interessante?</h3>
+    <p style="color:#A8C8E8;font-size:0.92rem;line-height:1.6;margin-bottom:24px">
+      I nostri consulenti valuteranno <strong>gratuitamente</strong> la candidatura della tua azienda.<br>
+      Contatta Antonio Castagnaro per una pre-istruttoria senza impegno.
+    </p>
+    <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+      <a href="tel:+390108078800" style="background:#C9A84C;color:#0A1628;padding:12px 24px;border-radius:6px;font-weight:700;text-decoration:none;font-size:0.92rem">📞 010 8078800</a>
+      <a href="mailto:a.castagnaro@energelia.it" style="background:transparent;color:#C9A84C;border:1px solid #C9A84C;padding:12px 24px;border-radius:6px;font-weight:700;text-decoration:none;font-size:0.92rem">✉️ Scrivici</a>
+    </div>
+    <p style="color:#3A5A7A;font-size:0.75rem;margin-top:16px">a.castagnaro@energelia.it</p>
+  </div>
+</div>
+
 </body></html>"""
 
 # ── PRIVACY POLICY ─────────────────────────────────────────────────────────────
