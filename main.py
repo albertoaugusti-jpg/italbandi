@@ -588,8 +588,8 @@ def index_page(user):
           <option value="regionale">Regionale</option>
         </select>
       </div>
-      <div id="regione-wrap" style="display:none">
-        <label class="search-box-label">Regione</label>
+      <div id="regione-wrap" style="display:none;grid-column:1/-1">
+        <label class="search-box-label">Regione <span style="color:#F87171">*</span></label>
         <select id="regione" onchange="aggiornaProvince()">
           <option value="">-- Scegli regione --</option>
           <option>Abruzzo</option><option>Basilicata</option><option>Calabria</option>
@@ -601,11 +601,12 @@ def index_page(user):
           <option>Valle d&apos;Aosta</option><option>Veneto</option>
         </select>
       </div>
-      <div id="provincia-wrap" style="display:none">
-        <label class="search-box-label">Provincia</label>
+      <div id="provincia-wrap" style="display:none;grid-column:1/-1">
+        <label class="search-box-label">Provincia (opzionale)</label>
         <select id="provincia"><option value="">(tutte)</option></select>
       </div>
     </div>
+    <div id="err-ricerca" style="display:none;color:#F87171;font-size:0.8rem;margin-bottom:8px">Seleziona una regione per cercare bandi regionali.</div>
     <button class="btn-cerca-hero" onclick="cercaEMostra()">Cerca bandi</button>
   </div>
 </div>
@@ -677,6 +678,7 @@ function aggiornaFiltri() {{
   const v = document.getElementById('livello').value;
   document.getElementById('regione-wrap').style.display   = v === 'regionale' ? 'block' : 'none';
   document.getElementById('provincia-wrap').style.display = 'none';
+  document.getElementById('err-ricerca').style.display    = 'none';
   if (v !== 'regionale') document.getElementById('regione').value = '';
 }}
 function aggiornaFiltri2() {{
@@ -704,11 +706,23 @@ function aggiornaProvince2() {{
   }} else wrap.style.display = 'none';
 }}
 function cercaEMostra() {{
-  // Copia filtri dalla view ricerca alla topbar risultati
+  // Validazione: se regionale, regione obbligatoria
+  const livello = document.getElementById('livello').value;
+  const regione = document.getElementById('regione').value;
+  if (livello === 'regionale' && !regione) {{
+    document.getElementById('err-ricerca').style.display = 'block';
+    document.getElementById('regione').focus();
+    return;
+  }}
+  document.getElementById('err-ricerca').style.display = 'none';
+  // Copia filtri alla topbar risultati
   document.getElementById('keyword2').value = document.getElementById('keyword').value;
   document.getElementById('stato2').value   = document.getElementById('stato').value;
-  document.getElementById('livello2').value = document.getElementById('livello').value;
+  document.getElementById('livello2').value = livello;
   aggiornaFiltri2();
+  if (livello === 'regionale' && regione) {{
+    document.getElementById('regione2').value = regione;
+  }}
   // Mostra view risultati
   document.getElementById('view-ricerca').style.display  = 'none';
   document.getElementById('view-risultati').style.display = 'block';
