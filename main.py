@@ -16,69 +16,62 @@ LOGO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo_italb
 
 app = FastAPI(title="ItalBandi")
 
-# ── Database Neon (cache bandi) via HTTP API ─────────────────────────────────
+# ── Database Neon (cache bandi) via psycopg2 ─────────────────────────────────
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
-def _neon_query(sql, params=None):
-    """Esegue query su Neon via HTTP API — zero driver, funziona su Python 3.14."""
-    if not DATABASE_URL:
-        return None
-    try:
-        import urllib.parse, requests as req
-        u    = urllib.parse.urlparse(DATABASE_URL)
-        host = u.hostname
-        pwd  = u.password
-        url  = f"https://{host}/sql"
-        payload = {"query": sql}
-        if params:
-            payload["params"] = params
-        r = req.post(url, json=payload,
-                     headers={"Authorization": f"Bearer {pwd}",
-                               "Neon-Connection-String": DATABASE_URL,
-                               "Content-Type": "application/json"},
-                     timeout=10)
-        if r.status_code == 200:
-            return r.json()
-        else:
-            print(f"[DB] HTTP error {r.status_code}: {r.text[:150]}", flush=True)
-            return None
-    except Exception as e:
-        print(f"[DB] query error: {e}", flush=True)
-        return None
+def _get_con():
+    import psycopg2
+    return psycopg2.connect(DATABASE_URL)
 
 def init_cache_db():
-    result = _neon_query("""CREATE TABLE IF NOT EXISTS bandi_cache (
-        object_id    TEXT PRIMARY KEY,
-        titolo       TEXT,
-        testo_pagina TEXT,
-        permalink    TEXT,
-        aggiornato   TIMESTAMP DEFAULT NOW()
-    )""")
-    if result is not None:
+    if not DATABASE_URL: return
+    try:
+        con = _get_con()
+        cur = con.cursor()
+        cur.execute("""CREATE TABLE IF NOT EXISTS bandi_cache (
+            object_id    TEXT PRIMARY KEY,
+            titolo       TEXT,
+            testo_pagina TEXT,
+            permalink    TEXT,
+            aggiornato   TIMESTAMP DEFAULT NOW()
+        )""")
+        con.commit(); cur.close(); con.close()
         print("[DB] init OK", flush=True)
-    else:
-        print("[DB] init failed", flush=True)
+    except Exception as e:
+        print(f"[DB] init error: {e}", flush=True)
 
 init_cache_db()
 
 def salva_in_cache(object_id, titolo, testo, permalink):
-    _neon_query("""INSERT INTO bandi_cache (object_id,titolo,testo_pagina,permalink,aggiornato)
-        VALUES ($1,$2,$3,$4,NOW())
-        ON CONFLICT (object_id) DO UPDATE
-        SET testo_pagina=$3,titolo=$2,permalink=$4,aggiornato=NOW()""",
-        [object_id, titolo, testo, permalink])
+    if not DATABASE_URL: return
+    try:
+        con = _get_con(); cur = con.cursor()
+        cur.execute("""INSERT INTO bandi_cache (object_id,titolo,testo_pagina,permalink,aggiornato)
+            VALUES (%s,%s,%s,%s,NOW())
+            ON CONFLICT (object_id) DO UPDATE
+            SET testo_pagina=%s,titolo=%s,permalink=%s,aggiornato=NOW()""",
+            (object_id,titolo,testo,permalink,testo,titolo,permalink))
+        con.commit(); cur.close(); con.close()
+    except Exception as e:
+        print(f"[DB] save error: {e}", flush=True)
 
 def leggi_da_cache(object_id):
-    result = _neon_query("SELECT testo_pagina FROM bandi_cache WHERE object_id=$1", [object_id])
-    if result and result.get("rows"):
-        return result["rows"][0][0]
-    return None
+    if not DATABASE_URL: return None
+    try:
+        con = _get_con(); cur = con.cursor()
+        cur.execute("SELECT testo_pagina FROM bandi_cache WHERE object_id=%s", (object_id,))
+        row = cur.fetchone(); cur.close(); con.close()
+        return row[0] if row else None
+    except: return None
 
 def conta_cache():
-    result = _neon_query("SELECT COUNT(*) FROM bandi_cache")
-    if result and result.get("rows"):
-        return result["rows"][0][0]
-    return 0
+    if not DATABASE_URL: return 0
+    try:
+        con = _get_con(); cur = con.cursor()
+        cur.execute("SELECT COUNT(*) FROM bandi_cache")
+        n = cur.fetchone()[0]; cur.close(); con.close()
+        return n
+    except: return 0
 
 @app.get("/logo")
 async def serve_logo():
