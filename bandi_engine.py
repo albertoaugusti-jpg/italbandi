@@ -301,3 +301,136 @@ def genera_scheda_web(hit):
     }
 
     return content, titolo
+
+
+# ── Genera scheda da testo già disponibile (cache) — SENZA web_search ────────
+
+def _chiedi_a_claude_da_testo(titolo, testo, stato_bando):
+    """Come _chiedi_a_claude ma usa il testo già disponibile — zero web_search."""
+    if not ANTHROPIC_API_KEY:
+        return {}
+
+    prompt = f"""Sei un esperto di finanza agevolata italiana di Energelia S.r.l.
+
+BANDO DA ANALIZZARE:
+Titolo: {titolo}
+Stato: {stato_bando}
+
+TESTO DEL BANDO:
+{testo[:6000]}
+
+Genera la scheda in JSON con questa struttura ESATTA (usa solo dati presenti nel testo):
+{{
+  "sottotitolo": "Ente erogatore · riferimento normativo · tipo agevolazione · {stato_bando}",
+  "dotazione": "importo totale fondo (null se non presente)",
+  "intensita": "percentuale contributo (null se non presente)",
+  "contributo_max": "importo massimo per beneficiario (null se non presente)",
+  "data_scadenza": "DD/MM/YYYY (null se non presente)",
+  "ente_finalita": ["Ente erogatore", "Obiettivo", "Riferimento normativo"],
+  "chi_partecipa": ["Beneficiari", "Requisiti", "Esclusioni"],
+  "cosa_finanziabile": ["Tipologia 1", "Tipologia 2", "Tipologia 3"],
+  "spese_ammissibili": ["Voce 1", "Voce 2", "Voce 3"],
+  "spese_non_ammissibili": ["Voce 1", "IVA", "Spese ante-ammissione"],
+  "contributo_voci": ["Intensita: X%", "Max: EUR X", "Min investimento: EUR X"],
+  "criteri_valutazione": ["Procedura", "Criterio 1", "Documentazione"],
+  "fasi_tempi": ["Apertura: data", "Scadenza: data", "Rendicontazione"],
+  "come_presentare": ["Portale", "Credenziali", "Allegati"],
+  "perche_interessante": ["Punto 1", "Punto 2", "Punto 3"],
+  "criticita": ["Vincolo 1", "Vincolo 2", "Attenzione"],
+  "cta_testo": "Frase CTA specifica",
+  "fonte_ufficiale": "Fonte dal testo"
+}}
+
+Rispondi SOLO con JSON valido."""
+
+    try:
+        resp = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={"x-api-key": ANTHROPIC_API_KEY,
+                     "anthropic-version": "2023-06-01",
+                     "content-type": "application/json"},
+            json={"model":    "claude-haiku-4-5-20251001",
+                  "max_tokens": 2000,
+                  "messages": [{"role": "user", "content": prompt}]},
+            timeout=60,
+        )
+        if resp.status_code != 200:
+            return {"_api_error": f"{resp.status_code}"}
+
+        blocks = resp.json().get("content", [])
+        testo_r = "\n".join(b.get("text","") for b in blocks if b.get("type")=="text").strip()
+        raw   = re.sub(r'```(?:json)?\s*','',testo_r)
+        raw   = re.sub(r'```','',raw).strip()
+        start = raw.find('{'); end = raw.rfind('}')
+        if start==-1 or end==-1:
+            return {}
+        return json.loads(raw[start:end+1])
+    except Exception as e:
+        return {"_api_error": str(e)}
+
+
+def genera_scheda_da_testo(hit, testo_cache):
+    """
+    Genera scheda usando il testo dalla cache — SENZA web_search.
+    Costo ~1-2 centesimi invece di 12-13.
+    """
+    titolo      = hit.get("post_title","") or hit.get("title","") or "Bando"
+    stato_bando = hit.get("scadenza_testo","Bandi aperti")
+    sc_str, _   = _scadenza_da_hit(hit)
+    dotaz_hit   = _dotazione_da_hit(hit)
+
+    taxh = hit.get("taxonomies_hierarchical",{})
+    ag   = taxh.get("area_geografica",{}) or {}
+    lvl0 = (ag.get("lvl0") or [""])[0]
+    lvl1 = (ag.get("lvl1") or [""])[0]
+    area = lvl1 or lvl0 or ""
+
+    cl = _chiedi_a_claude_da_testo(titolo, testo_cache, stato_bando)
+    api_error = cl.get("_api_error","")
+
+    def cv(key, fallback=None):
+        v = cl.get(key)
+        if isinstance(v, list): return v if v else (fallback or [])
+        if v and str(v).strip() not in ("","None","null","—","-"): return str(v).strip()
+        return fallback
+
+    dotazione  = cv("dotazione",     dotaz_hit or "—")
+    intensita  = cv("intensita",     "—")
+    contr_max  = cv("contributo_max","—")
+    data_val   = cv("data_scadenza", sc_str or "—")
+    sottotitolo= cv("sottotitolo",   f"{area} · {stato_bando}" if area else stato_bando)
+    fonte      = cv("fonte_ufficiale", f"Elaborato da Energelia S.r.l. · {datetime.now().strftime('%B %Y')}")
+    stato_bg   = "blue" if "prossima" in stato_bando.lower() else "orange"
+
+    content = {
+        "titolo":      titolo.upper(),
+        "sottotitolo": sottotitolo,
+        "metriche": [
+            {"label":"DOTAZIONE",     "valore":_sintetizza(dotazione),  "bg":"blue"},
+            {"label":"INTENSITA'",    "valore":_sintetizza(intensita),  "bg":"orange"},
+            {"label":"CONTRIBUTO MAX","valore":_sintetizza(contr_max),  "bg":"green"},
+            {"label":"SCADENZA",      "valore":_sintetizza(data_val),   "bg":stato_bg},
+        ],
+        "sinistra": [
+            {"titolo":"ENTE / FINALITA'",     "voci":_pulisci(cv("ente_finalita",[]))},
+            {"titolo":"CHI PUO' PARTECIPARE", "voci":_pulisci(cv("chi_partecipa",[]))},
+            {"titolo":"COSA E' FINANZIABILE", "voci":_pulisci(cv("cosa_finanziabile",[]))},
+            {"titolo":"SPESE NON AMMISSIBILI","voci":_pulisci(cv("spese_non_ammissibili",[]))},
+        ],
+        "tabella_contributi": None,
+        "destra": [
+            {"titolo":"CONTRIBUTO / INTENSITA'","voci":_pulisci(cv("contributo_voci",[]))},
+            {"titolo":"CRITERI / VALUTAZIONE",  "voci":_pulisci(cv("criteri_valutazione",[]))},
+            {"titolo":"FASI E TEMPI",           "voci":_pulisci(cv("fasi_tempi",[]))},
+            {"titolo":"COME PRESENTARE",        "voci":_pulisci(cv("come_presentare",[]))},
+        ],
+        "punti_forza": _pulisci(cv("perche_interessante",[])),
+        "criticita":   _pulisci(cv("criticita",[])),
+        "cta_testo":   cv("cta_testo", "Bando aperto: agisci ora!" if "aperto" in stato_bando.lower() else "Preparati ora con Energelia!"),
+        "cta_tel":    "Tel. 010 8078800",
+        "cta_email":  "a.augusti@energelia.it",
+        "fonte":      f"Fonte: {fonte[:80]}",
+        "mese_anno":  datetime.now().strftime("%B %Y"),
+        "_api_error": api_error,
+    }
+    return content, titolo
