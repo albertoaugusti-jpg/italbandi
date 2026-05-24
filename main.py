@@ -232,67 +232,91 @@ a:hover { text-decoration: underline; }
 .risultati-header { font-size: 0.82rem; color: #6A8AA8; margin-bottom: 16px; font-weight: 600; letter-spacing: 0.5px; }
 
 .bando-card {
+  border-radius: var(--border-radius-lg, 12px);
+  overflow: hidden;
+  margin-bottom: 16px;
   background: #0F2035;
   border: 1px solid #1E3A5F;
-  border-radius: 12px;
-  margin-bottom: 16px;
-  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.35);
   transition: transform 0.2s, box-shadow 0.2s;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
 }
-.bando-card:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(0,0,0,0.4); }
+.bando-card:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(0,0,0,0.5); }
 .card-img {
-  height: 90px;
+  height: 110px;
   background-size: cover;
   background-position: center;
   position: relative;
-  display: flex;
-  align-items: flex-end;
-  padding: 10px 16px;
 }
-.card-img::before {
-  content: '';
+.card-img-overlay {
   position: absolute;
   inset: 0;
-  background: linear-gradient(to bottom, rgba(10,22,40,0.2) 0%, rgba(10,22,40,0.85) 100%);
-}
-.card-img-badge {
-  position: relative;
-  z-index: 1;
+  background: linear-gradient(to bottom, rgba(10,22,40,0.15) 0%, rgba(10,22,40,0.82) 100%);
   display: flex;
-  gap: 8px;
-  align-items: center;
-  width: 100%;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 10px 14px;
 }
-.card-body { padding: 16px 20px 20px; }
-.card-titolo { font-size: 0.92rem; font-weight: 700; color: #D4E8FF; line-height: 1.4; margin-bottom: 12px; }
-.badge { font-size: 0.65rem; font-weight: 700; padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
-.badge-aperto   { background: #0D3321; color: #4ADE80; border: 1px solid #4ADE80; }
-.badge-prossimo { background: #0D1F40; color: #60A5FA; border: 1px solid #60A5FA; }
-.badge-livello  { background: rgba(201,168,76,0.15); color: #C9A84C; border: 1px solid rgba(201,168,76,0.3); font-size: 0.62rem; }
-.card-meta { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 14px; }
-.meta-item label { display: block; font-size: 0.62rem; font-weight: 700; color: #5A7A9A; text-transform: uppercase; letter-spacing: 0.05em; }
-.meta-item span  { font-size: 0.8rem; color: #A8C8E8; font-weight: 500; }
-.card-actions { display: flex; align-items: center; gap: 10px; }
+.card-cat-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.card-badges { display: flex; gap: 6px; }
+.card-body { padding: 14px 16px 16px; }
+.card-titolo { font-size: 0.88rem; font-weight: 700; color: #D4E8FF; line-height: 1.4; margin-bottom: 12px; }
+.card-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.card-metric {
+  background: rgba(10,22,40,0.6);
+  border: 1px solid #1E3A5F;
+  border-radius: 6px;
+  padding: 7px 10px;
+}
+.card-metric-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: #5A7A9A; margin-bottom: 2px; }
+.card-metric-val { font-size: 11px; font-weight: 600; color: #A8C8E8; }
+.card-actions { display: flex; gap: 8px; align-items: center; }
 .btn-scheda {
-  padding: 8px 18px;
+  flex: 1; padding: 8px 14px;
   background: #C9A84C; color: #0A1628;
   border: none; border-radius: 5px;
-  font-size: 0.82rem; font-weight: 700; cursor: pointer;
-  white-space: nowrap;
+  font-size: 0.8rem; font-weight: 700; cursor: pointer;
 }
 .btn-scheda:hover { background: #E0BF6A; }
 .btn-scheda:disabled { background: #3A4A5A; color: #6A8AA8; cursor: not-allowed; }
 .btn-preview {
-  padding: 8px 14px;
+  padding: 8px 12px;
   background: none; color: #C9A84C;
-  border: 1px solid #1E3A5F; border-radius: 5px;
+  border: 1px solid #2A4A6A; border-radius: 5px;
   font-size: 0.75rem; font-weight: 700; cursor: pointer;
   white-space: nowrap;
 }
-.btn-preview:hover { border-color: #C9A84C; }
-.spinner { display: none; font-size: 0.78rem; color: #6A8AA8; }
+.btn-preview:hover { border-color: #C9A84C; background: rgba(201,168,76,0.08); }
+.badge { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 20px; white-space: nowrap; }
+.badge-aperto   { background: rgba(74,222,128,0.15); color: #4ADE80; border: 1px solid rgba(74,222,128,0.4); }
+.badge-prossimo { background: rgba(96,165,250,0.15); color: #60A5FA; border: 1px solid rgba(96,165,250,0.4); }
+.spinner { display: none; font-size: 0.75rem; color: #6A8AA8; white-space: nowrap; }
 .loader  { text-align: center; padding: 40px; color: #5A7A9A; }
+.preview-panel {
+  display: none;
+  margin: 0 16px 14px;
+  padding: 12px 14px;
+  background: rgba(10,22,40,0.7);
+  border: 1px solid #1E3A5F;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  color: #A8C8E8;
+  line-height: 1.6;
+}
+.preview-loading { color: #5A7A9A; font-style: italic; }
 
 /* Auth forms */
 .auth-wrap {
@@ -358,8 +382,8 @@ footer.site-footer a { color: #6A8AA8; }
 
 NAVBAR_LOGGED = lambda user: f"""
 <nav class="navbar">
-  <a href="/" style="display:flex;align-items:center;gap:12px;text-decoration:none">
-    <img src="/logo" alt="ItalBandi" style="height:44px;width:44px;object-fit:cover;border-radius:4px">
+  <a href="/" style="display:flex;align-items:center;gap:14px;text-decoration:none">
+    <img src="/logo" alt="ItalBandi" style="height:68px;width:68px;object-fit:cover;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.4)">
     <span class="navbar-brand">ITAL<span>BANDI</span></span>
   </a>
   <div class="navbar-links">
@@ -412,7 +436,7 @@ def login_page(error=""):
 <title>ItalBandi — Accedi</title>{CSS_BASE}</head><body>
 <nav class="navbar">
   <a href="/" style="display:flex;align-items:center;gap:12px;text-decoration:none">
-    <img src="/logo" alt="ItalBandi" style="height:44px;width:44px;object-fit:cover;border-radius:4px">
+    <img src="/logo" alt="ItalBandi" style="height:60px;width:60px;object-fit:cover;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.4)">
     <span class="navbar-brand">ITAL<span>BANDI</span></span>
   </a>
   <div class="navbar-links">
@@ -446,7 +470,7 @@ def registrati_page(error="", ok=""):
 <title>ItalBandi — Registrati</title>{CSS_BASE}</head><body>
 <nav class="navbar">
   <a href="/" style="display:flex;align-items:center;gap:12px;text-decoration:none">
-    <img src="/logo" alt="ItalBandi" style="height:44px;width:44px;object-fit:cover;border-radius:4px">
+    <img src="/logo" alt="ItalBandi" style="height:60px;width:60px;object-fit:cover;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.4)">
     <span class="navbar-brand">ITAL<span>BANDI</span></span>
   </a>
   <div class="navbar-links"><a href="/login">Accedi</a></div>
@@ -598,74 +622,98 @@ async function cerca() {{
   _hits = {{}};
   data.bandi.forEach(b => {{ _hits[b.id] = b._hit; }});
 
-  function getFotoUrl(titolo) {{
-    const t = (titolo || '').toLowerCase();
-    if (/agric|rurale|biologica|benessere animale|zootec|bovino|suino|ovino|avicol|vitivinic|vino|olio|ortofrutta|pac |csr |sra/.test(t))
-      return 'https://images.unsplash.com/photo-1464938050520-ef2270bb8ce8?w=600&q=80';
-    if (/energia|rinnovabil|fotovoltaic|efficienza energetica|solare|eolico|idrogeno|green/.test(t))
-      return 'https://images.unsplash.com/photo-1509391366360-2e959784a276?w=600&q=80';
-    if (/turismo|albergo|hotel|agriturismo|ristoran|hospitality|ricettiv/.test(t))
-      return 'https://images.unsplash.com/photo-1571896349842-33c89424de2d?w=600&q=80';
-    if (/digital|tecnolog|software|innovaz|startup|ricerca|sviluppo|intelligenza|cloud|cyber/.test(t))
-      return 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=600&q=80';
-    if (/macchinari|impianti|manifattur|industria|produzione|artigian|metalmeccan|tessile|moda/.test(t))
-      return 'https://images.unsplash.com/photo-1565514020179-026b92b84bb6?w=600&q=80';
-    if (/commercio|negozio|bottega|retail|distribuzione|mercato|fiera/.test(t))
-      return 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=600&q=80';
-    if (/formazione|lavoro|occupazione|welfare|dipendenti|risorse umane|personale|stage/.test(t))
-      return 'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=600&q=80';
-    if (/internazionaliz|export|estero|mercati internazionali|paesi terzi/.test(t))
-      return 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600&q=80';
-    if (/sociale|terzo settore|onlus|cooperativa|comunità|inclusione|disabil/.test(t))
-      return 'https://images.unsplash.com/photo-1559027615-cd4628902d4a?w=600&q=80';
-    if (/edilizia|riqualificaz|ristrutturaz|immobil|edifici|patrimonio/.test(t))
-      return 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=600&q=80';
-    if (/cultura|arte|musei|spettacolo|cinema|musica|patrimonio culturale/.test(t))
-      return 'https://images.unsplash.com/photo-1499781350541-7783f6c6a0c8?w=600&q=80';
-    if (/pesca|mare|acquacoltura|marina|portuale/.test(t))
-      return 'https://images.unsplash.com/photo-1504309092620-4d0ec726efa4?w=600&q=80';
-    // Default: business generico
-    return 'https://images.unsplash.com/photo-1542744173-8e7e53415bb0?w=600&q=80';
+  const CATS = {{
+    agric:    {{ r:/agric|rurale|biolog|animale|zootec|bovino|suino|ovino|avicol|vitivin|vino|olio|ortofrut|pac |csr |sra|forest/, foto:'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=700&q=80', c:'#1E3A1A', t:'#6FCF5A', i:'🌿', l:'Agricoltura' }},
+    energy:   {{ r:/energia|rinnovab|fotovolt|efficienza energet|solare|eolico|idrogeno|green|feeri/, foto:'https://images.unsplash.com/photo-1548337138-e87d889cc369?w=700&q=80', c:'#0D2240', t:'#60A5FA', i:'⚡', l:'Energia' }},
+    turismo:  {{ r:/turismo|albergo|hotel|agriturismo|ristorant|hospitality|ricettiv|ospital/, foto:'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?w=700&q=80', c:'#2A1520', t:'#F9A8D4', i:'🏨', l:'Turismo' }},
+    digital:  {{ r:/digital|tecnolog|software|innovaz|startup|ricerca|sviluppo|intelligen|cloud|cyber|ict/, foto:'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=700&q=80', c:'#0D0D30', t:'#C4B5FD', i:'💻', l:'Digitale' }},
+    industria:{{ r:/macchin|impianti|manifattur|industria|produzion|artigian|metalmecc|tessile|moda|terz/, foto:'https://images.unsplash.com/photo-1581091226033-d5c48150dbaa?w=700&q=80', c:'#2A1A00', t:'#FCD34D', i:'🏭', l:'Industria' }},
+    commercio:{{ r:/commercio|negozio|bottega|retail|distribuz|mercato|fiera|duc|centro urban/, foto:'https://images.unsplash.com/photo-1555529669-e69e7aa0ba9a?w=700&q=80', c:'#0A2A0A', t:'#4ADE80', i:'🏪', l:'Commercio' }},
+    lavoro:   {{ r:/formazion|lavoro|occupaz|welfare|dipendenti|risorse umane|personal|stage|gol|par /, foto:'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=700&q=80', c:'#0A1A30', t:'#93C5FD', i:'👥', l:'Formazione' }},
+    intl:     {{ r:/internazion|export|estero|mercati intern|paesi terzi|simest/, foto:'https://images.unsplash.com/photo-1578575437130-527eed3abbec?w=700&q=80', c:'#0A0A2A', t:'#C4B5FD', i:'🌍', l:'Export' }},
+    sociale:  {{ r:/sociale|terzo settore|onlus|cooperat|comunit|inclusione|disabil|volont/, foto:'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=700&q=80', c:'#0A2A15', t:'#4ADE80', i:'🤝', l:'Sociale' }},
+    edilizia: {{ r:/edilizia|riqualif|ristruttur|immobil|edifici|patrimonio|sismica|cappotto/, foto:'https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=700&q=80', c:'#2A1500', t:'#FCD34D', i:'🏗️', l:'Edilizia' }},
+    cultura:  {{ r:/cultura|arte|musei|spettacolo|cinema|musica|patrimonio cultur|editoria/, foto:'https://images.unsplash.com/photo-1544967082-d9d25d867d66?w=700&q=80', c:'#2A001A', t:'#F9A8D4', i:'🎨', l:'Cultura' }},
+    pesca:    {{ r:/pesca|mare|acquacolt|marina|portuale|ittico/, foto:'https://images.unsplash.com/photo-1519614483-c6d3001943d8?w=700&q=80', c:'#001A30', t:'#93C5FD', i:'🐟', l:'Pesca' }},
+    export:   {{ r:/voucher|certificaz|competenz|digitale|under 35|giovani|disoccupat/, foto:'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=700&q=80', c:'#1A0A2A', t:'#C4B5FD', i:'🎓', l:'Formazione' }},
+  }};
+  const DEFCAT = {{ foto:'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=700&q=80', c:'#0A1628', t:'#A8C8E8', i:'📋', l:'Finanza Agevolata' }};
+  function getCat(titolo) {{
+    const t = (titolo||'').toLowerCase();
+    for (const v of Object.values(CATS)) {{ if (v.r.test(t)) return v; }}
+    return DEFCAT;
   }}
 
-  document.getElementById('risultati').innerHTML = data.bandi.map((b, i) => {{
-    const imgUrl = getFotoUrl(b.titolo);
-    return `
-    <div class="bando-card">
-      <div class="card-img" style="background-image:url('${{imgUrl}}')">
-        <div class="card-img-badge">
-          <span class="badge ${{b.stato.includes('prossima') ? 'badge-prossimo' : 'badge-aperto'}}">${{b.stato}}</span>
-          <span class="badge badge-livello">${{b.livello}}</span>
+  document.getElementById('risultati').innerHTML = data.bandi.map(b => {{
+    const cat = getCat(b.titolo);
+    return `<div class="bando-card">
+      <div class="card-img" style="background-image:url('${{cat.foto}}')">
+        <div class="card-cat-header">
+          <div class="card-cat-label" style="color:${{cat.t}};background:${{cat.c}};display:inline-flex;padding:4px 8px;border-radius:20px;backdrop-filter:blur(4px)">${{cat.i}} ${{cat.l}}</div>
+          <div class="card-badges">
+            <span class="badge ${{b.stato.includes('prossima') ? 'badge-prossimo' : 'badge-aperto'}}">${{b.stato}}</span>
+            <span class="badge" style="background:rgba(201,168,76,0.2);color:#C9A84C;border:1px solid rgba(201,168,76,0.4)">${{b.livello}}</span>
+          </div>
         </div>
       </div>
       <div class="card-body">
         <div class="card-titolo">${{b.titolo}}</div>
-        <div class="card-meta">
-          <div class="meta-item"><label>Scadenza</label><span>${{b.scadenza}}</span></div>
-          <div class="meta-item"><label>Destinatari</label><span>${{(b.beneficiari||'—').substring(0,45)}}</span></div>
-        </div>
-        <div id="preview-${{b.id}}" style="display:none;margin-bottom:14px;padding:12px;background:#0A1628;border-radius:6px;border:1px solid #1E3A5F;font-size:0.82rem;color:#A8C8E8">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-            <div><span style="color:#C9A84C;font-weight:700">Stato:</span> ${{b.stato}}</div>
-            <div><span style="color:#C9A84C;font-weight:700">Livello:</span> ${{b.livello}}</div>
-            <div><span style="color:#C9A84C;font-weight:700">Scadenza:</span> ${{b.scadenza}}</div>
-            <div><span style="color:#C9A84C;font-weight:700">Destinatari:</span> ${{b.beneficiari || '—'}}</div>
-          </div>
-        </div>
-        <div class="card-actions">
-          <button class="btn-scheda" id="btn-${{b.id}}" onclick="generaScheda('${{b.id}}')">📄 Genera Scheda</button>
-          <button class="btn-preview" onclick="togglePreview('${{b.id}}')" id="arrow-${{b.id}}">PREVIEW</button>
-          <span class="spinner" id="sp-${{b.id}}">⏳ Elaborazione...</span>
+        <div class="card-metrics">
+          <div class="card-metric"><div class="card-metric-label">Scadenza</div><div class="card-metric-val">${{b.scadenza}}</div></div>
+          <div class="card-metric"><div class="card-metric-label">Livello</div><div class="card-metric-val">${{b.livello}}</div></div>
+          <div class="card-metric" style="grid-column:1/-1"><div class="card-metric-label">Destinatari</div><div class="card-metric-val">${{(b.beneficiari||'—').substring(0,55)}}</div></div>
         </div>
       </div>
-    </div>`;}}).join('');
+      <div class="preview-panel" id="preview-${{b.id}}">
+        <span class="preview-loading" id="prev-msg-${{b.id}}">Clicca Preview per scoprire se questo bando fa per te...</span>
+      </div>
+      <div class="card-actions" style="padding:0 16px 16px">
+        <button class="btn-scheda" id="btn-${{b.id}}" onclick="generaScheda('${{b.id}}')">📄 Genera Scheda</button>
+        <button class="btn-preview" id="arrow-${{b.id}}" onclick="togglePreview('${{b.id}}')">PREVIEW</button>
+        <span class="spinner" id="sp-${{b.id}}">⏳ Elaborazione...</span>
+      </div>
+    </div>`;
+  }}).join('');
 }}
-function togglePreview(id) {{
+const _previewCache = {{}};
+async function togglePreview(id) {{
   const el    = document.getElementById('preview-' + id);
   const arrow = document.getElementById('arrow-' + id);
-  const open  = el.style.display === 'none';
-  el.style.display    = open ? 'block' : 'none';
-  arrow.textContent   = open ? 'CHIUDI' : 'PREVIEW';
+  const msg   = document.getElementById('prev-msg-' + id);
+  const apri  = el.style.display === 'none' || el.style.display === '';
+  if (!apri) {{
+    el.style.display = 'none';
+    arrow.textContent = 'PREVIEW';
+    return;
+  }}
+  el.style.display = 'block';
+  arrow.textContent = 'CHIUDI';
+  if (_previewCache[id]) {{ msg.innerHTML = _previewCache[id]; return; }}
+  const hit = _hits[id];
+  const titolo = hit ? (hit.post_title || hit.title || '') : '';
+  const urlCE  = hit ? (hit.permalink || hit.link || hit.url || '') : '';
+  msg.innerHTML = '<span style="color:#5A7A9A;font-style:italic">⏳ Analisi in corso...</span>';
+  try {{
+    // Prima leggi la pagina CE
+    let testoCE = '';
+    if (urlCE) {{
+      const rt = await fetch('/api/fetch-testo?url=' + encodeURIComponent(urlCE));
+      if (rt.ok) {{ const dt = await rt.json(); testoCE = dt.testo || ''; }}
+    }}
+    const r = await fetch('/api/preview', {{
+      method: 'POST', headers: {{'Content-Type':'application/json'}},
+      body: JSON.stringify({{ titolo, testo_ce: testoCE.substring(0,4000) }})
+    }});
+    const d = await r.json();
+    if (d.html) {{
+      _previewCache[id] = d.html;
+      msg.innerHTML = d.html;
+    }} else {{
+      msg.innerHTML = '<span style="color:#F87171">Anteprima non disponibile.</span>';
+    }}
+  }} catch(e) {{
+    msg.innerHTML = '<span style="color:#F87171">Errore: ' + e.message + '</span>';
+  }}
 }}
 async function generaScheda(id) {{
   const btn = document.getElementById('btn-' + id);
@@ -923,7 +971,7 @@ async def chi_siamo(session_id: str = Cookie(default=None)):
     nav = NAVBAR_LOGGED(user) if user else f"""
 <nav class="navbar">
   <a href="/" style="display:flex;align-items:center;gap:12px;text-decoration:none">
-    <img src="/logo" alt="ItalBandi" style="height:44px;width:44px;object-fit:cover;border-radius:4px">
+    <img src="/logo" alt="ItalBandi" style="height:60px;width:60px;object-fit:cover;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.4)">
     <span class="navbar-brand">ITAL<span>BANDI</span></span>
   </a>
   <div class="navbar-links">
@@ -1029,7 +1077,7 @@ LANDING_HTML = lambda: f"""<!DOCTYPE html><html lang="it"><head>
   position: absolute; inset: 0;
   background: radial-gradient(ellipse at 50% 40%, rgba(201,168,76,0.08) 0%, transparent 60%);
 }}
-.hero-logo {{ width: 120px; height: 120px; object-fit: cover; border-radius: 12px; margin-bottom: 32px; box-shadow: 0 0 40px rgba(201,168,76,0.3); }}
+.hero-logo {{ width: 200px; height: 200px; object-fit: cover; border-radius: 20px; margin-bottom: 32px; box-shadow: 0 0 60px rgba(201,168,76,0.4), 0 20px 40px rgba(0,0,0,0.5); }}
 .hero-title {{ font-size: 3rem; font-weight: 900; color: #FFFFFF; letter-spacing: -1px; line-height: 1.1; margin-bottom: 16px; }}
 .hero-title span {{ color: #C9A84C; }}
 .hero-sub {{ font-size: 1.15rem; color: #8899AA; max-width: 560px; line-height: 1.7; margin-bottom: 40px; }}
@@ -1057,7 +1105,7 @@ LANDING_HTML = lambda: f"""<!DOCTYPE html><html lang="it"><head>
 </head><body>
 <nav class="navbar">
   <a href="/" style="display:flex;align-items:center;gap:12px;text-decoration:none">
-    <img src="/logo" alt="ItalBandi" style="height:44px;width:44px;object-fit:cover;border-radius:4px">
+    <img src="/logo" alt="ItalBandi" style="height:60px;width:60px;object-fit:cover;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.4)">
     <span class="navbar-brand">ITAL<span>BANDI</span></span>
   </a>
   <div class="navbar-links">
@@ -1189,6 +1237,60 @@ async def fetch_testo(url: str = Query(""), session_id: str = Cookie(default=Non
     except Exception as e:
         print(f"[FETCH] error: {e}", flush=True)
         return JSONResponse({"testo": ""})
+
+
+@app.post("/api/preview")
+async def api_preview(body: dict, session_id: str = Cookie(default=None)):
+    if not get_session(session_id):
+        return JSONResponse({"error": "Non autenticato"}, status_code=401)
+    titolo   = body.get("titolo", "")
+    testo_ce = body.get("testo_ce", "")
+    if not titolo:
+        return JSONResponse({"html": ""})
+    try:
+        prompt = f"""Sei un esperto di finanza agevolata. Leggi questo bando e rispondi in modo ULTRA SINTETICO.
+
+TITOLO: {titolo}
+TESTO: {testo_ce[:3000]}
+
+Rispondi SOLO con un JSON con questi campi (max 1 riga per campo):
+{{
+  "chi": "Chi può partecipare (es: PMI lombarde settore manifatturiero)",
+  "cosa": "Cosa si finanzia (es: macchinari, software, formazione)",
+  "numeri": "Cifre chiave (es: 60% fondo perduto · max EUR 150.000)",
+  "scadenza": "Scadenza (es: 30/06/2026)",
+  "fa_per_te": "Una frase diretta tipo: Adatto se sei una PMI con sede in Lombardia che vuole investire in macchinari."
+}}
+Solo JSON, nient'altro."""
+
+        import requests as req
+        resp = req.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={"x-api-key": be.ANTHROPIC_API_KEY,
+                     "anthropic-version": "2023-06-01",
+                     "content-type": "application/json"},
+            json={"model": "claude-haiku-4-5-20251001", "max_tokens": 400,
+                  "messages": [{"role": "user", "content": prompt}]},
+            timeout=30
+        )
+        blocks = resp.json().get("content", [])
+        testo  = "\n".join(b.get("text","") for b in blocks if b.get("type")=="text").strip()
+        raw    = re.sub(r'```(?:json)?\s*','',testo); raw = re.sub(r'```','',raw).strip()
+        s = raw.find('{'); e = raw.rfind('}')
+        d = json.loads(raw[s:e+1]) if s!=-1 else {}
+        html = f"""
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+  <div><span style="color:#C9A84C;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em">Chi può partecipare</span><br><span style="font-size:12px">{d.get('chi','—')}</span></div>
+  <div><span style="color:#C9A84C;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em">Cosa si finanzia</span><br><span style="font-size:12px">{d.get('cosa','—')}</span></div>
+  <div><span style="color:#C9A84C;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em">Cifre chiave</span><br><span style="font-size:12px">{d.get('numeri','—')}</span></div>
+  <div><span style="color:#C9A84C;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em">Scadenza</span><br><span style="font-size:12px">{d.get('scadenza','—')}</span></div>
+</div>
+<div style="border-top:1px solid #1E3A5F;padding-top:8px;font-size:12px;color:#4ADE80">
+  💡 {d.get('fa_per_te','—')}
+</div>"""
+        return JSONResponse({"html": html})
+    except Exception as ex:
+        return JSONResponse({"html": f'<span style="color:#F87171">Errore: {ex}</span>'})
 
 
 @app.get("/api/cerca")
