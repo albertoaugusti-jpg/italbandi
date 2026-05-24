@@ -73,6 +73,9 @@ DB_PATH  = "/tmp/italbandi.db"
 SESSIONS = {}  # session_id → {user_id, username, is_admin}
 
 # ── Database ───────────────────────────────────────────────────────────────────
+POSTMARK_KEY = "531003f7-031d-4a46-9866-331f7e74dfc4"
+BASE_URL     = "https://italbandi.onrender.com"
+
 def init_db():
     con = sqlite3.connect(DB_PATH)
     con.execute("""CREATE TABLE IF NOT EXISTS utenti (
@@ -82,31 +85,72 @@ def init_db():
         ruolo TEXT, impresa TEXT,
         password_hash TEXT NOT NULL,
         is_admin INTEGER DEFAULT 0,
+        verificato INTEGER DEFAULT 0,
+        token_verifica TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )""")
-    # Admin fisso
+    # Migrazione: aggiungi colonne se non esistono
+    try:
+        con.execute("ALTER TABLE utenti ADD COLUMN verificato INTEGER DEFAULT 0")
+    except: pass
+    try:
+        con.execute("ALTER TABLE utenti ADD COLUMN token_verifica TEXT")
+    except: pass
+    # Admin fisso — già verificato
     pw_hash = hashlib.sha256("Samp1946,".encode()).hexdigest()
-    con.execute("INSERT OR IGNORE INTO utenti (nome,cognome,email,password_hash,is_admin) VALUES (?,?,?,?,?)",
-                ("Admin","ItalBandi","admin@italbandi.it", pw_hash, 1))
+    con.execute("INSERT OR IGNORE INTO utenti (nome,cognome,email,password_hash,is_admin,verificato) VALUES (?,?,?,?,?,?)",
+                ("Admin","ItalBandi","admin@italbandi.it", pw_hash, 1, 1))
     con.commit(); con.close()
 
 init_db()
 
+def invia_email_verifica(email, nome, token):
+    """Manda email di verifica via Postmark."""
+    try:
+        import requests as req
+        link = f"{BASE_URL}/verifica?token={token}"
+        req.post("https://api.postmarkapp.com/email",
+            headers={"X-Postmark-Server-Token": POSTMARK_KEY,
+                     "Content-Type": "application/json"},
+            json={
+                "From": "noreply@energelia.it",
+                "To": email,
+                "Subject": "Conferma la tua email — ItalBandi",
+                "HtmlBody": f"""
+<div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto">
+  <h2 style="color:#0A1628">Benvenuto su ItalBandi, {nome}!</h2>
+  <p>Clicca il pulsante qui sotto per confermare la tua email e attivare il tuo account.</p>
+  <a href="{link}" style="display:inline-block;background:#C9A84C;color:#0A1628;padding:14px 32px;border-radius:6px;font-weight:700;text-decoration:none;margin:20px 0">
+    ✓ Conferma Email
+  </a>
+  <p style="color:#888;font-size:0.85rem">Il link è valido per 24 ore.<br>Se non ti sei registrato su ItalBandi, ignora questa email.</p>
+  <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
+  <p style="color:#888;font-size:0.8rem">ItalBandi — un servizio di Energelia S.r.l. · Genova</p>
+</div>""",
+                "TextBody": f"Benvenuto su ItalBandi, {nome}!\n\nConferma la tua email cliccando questo link:\n{link}\n\nIl link è valido per 24 ore.",
+            }, timeout=10)
+        print(f"[EMAIL] verifica inviata a {email}", flush=True)
+    except Exception as e:
+        print(f"[EMAIL] errore: {e}", flush=True)
+
 def get_user(email, password):
     pw_hash = hashlib.sha256(password.encode()).hexdigest()
     con = sqlite3.connect(DB_PATH)
-    row = con.execute("SELECT id,nome,cognome,email,is_admin FROM utenti WHERE email=? AND password_hash=?",
+    row = con.execute("SELECT id,nome,cognome,email,is_admin,verificato FROM utenti WHERE email=? AND password_hash=?",
                       (email, pw_hash)).fetchone()
     con.close()
     return row
 
 def register_user(nome, cognome, email, password, telefono="", ruolo="", impresa=""):
     pw_hash = hashlib.sha256(password.encode()).hexdigest()
+    token   = secrets.token_urlsafe(32)
     try:
         con = sqlite3.connect(DB_PATH)
-        con.execute("INSERT INTO utenti (nome,cognome,email,password_hash,telefono,ruolo,impresa) VALUES (?,?,?,?,?,?,?)",
-                    (nome, cognome, email, pw_hash, telefono, ruolo, impresa))
+        con.execute("INSERT INTO utenti (nome,cognome,email,password_hash,telefono,ruolo,impresa,verificato,token_verifica) VALUES (?,?,?,?,?,?,?,0,?)",
+                    (nome, cognome, email, pw_hash, telefono, ruolo, impresa, token))
         con.commit(); con.close()
+        # Manda email di verifica in background
+        threading.Thread(target=invia_email_verifica, args=(email, nome, token), daemon=True).start()
         return True, ""
     except sqlite3.IntegrityError:
         return False, "Email già registrata."
@@ -726,15 +770,44 @@ async def login_get(session_id: str = Cookie(default=None)):
 async def login_post(email: str = Form(""), password: str = Form("")):
     # Admin speciale
     if email.lower() == "admin" and password == "Samp1946,":
-        user_row = (0, "Admin", "ItalBandi", "admin@italbandi.it", 1)
+        user_row = (0, "Admin", "ItalBandi", "admin@italbandi.it", 1, 1)
     else:
         user_row = get_user(email, password)
     if not user_row:
         return HTMLResponse(login_page("Email o password non corretti."))
+    # Controlla se email verificata (colonna index 5)
+    if len(user_row) > 5 and not user_row[5]:
+        return HTMLResponse(login_page("Email non ancora verificata. Controlla la tua casella di posta e clicca il link di conferma."))
     sid = create_session(user_row)
     resp = RedirectResponse("/", status_code=302)
     resp.set_cookie("session_id", sid, max_age=86400*7, httponly=True)
     return resp
+
+
+@app.get("/verifica", response_class=HTMLResponse)
+async def verifica_email(token: str = ""):
+    if not token:
+        return HTMLResponse("<h2>Link non valido.</h2>")
+    con = sqlite3.connect(DB_PATH)
+    row = con.execute("SELECT id, nome FROM utenti WHERE token_verifica=?", (token,)).fetchone()
+    if not row:
+        con.close()
+        return HTMLResponse(f"""<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Link non valido</title></head>
+<body style="font-family:Arial;text-align:center;padding:60px;background:#0A1628;color:#E8E8E8">
+<h2 style="color:#F87171">Link non valido o già utilizzato.</h2>
+<a href="/login" style="color:#C9A84C">Vai al login</a>
+</body></html>""")
+    con.execute("UPDATE utenti SET verificato=1, token_verifica=NULL WHERE id=?", (row[0],))
+    con.commit(); con.close()
+    return HTMLResponse(f"""<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Email confermata</title></head>
+<body style="font-family:Arial;text-align:center;padding:60px;background:#0A1628;color:#E8E8E8">
+<div style="max-width:480px;margin:0 auto;background:#0F2035;border:1px solid #C9A84C;border-radius:12px;padding:40px">
+  <div style="font-size:3rem;margin-bottom:16px">✅</div>
+  <h2 style="color:#C9A84C;margin-bottom:12px">Email confermata!</h2>
+  <p style="color:#A8C8E8;margin-bottom:24px">Benvenuto su ItalBandi, <strong>{row[1]}</strong>! Il tuo account è ora attivo.</p>
+  <a href="/login" style="background:#C9A84C;color:#0A1628;padding:12px 32px;border-radius:6px;font-weight:700;text-decoration:none">Accedi ora →</a>
+</div>
+</body></html>""")
 
 @app.post("/logout")
 async def logout(session_id: str = Cookie(default=None)):
@@ -762,7 +835,7 @@ async def registrati_post(
     ok, err = register_user(nome, cognome, email, password, telefono, ruolo, impresa)
     if not ok:
         return HTMLResponse(registrati_page(error=err))
-    return HTMLResponse(registrati_page(ok=f"Account creato! <a href='/login'>Accedi ora</a>"))
+    return HTMLResponse(registrati_page(ok=f"✅ Account creato! Ti abbiamo inviato una email a <strong>{email}</strong> con il link di conferma. Controlla la tua casella di posta (anche lo spam) e clicca il link per attivare l'account."))
 
 @app.get("/privacy", response_class=HTMLResponse)
 async def privacy():
