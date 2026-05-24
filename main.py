@@ -474,7 +474,7 @@ async function cerca() {{
   document.getElementById('risultati').innerHTML = data.bandi.map(b => `
     <div class="bando-card">
       <div class="card-top">
-        <div class="card-titolo">${{b.titolo}}</div>
+        <div class="card-titolo" onclick="togglePreview('${{b.id}}')" style="cursor:pointer" title="Clicca per dettagli">${{b.titolo}}</div>
         <span class="badge ${{b.stato.includes('prossima') ? 'badge-prossimo' : 'badge-aperto'}}">${{b.stato}}</span>
       </div>
       <div class="card-meta">
@@ -483,13 +483,27 @@ async function cerca() {{
         <div class="meta-item"><label>Scadenza</label><span>${{b.scadenza}}</span></div>
         <div class="meta-item"><label>Destinatari</label><span>${{(b.beneficiari||'').substring(0,60)}}</span></div>
       </div>
-      <div style="display:flex;align-items:center;gap:12px">
-        <button class="btn-scheda" id="btn-${{b.id}}" onclick="generaScheda('${{b.id}}')">📄 Genera Scheda PDF</button>
+      <div id="preview-${{b.id}}" style="display:none;margin-top:14px;padding:14px;background:#0A1628;border-radius:6px;border:1px solid #1E3A5F">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:0.82rem;color:#A8C8E8">
+          <div><span style="color:#C9A84C;font-weight:700">Stato:</span> ${{b.stato}}</div>
+          <div><span style="color:#C9A84C;font-weight:700">Livello:</span> ${{b.livello}}</div>
+          <div><span style="color:#C9A84C;font-weight:700">Dotazione:</span> ${{b.dotazione}}</div>
+          <div><span style="color:#C9A84C;font-weight:700">Scadenza:</span> ${{b.scadenza}}</div>
+          <div style="grid-column:1/-1"><span style="color:#C9A84C;font-weight:700">Destinatari:</span> ${{b.beneficiari || '—'}}</div>
+        </div>
+        <p style="font-size:0.78rem;color:#5A7A9A;margin-top:10px">👆 Clicca "Genera Scheda PDF" per la scheda completa con tutti i dettagli del bando.</p>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;margin-top:12px">
+        <button class="btn-scheda" id="btn-${{b.id}}" onclick="generaScheda('${{b.id}}','${{b.titolo.replace(/'/g,\\"\\\\'\\")}}'  )">📄 Genera Scheda PDF</button>
         <span class="spinner" id="sp-${{b.id}}">⏳ Generazione in corso (30-60 sec)...</span>
       </div>
     </div>`).join('');
 }}
-async function generaScheda(id) {{
+function togglePreview(id) {{
+  const el = document.getElementById('preview-' + id);
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}}
+async function generaScheda(id, titolo) {{
   const btn = document.getElementById('btn-' + id);
   const sp  = document.getElementById('sp-'  + id);
   btn.disabled = true; sp.style.display = 'inline';
@@ -502,7 +516,10 @@ async function generaScheda(id) {{
     const blob = await resp.blob();
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
-    a.href = url; a.download = 'Scheda_' + id + '.pdf';
+    a.href = url;
+    // Nome file: Energelia + titolo sintetico
+    const nomeFile = 'Energelia_' + (titolo||id).substring(0,40).replace(/[^a-zA-Z0-9]/g,'_') + '.pdf';
+    a.download = nomeFile;
     document.body.appendChild(a); a.click(); a.remove();
     URL.revokeObjectURL(url);
   }} catch(e) {{ alert('Errore: ' + e.message); }}
@@ -883,6 +900,9 @@ async def genera_scheda(bando_id: str, body: dict, session_id: str = Cookie(defa
         if api_error:
             print(f"[CLAUDE API ERROR] {api_error}", flush=True)
 
+        # Imposta logo Energelia
+        logo_energelia = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Logo Energelia realistico.png")
+        ENGINE.LOGO    = logo_energelia if os.path.exists(logo_energelia) else ENGINE.LOGO
         ENGINE.CONTENT = content
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
             tmp_path = tmp.name
