@@ -988,7 +988,7 @@ LANDING_HTML = lambda: f"""<!DOCTYPE html><html lang="it"><head>
 
 @app.get("/api/fetch-testo")
 async def fetch_testo(url: str = Query(""), session_id: str = Cookie(default=None)):
-    """Il browser chiama questo endpoint che fa da proxy verso la pagina CE."""
+    """Proxy verso la pagina CE — chiamato dal browser dell'utente."""
     if not get_session(session_id):
         return JSONResponse({"error": "Non autenticato"}, status_code=401)
     if not url:
@@ -1003,14 +1003,12 @@ async def fetch_testo(url: str = Query(""), session_id: str = Cookie(default=Non
         }
         r = req.get(url, headers=headers, timeout=15, allow_redirects=True)
         html = r.text
-        # Estrae solo il contenuto del bando (non menu, footer, script)
         html = re.sub(r'<script[^>]*>.*?</script>', ' ', html, flags=re.DOTALL|re.IGNORECASE)
         html = re.sub(r'<style[^>]*>.*?</style>', ' ', html, flags=re.DOTALL|re.IGNORECASE)
-        # Cerca il contenuto principale del bando
-        import re as _re
-        match = _re.search(r'<div[^>]+class=["\'][^"\']*(?:bando-contenuto|box_intro_bando|paragrafo-bando|post.content)[^"\']*["\'][^>]*>(.*?)</div>', html, _re.DOTALL|_re.IGNORECASE)
+        match = re.search(r'(?:bando-contenuto|box_intro_bando|paragrafo-bando)', html, re.IGNORECASE)
         if match:
-            testo = _re.sub(r'<[^>]+>', ' ', match.group(0))
+            start = max(0, match.start() - 200)
+            testo = re.sub(r'<[^>]+>', ' ', html[start:start+20000])
         else:
             testo = re.sub(r'<[^>]+>', ' ', html)
         testo = re.sub(r'\s+', ' ', testo).strip()
@@ -1019,6 +1017,9 @@ async def fetch_testo(url: str = Query(""), session_id: str = Cookie(default=Non
     except Exception as e:
         print(f"[FETCH] error: {e}", flush=True)
         return JSONResponse({"testo": ""})
+
+
+@app.get("/api/cerca")
 async def cerca(
     request: Request,
     keyword: str = Query(""), stato: str = Query("aperto"),
