@@ -521,34 +521,35 @@ async function cerca() {{
   document.getElementById('risultati').innerHTML = data.bandi.map(b => `
     <div class="bando-card">
       <div class="card-top">
-        <div class="card-titolo" onclick="togglePreview('${{b.id}}')" style="cursor:pointer" title="Clicca per dettagli">${{b.titolo}}</div>
+        <div class="card-titolo">${{b.titolo}}</div>
         <span class="badge ${{b.stato.includes('prossima') ? 'badge-prossimo' : 'badge-aperto'}}">${{b.stato}}</span>
       </div>
       <div class="card-meta">
         <div class="meta-item"><label>Livello</label><span>${{b.livello}}</span></div>
-        <div class="meta-item"><label>Dotazione</label><span>${{b.dotazione}}</span></div>
         <div class="meta-item"><label>Scadenza</label><span>${{b.scadenza}}</span></div>
         <div class="meta-item"><label>Destinatari</label><span>${{(b.beneficiari||'').substring(0,60)}}</span></div>
       </div>
-      <div id="preview-${{b.id}}" style="display:none;margin-top:14px;padding:14px;background:#0A1628;border-radius:6px;border:1px solid #1E3A5F">
+      <div id="preview-${{b.id}}" style="display:none;margin-top:12px;padding:14px;background:#0A1628;border-radius:6px;border:1px solid #1E3A5F">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:0.82rem;color:#A8C8E8">
           <div><span style="color:#C9A84C;font-weight:700">Stato:</span> ${{b.stato}}</div>
           <div><span style="color:#C9A84C;font-weight:700">Livello:</span> ${{b.livello}}</div>
-          <div><span style="color:#C9A84C;font-weight:700">Dotazione:</span> ${{b.dotazione}}</div>
           <div><span style="color:#C9A84C;font-weight:700">Scadenza:</span> ${{b.scadenza}}</div>
-          <div style="grid-column:1/-1"><span style="color:#C9A84C;font-weight:700">Destinatari:</span> ${{b.beneficiari || '—'}}</div>
+          <div><span style="color:#C9A84C;font-weight:700">Destinatari:</span> ${{b.beneficiari || '—'}}</div>
         </div>
-        <p style="font-size:0.78rem;color:#5A7A9A;margin-top:10px">👆 Clicca "Genera Scheda PDF" per la scheda completa con tutti i dettagli del bando.</p>
       </div>
       <div style="display:flex;align-items:center;gap:12px;margin-top:12px">
         <button class="btn-scheda" id="btn-${{b.id}}" onclick="generaScheda('${{b.id}}')">📄 Genera Scheda PDF</button>
-        <span class="spinner" id="sp-${{b.id}}">⏳ Generazione in corso (30-60 sec)...</span>
+        <button onclick="togglePreview('${{b.id}}')" id="arrow-${{b.id}}" style="background:none;border:1px solid #1E3A5F;color:#C9A84C;border-radius:4px;padding:6px 10px;cursor:pointer;font-size:0.9rem" title="Espandi dettagli">▼</button>
+        <span class="spinner" id="sp-${{b.id}}">⏳ Generazione in corso...</span>
       </div>
     </div>`).join('');
 }}
 function togglePreview(id) {{
-  const el = document.getElementById('preview-' + id);
-  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+  const el    = document.getElementById('preview-' + id);
+  const arrow = document.getElementById('arrow-' + id);
+  const open  = el.style.display === 'none';
+  el.style.display    = open ? 'block' : 'none';
+  arrow.textContent   = open ? '▲' : '▼';
 }}
 async function generaScheda(id) {{
   const btn = document.getElementById('btn-' + id);
