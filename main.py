@@ -3,7 +3,7 @@ ItalBandi — main.py
 Portale web con autenticazione, registrazione, privacy, cookie policy
 Proprietà: Energelia S.r.l. — Responsabile privacy: Bruno Massimo Legger
 """
-import os, tempfile, traceback, sqlite3, hashlib, secrets, json
+import os, tempfile, traceback, sqlite3, hashlib, secrets, json, re
 from datetime import datetime, timedelta
 from fastapi import FastAPI, Query, Request, Form, Cookie
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, RedirectResponse, Response
@@ -887,7 +887,8 @@ async def genera_scheda(bando_id: str, body: dict, session_id: str = Cookie(defa
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
             tmp_path = tmp.name
         ENGINE.generate(output_path=tmp_path, verbose=False)
-        nome_file = f"Scheda_{bando_id[:30]}_{datetime.now().strftime('%Y%m%d')}.pdf"
+        titolo_corto = re.sub(r'[^\w\s]', '', titolo)[:40].strip().replace(' ', '_')
+        nome_file = f"Energelia_{titolo_corto}_{datetime.now().strftime('%Y%m%d')}.pdf"
         return FileResponse(path=tmp_path, media_type="application/pdf", filename=nome_file)
     except Exception as e:
         return JSONResponse({"error": traceback.format_exc()}, status_code=500)
