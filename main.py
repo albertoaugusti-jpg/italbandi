@@ -16,83 +16,73 @@ LOGO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo_italb
 
 app = FastAPI(title="ItalBandi")
 
-# ── Database Neon (cache bandi) ───────────────────────────────────────────────
+# ── Database Neon (cache bandi) via HTTP API ─────────────────────────────────
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
-def _run_async(coro):
-    import asyncio
+def _neon_query(sql, params=None):
+    """Esegue query su Neon via HTTP API — zero driver, funziona su Python 3.14."""
+    if not DATABASE_URL:
+        return None
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_closed():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop.run_until_complete(coro)
-    except RuntimeError:
-        import asyncio
-        return asyncio.run(coro)
+        import urllib.parse, base64, requests as req
+        u = urllib.parse.urlparse(DATABASE_URL)
+        host = u.hostname
+        user = u.username
+        pwd  = u.password
+        db   = u.path.lstrip("/")
+        # Neon HTTP endpoint
+        url  = f"https://{host}/sql"
+        auth = base64.b64encode(f"{user}:{pwd}".encode()).decode()
+        payload = {"query": sql}
+        if params:
+            payload["params"] = [str(p) if p is not None else None for p in params]
+        r = req.post(url, json=payload,
+                     headers={"Authorization": f"Basic {auth}",
+                               "Neon-Connection-String": DATABASE_URL,
+                               "Content-Type": "application/json"},
+                     timeout=10)
+        if r.status_code == 200:
+            return r.json()
+        else:
+            print(f"[DB] HTTP error {r.status_code}: {r.text[:100]}", flush=True)
+            return None
+    except Exception as e:
+        print(f"[DB] query error: {e}", flush=True)
+        return None
 
 def init_cache_db():
-    if not DATABASE_URL: return
-    async def _f():
-        import asyncpg
-        con = await asyncpg.connect(DATABASE_URL)
-        await con.execute("""CREATE TABLE IF NOT EXISTS bandi_cache (
-            object_id    TEXT PRIMARY KEY,
-            titolo       TEXT,
-            testo_pagina TEXT,
-            permalink    TEXT,
-            aggiornato   TIMESTAMP DEFAULT NOW()
-        )""")
-        await con.close()
+    result = _neon_query("""CREATE TABLE IF NOT EXISTS bandi_cache (
+        object_id    TEXT PRIMARY KEY,
+        titolo       TEXT,
+        testo_pagina TEXT,
+        permalink    TEXT,
+        aggiornato   TIMESTAMP DEFAULT NOW()
+    )""")
+    if result is not None:
         print("[DB] init OK", flush=True)
-    try:
-        _run_async(_f())
-    except Exception as e:
-        print(f"[DB] init error: {e}", flush=True)
+    else:
+        print("[DB] init failed", flush=True)
 
 init_cache_db()
 
 def salva_in_cache(object_id, titolo, testo, permalink):
-    if not DATABASE_URL: return
-    async def _f():
-        import asyncpg
-        con = await asyncpg.connect(DATABASE_URL)
-        await con.execute("""INSERT INTO bandi_cache (object_id,titolo,testo_pagina,permalink,aggiornato)
-            VALUES ($1,$2,$3,$4,NOW())
-            ON CONFLICT (object_id) DO UPDATE
-            SET testo_pagina=$3,titolo=$2,permalink=$4,aggiornato=NOW()""",
-            object_id, titolo, testo, permalink)
-        await con.close()
-    try:
-        _run_async(_f())
-    except Exception as e:
-        print(f"[DB] save error: {e}", flush=True)
+    _neon_query("""INSERT INTO bandi_cache (object_id,titolo,testo_pagina,permalink,aggiornato)
+        VALUES ($1,$2,$3,$4,NOW())
+        ON CONFLICT (object_id) DO UPDATE
+        SET testo_pagina=$3,titolo=$2,permalink=$4,aggiornato=NOW()""",
+        [object_id, titolo, testo, permalink])
 
 def leggi_da_cache(object_id):
-    if not DATABASE_URL: return None
-    async def _f():
-        import asyncpg
-        con = await asyncpg.connect(DATABASE_URL)
-        row = await con.fetchrow("SELECT testo_pagina FROM bandi_cache WHERE object_id=$1", object_id)
-        await con.close()
-        return row["testo_pagina"] if row else None
-    try:
-        return _run_async(_f())
-    except:
-        return None
+    result = _neon_query("SELECT testo_pagina FROM bandi_cache WHERE object_id=$1", [object_id])
+    if result and result.get("rows"):
+        return result["rows"][0][0]
+    return None
 
 def conta_cache():
-    if not DATABASE_URL: return 0
-    async def _f():
-        import asyncpg
-        con = await asyncpg.connect(DATABASE_URL)
-        n = await con.fetchval("SELECT COUNT(*) FROM bandi_cache")
-        await con.close()
-        return n or 0
-    try:
-        return _run_async(_f())
-    except:
-        return 0
+    result = _neon_query("SELECT COUNT(*) FROM bandi_cache")
+    if result and result.get("rows"):
+        return result["rows"][0][0]
+    return 0
 
 @app.get("/logo")
 async def serve_logo():
