@@ -1,16 +1,10 @@
 """
 bandi_engine.py — ItalBandi
-Flusso pulito:
-  1. Titolo bando da Algolia (già nel browser)
-  2. Claude cerca il bando su Google con web_search
-  3. Se trova link ufficiale (decreto/PDF/.gov) lo legge
-  4. Genera JSON con il prompt Energelia
-  5. Restituisce content dict per schede_engine.generate()
+Flusso: titolo + URL bando → Claude legge e genera scheda
 """
 import requests, os, re, json, time
 from datetime import datetime
 
-# ── Credenziali ───────────────────────────────────────────────────────────────
 ANTHROPIC_API_KEY = os.environ.get("CLAUDE_API_KEY") or os.environ.get("ANTHROPIC_API_KEY", "")
 
 ALGOLIA_APP_ID  = "LHI8XKBFMN"
@@ -23,30 +17,7 @@ ALGOLIA_HEADERS = {
     "Content-Type":             "application/json",
 }
 
-PROVINCE = {
-    "Liguria":    ["Provincia di Genova","Provincia di Imperia","Provincia di La-Spezia","Provincia di Savona"],
-    "Lombardia":  ["Provincia di Bergamo","Provincia di Brescia","Provincia di Como","Provincia di Cremona","Provincia di Lecco","Provincia di Lodi","Provincia di Mantova","Provincia di Milano","Provincia di Monza-Brianza","Provincia di Pavia","Provincia di Sondrio","Provincia di Varese"],
-    "Piemonte":   ["Provincia di Alessandria","Provincia di Asti","Provincia di Biella","Provincia di Cuneo","Provincia di Novara","Provincia di Torino","Provincia di Verbano-Cusio-Ossola","Provincia di Vercelli"],
-    "Veneto":     ["Provincia di Belluno","Provincia di Padova","Provincia di Rovigo","Provincia di Treviso","Provincia di Venezia","Provincia di Verona","Provincia di Vicenza"],
-    "Toscana":    ["Provincia di Arezzo","Provincia di Firenze","Provincia di Grosseto","Provincia di Livorno","Provincia di Lucca","Provincia di Massa-Carrara","Provincia di Pisa","Provincia di Pistoia","Provincia di Prato","Provincia di Siena"],
-    "Lazio":      ["Provincia di Frosinone","Provincia di Latina","Provincia di Rieti","Provincia di Roma","Provincia di Viterbo"],
-    "Campania":   ["Provincia di Avellino","Provincia di Benevento","Provincia di Caserta","Provincia di Napoli","Provincia di Salerno"],
-    "Emilia-Romagna": ["Provincia di Bologna","Provincia di Ferrara","Provincia di Forli-Cesena","Provincia di Modena","Provincia di Parma","Provincia di Piacenza","Provincia di Ravenna","Provincia di Reggio-Emilia","Provincia di Rimini"],
-    "Puglia":     ["Provincia di Bari","Provincia di Barletta-Andria-Trani","Provincia di Brindisi","Provincia di Foggia","Provincia di Lecce","Provincia di Taranto"],
-    "Sicilia":    ["Provincia di Agrigento","Provincia di Caltanissetta","Provincia di Catania","Provincia di Enna","Provincia di Messina","Provincia di Palermo","Provincia di Ragusa","Provincia di Siracusa","Provincia di Trapani"],
-    "Sardegna":   ["Provincia di Cagliari","Provincia di Nuoro","Provincia di Oristano","Provincia di Sassari"],
-    "Abruzzo":    ["Provincia di Chieti","Provincia di L'Aquila","Provincia di Pescara","Provincia di Teramo"],
-    "Marche":     ["Provincia di Ancona","Provincia di Ascoli Piceno","Provincia di Fermo","Provincia di Macerata","Provincia di Pesaro Urbino"],
-    "Friuli-Venezia-Giulia": ["Provincia di Gorizia","Provincia di Pordenone","Provincia di Trieste","Provincia di Udine"],
-    "Calabria":   ["Provincia di Catanzaro","Provincia di Cosenza","Provincia di Crotone","Provincia di Reggio-Calabria","Provincia di Vibo-Valentia"],
-    "Umbria":     ["Provincia di Perugia","Provincia di Terni"],
-    "Basilicata": ["Provincia di Matera","Provincia di Potenza"],
-    "Molise":     ["Provincia di Campobasso","Provincia di Isernia"],
-    "Trentino-Alto-Adige": ["Provincia di Bolzano","Provincia di Trento"],
-    "Valle d'Aosta": ["Provincia di Aosta"],
-}
-
-# ── Algolia helpers ───────────────────────────────────────────────────────────
+# ── Algolia: ricerca bandi ────────────────────────────────────────────────────
 
 def build_filters(scadenza_vals, livello, regione, provincia):
     parts = []
@@ -66,84 +37,64 @@ def build_filters(scadenza_vals, livello, regione, provincia):
 
 
 def cerca_bandi_web(keyword="", stato="aperto", livello="", regione="", provincia="", max_hits=50):
-    stato_map = {
-        "aperto":   ["Bandi aperti"],
-        "prossimo": ["Bandi prossima apertura"],
-        "tutti":    ["Bandi aperti", "Bandi prossima apertura"],
-    }
-    livello_map = {
-        "europeo":   "Bandi europei",
-        "nazionale": "Bandi nazionali",
-        "regionale": "Bandi regionali",
-    }
-    stato_vals     = stato_map.get(stato, ["Bandi aperti"])
-    livello_mapped = livello_map.get(livello, livello)
-    filters        = build_filters(stato_vals, livello_mapped, regione, provincia)
-
-    payload = {"query": keyword, "hitsPerPage": max_hits, "page": 0,
-               "filters": filters, "attributesToRetrieve": ["*"]}
-    r = requests.post(ALGOLIA_URL, headers=ALGOLIA_HEADERS, json=payload, timeout=15)
+    stato_map   = {"aperto": ["Bandi aperti"], "prossimo": ["Bandi prossima apertura"], "tutti": ["Bandi aperti","Bandi prossima apertura"]}
+    livello_map = {"europeo": "Bandi europei", "nazionale": "Bandi nazionali", "regionale": "Bandi regionali"}
+    filters = build_filters(stato_map.get(stato, ["Bandi aperti"]), livello_map.get(livello, livello), regione, provincia)
+    r = requests.post(ALGOLIA_URL, headers=ALGOLIA_HEADERS,
+                      json={"query": keyword, "hitsPerPage": max_hits, "page": 0,
+                            "filters": filters, "attributesToRetrieve": ["*"]}, timeout=15)
     r.raise_for_status()
     data = r.json()
     return data.get("hits", []), data.get("nbHits", 0)
 
 
-# ── Hit → card per il frontend ────────────────────────────────────────────────
+# ── Dati dall'hit ─────────────────────────────────────────────────────────────
 
 def _fmt_date(val):
-    if not val:
-        return "", None
+    if not val: return "", None
     if isinstance(val, (int, float)):
         try:
             dt = datetime.fromtimestamp(val)
             return dt.strftime("%d/%m/%Y"), dt
-        except Exception:
-            return str(val), None
+        except: return str(val), None
     for fmt in ["%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"]:
         try:
             dt = datetime.strptime(str(val).strip(), fmt)
             return dt.strftime("%d/%m/%Y"), dt
-        except Exception:
-            pass
+        except: pass
     s = str(val).strip()
     return (s, None) if len(s) > 3 else ("", None)
 
 
 def _scadenza_da_hit(hit):
-    for campo in ("scadenza", "data_scadenza", "deadline", "data_chiusura", "fine", "end_date"):
-        val = hit.get(campo)
+    for c in ("scadenza","data_scadenza","deadline","data_chiusura","fine","end_date"):
+        val = hit.get(c)
         if val:
             s, dt = _fmt_date(val)
-            if s:
-                return s, dt
+            if s: return s, dt
     return "", None
 
 
 def _dotazione_da_hit(hit):
-    for campo in ("dotazione", "dotazione_finanziaria", "budget", "importo",
-                  "importo_totale", "risorse", "finanziamento", "stanziamento"):
-        val = hit.get(campo)
-        if val and str(val).strip() not in ("0", "0.0", "", "[]", "{}"):
+    for c in ("dotazione","dotazione_finanziaria","budget","importo","importo_totale","risorse","finanziamento"):
+        val = hit.get(c)
+        if val and str(val).strip() not in ("0","0.0","","[]","{}"):
             v = str(val).strip()
             try:
-                n = float(v.replace(",", ".").replace(".", "").replace(" ", ""))
+                n = float(v.replace(",",".").replace(".","").replace(" ",""))
                 if n > 0:
-                    return f"EUR {n/1_000_000:,.1f} MLN".replace(",", ".") if n >= 1_000_000 \
-                           else f"EUR {int(n):,}".replace(",", ".")
-            except ValueError:
-                if any(c.isdigit() for c in v):
-                    return v[:50]
+                    return f"EUR {n/1_000_000:,.1f} MLN".replace(",",".") if n>=1_000_000 else f"EUR {int(n):,}".replace(",",".")
+            except: 
+                if any(c.isdigit() for c in v): return v[:50]
     return None
 
 
 def _beneficiari_da_hit(hit):
-    for k in ("beneficiari", "destinatari", "soggetti_ammissibili"):
+    for k in ("beneficiari","destinatari","soggetti_ammissibili"):
         val = hit.get(k)
         if val:
-            if isinstance(val, list):
-                return ", ".join(str(x).split("/")[0].strip() for x in val[:3])
-            if isinstance(val, str) and val.strip():
-                return val.strip()[:120]
+            if isinstance(val, list): return ", ".join(str(x).split("/")[0].strip() for x in val[:3])
+            if isinstance(val, str) and val.strip(): return val.strip()[:120]
     return ""
 
 
@@ -152,21 +103,20 @@ def _livello_da_hit(hit):
     ag   = taxh.get("area_geografica", {}) or {}
     lvl0 = (ag.get("lvl0") or [])
     lvl1 = (ag.get("lvl1") or [])
-    if not lvl0:
-        return "—"
+    if not lvl0: return "—"
     area = lvl0[0]
-    if "Europei" in area:   return "Europeo"
+    if "Europei"   in area: return "Europeo"
     if "Nazionali" in area: return "Nazionale"
-    geo = lvl1[0].replace("Provincia di ", "") if lvl1 else area
+    geo = lvl1[0].replace("Provincia di ","") if lvl1 else area
     return f"Regionale · {geo}"
 
 
 def hit_to_card(hit):
     sc_str, _ = _scadenza_da_hit(hit)
     return {
-        "id":          hit.get("objectID", ""),
+        "id":          hit.get("objectID",""),
         "titolo":      hit.get("post_title") or hit.get("title") or "—",
-        "stato":       hit.get("scadenza_testo", "—"),
+        "stato":       hit.get("scadenza_testo","—"),
         "livello":     _livello_da_hit(hit),
         "dotazione":   _dotazione_da_hit(hit) or "—",
         "scadenza":    sc_str or "—",
@@ -175,51 +125,51 @@ def hit_to_card(hit):
     }
 
 
-# ── CUORE: Claude cerca il bando e genera la scheda ──────────────────────────
+# ── Claude legge il bando e genera la scheda ─────────────────────────────────
 
-def _genera_con_claude(titolo, stato_bando):
+def _chiedi_a_claude(titolo, url_bando, stato_bando):
     """
-    Claude cerca il bando su Google, legge le fonti ufficiali se disponibili,
-    e genera tutte le sezioni della scheda in JSON.
+    Passa titolo + URL a Claude.
+    Claude usa web_search per leggere la pagina e la documentazione ufficiale.
+    Genera JSON con tutte le sezioni della scheda Energelia.
     """
     if not ANTHROPIC_API_KEY:
         return {}
 
-    stato_cta = "prossima apertura" if "prossima" in stato_bando.lower() else "aperto"
+    url_info = f"\nURL della pagina del bando: {url_bando}" if url_bando else ""
 
-    prompt = f"""Sei un esperto di finanza agevolata italiana che lavora per Energelia S.r.l.
+    prompt = f"""Sei un esperto di finanza agevolata italiana di Energelia S.r.l.
 
-Devi creare la scheda informativa del seguente bando:
-
-TITOLO BANDO: "{titolo}"
-STATO: {stato_bando}
+BANDO DA ANALIZZARE:
+Titolo: {titolo}
+Stato: {stato_bando}{url_info}
 
 ISTRUZIONI:
-1. Cerca informazioni complete su questo bando usando web_search
-2. Se trovi un link a decreto ufficiale, PDF ministeriale o sito .gov.it/.regione.it, leggilo
-3. Usa SOLO dati reali trovati — mai placeholder come "verificare sul bando"
-4. Genera la scheda in formato JSON con questa struttura ESATTA:
+1. Usa web_search per cercare questo bando e trovare informazioni complete
+2. Se trovi un link a documentazione ufficiale (decreto, PDF su .gov.it o .regione.it), leggilo
+3. Raccogli TUTTI i dati numerici reali: importi, percentuali, date, limiti
+4. Non usare mai "verificare sul bando" o placeholder — solo dati reali trovati
 
+Genera la scheda in JSON con questa struttura ESATTA:
 {{
-  "sottotitolo": "Ente erogatore · riferimento normativo · tipo contributo · stato",
-  "dotazione": "importo totale fondo es. EUR 5 MLN oppure null",
-  "intensita": "es. 60% fondo perduto oppure null",
-  "contributo_max": "es. EUR 150.000 oppure null",
-  "investimento_range": "es. 60k - 500k oppure null",
-  "data_metrica": "es. scadenza 15/12/2026 oppure prossima apertura",
-  "label_data": "SCADENZA oppure APERTURA",
-  "ente_finalita": ["Ente erogatore preciso", "Obiettivo del bando", "Contesto normativo"],
-  "chi_partecipa": ["Tipologia beneficiari", "Requisiti chiave", "Eventuali esclusioni"],
-  "cosa_finanziabile": ["Intervento 1", "Intervento 2", "Intervento 3"],
-  "spese_ammissibili": ["Spesa 1", "Spesa 2", "Spesa 3", "Spesa 4"],
-  "struttura_agevolazione": [["Voce", "Valore"], ["Intensita fondo perduto", "X%"], ["Contributo massimo", "EUR X"]],
-  "criteri_valutazione": ["Tipo procedura", "Criterio 1", "Criterio 2"],
-  "fasi_tempi": ["Apertura: data", "Scadenza: data", "Rendicontazione: tempi"],
-  "come_presentare": ["Portale specifico", "Credenziali richieste", "Allegati obbligatori"],
-  "perche_interessante": ["Punto forza 1 concreto", "Punto forza 2 concreto", "Punto forza 3 concreto"],
-  "criticita": ["Vincolo 1 reale", "Vincolo 2 reale", "Vincolo 3 reale"],
-  "cta_testo": "Frase CTA personalizzata per questo bando",
-  "fonte": "Fonte: ente/decreto/riferimento ufficiale trovato"
+  "sottotitolo": "Ente erogatore · riferimento normativo · tipo agevolazione · {stato_bando}",
+  "dotazione": "importo totale fondo es. EUR 5 MLN (null se non trovato)",
+  "intensita": "es. 60% fondo perduto (null se non trovato)",
+  "contributo_max": "es. EUR 150.000 (null se non trovato)",
+  "data_scadenza": "DD/MM/YYYY o descrizione (null se non trovato)",
+  "ente_finalita": ["Ente erogatore preciso", "Obiettivo del bando", "Riferimento normativo"],
+  "chi_partecipa": ["Beneficiari principali", "Requisiti chiave", "Eventuali esclusioni"],
+  "cosa_finanziabile": ["Tipologia 1", "Tipologia 2", "Tipologia 3"],
+  "spese_ammissibili": ["Voce 1", "Voce 2", "Voce 3"],
+  "spese_non_ammissibili": ["Voce esclusa 1", "IVA se non recuperabile", "Spese ante-ammissione"],
+  "contributo_voci": ["Intensita: X%", "Contributo max: EUR X", "Investimento min: EUR X"],
+  "criteri_valutazione": ["Tipo procedura: sportello/valutativa", "Criterio 1", "Documentazione richiesta"],
+  "fasi_tempi": ["Apertura: data", "Scadenza: data", "Rendicontazione: termini"],
+  "come_presentare": ["Portale specifico con URL", "Credenziali: SPID/CNS/altro", "Allegati obbligatori principali"],
+  "perche_interessante": ["Punto forza concreto 1", "Punto forza concreto 2", "Punto forza concreto 3"],
+  "criticita": ["Vincolo operativo 1", "Vincolo operativo 2", "Attenzione specifica"],
+  "cta_testo": "Frase CTA specifica per questo bando e target",
+  "fonte_ufficiale": "Ente/decreto/riferimento trovato"
 }}
 
 Rispondi SOLO con JSON valido. Nessun testo prima o dopo."""
@@ -228,156 +178,126 @@ Rispondi SOLO con JSON valido. Nessun testo prima o dopo."""
         try:
             resp = requests.post(
                 "https://api.anthropic.com/v1/messages",
-                headers={
-                    "x-api-key":         ANTHROPIC_API_KEY,
-                    "anthropic-version": "2023-06-01",
-                    "content-type":      "application/json",
-                },
-                json={
-                    "model":      "claude-haiku-4-5-20251001",
-                    "max_tokens": 2500,
-                    "tools":      [{"type": "web_search_20250305", "name": "web_search"}],
-                    "messages":   [{"role": "user", "content": prompt}],
-                },
+                headers={"x-api-key": ANTHROPIC_API_KEY,
+                         "anthropic-version": "2023-06-01",
+                         "content-type": "application/json"},
+                json={"model":    "claude-haiku-4-5-20251001",
+                      "max_tokens": 2500,
+                      "tools":    [{"type": "web_search_20250305", "name": "web_search"}],
+                      "messages": [{"role": "user", "content": prompt}]},
                 timeout=120,
             )
-
             if resp.status_code == 429:
-                time.sleep((tentativo + 1) * 10)
+                time.sleep((tentativo+1)*10)
                 continue
             if resp.status_code != 200:
-                return {}
+                return {"_api_error": f"{resp.status_code}: {resp.text[:200]}"}
 
             blocks = resp.json().get("content", [])
-            testo  = "\n".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
+            testo  = "\n".join(b.get("text","") for b in blocks if b.get("type")=="text").strip()
             if not testo:
-                return {}
+                return {"_api_error": "risposta vuota"}
 
-            raw   = re.sub(r'```(?:json)?\s*', '', testo)
-            raw   = re.sub(r'```', '', raw).strip()
-            start = raw.find('{')
-            end   = raw.rfind('}')
-            if start == -1 or end == -1:
-                return {}
+            raw   = re.sub(r'```(?:json)?\s*','',testo)
+            raw   = re.sub(r'```','',raw).strip()
+            start = raw.find('{'); end = raw.rfind('}')
+            if start==-1 or end==-1:
+                return {"_api_error": f"no JSON: {testo[:100]}"}
 
             return json.loads(raw[start:end+1])
 
-        except (json.JSONDecodeError, Exception):
-            return {}
-
+        except json.JSONDecodeError as e:
+            return {"_api_error": f"JSON error: {e}"}
+        except Exception as e:
+            return {"_api_error": str(e)}
     return {}
 
 
-# ── Costruisce il CONTENT dict per schede_engine ─────────────────────────────
+# ── Assembla CONTENT per energelia_scheda_engine ──────────────────────────────
 
 def _pulisci(lst):
     return [str(x).strip() for x in (lst or [])
-            if x and str(x).strip() not in ("", "None", "null", "—", "-")]
+            if x and str(x).strip() not in ("","None","null","—","-")]
 
 
 def _sintetizza(val, max_len=16):
-    if not val or str(val).strip() in ("—", "-", "", "null", "None"):
-        return "—"
+    if not val or str(val).strip() in ("—","-","","null","None"): return "—"
     v = str(val).strip()
-    if len(v) <= max_len:
-        return v
-    return v[:max_len].rstrip() + "…"
+    return v if len(v)<=max_len else v[:max_len].rstrip()+"…"
 
 
 def genera_scheda_web(hit):
     """
-    Punto di ingresso principale per la generazione scheda dal web.
-    Restituisce (content_dict, titolo).
+    Genera la scheda dal bando.
+    Restituisce (content_dict, titolo) compatibile con energelia_scheda_engine.
     """
-    titolo      = hit.get("post_title", "") or hit.get("title", "") or "Bando"
-    stato_bando = hit.get("scadenza_testo", "Bandi aperti")
+    titolo      = hit.get("post_title","") or hit.get("title","") or "Bando"
+    stato_bando = hit.get("scadenza_testo","Bandi aperti")
+    url_bando   = hit.get("permalink","") or hit.get("link","") or hit.get("url","")
     sc_str, _   = _scadenza_da_hit(hit)
     dotaz_hit   = _dotazione_da_hit(hit)
 
-    # Estrai area geografica
-    taxh  = hit.get("taxonomies_hierarchical", {})
-    ag    = taxh.get("area_geografica", {}) or {}
-    lvl0  = (ag.get("lvl0") or [""])[0]
-    lvl1  = (ag.get("lvl1") or [""])[0]
-    area  = lvl1 or lvl0 or ""
+    taxh = hit.get("taxonomies_hierarchical",{})
+    ag   = taxh.get("area_geografica",{}) or {}
+    lvl0 = (ag.get("lvl0") or [""])[0]
+    lvl1 = (ag.get("lvl1") or [""])[0]
+    area = lvl1 or lvl0 or ""
 
-    # Claude cerca e popola
-    cl = _genera_con_claude(titolo, stato_bando)
+    # Claude cerca e genera
+    cl = _chiedi_a_claude(titolo, url_bando, stato_bando)
+
+    # Log dell'eventuale errore API nel content stesso (visibile nel traceback del server)
+    api_error = cl.get("_api_error","")
 
     def cv(key, fallback=None):
         v = cl.get(key)
         if isinstance(v, list):
             return v if v else (fallback or [])
-        if v and str(v).strip() not in ("", "None", "null", "—", "-"):
+        if v and str(v).strip() not in ("","None","null","—","-"):
             return str(v).strip()
         return fallback
 
-    # Metriche
-    dotazione  = cv("dotazione",       dotaz_hit or "—")
-    intensita  = cv("intensita",       "—")
-    contr_max  = cv("contributo_max",  "—")
-    inv_range  = cv("investimento_range", "—")
-    data_val   = cv("data_metrica",    sc_str or "—")
-    label_data = cv("label_data",      "SCADENZA")
+    dotazione  = cv("dotazione",    dotaz_hit or "—")
+    intensita  = cv("intensita",    "—")
+    contr_max  = cv("contributo_max","—")
+    data_val   = cv("data_scadenza", sc_str or "—")
+    sottotitolo= cv("sottotitolo",   f"{area} · {stato_bando}" if area else stato_bando)
+    fonte      = cv("fonte_ufficiale", f"Elaborato da Energelia S.r.l. · {datetime.now().strftime('%B %Y')}")
 
-    # Usa contributo_max come seconda metrica se intensita non disponibile
-    met2_label = "CONTRIBUTO MAX" if contr_max != "—" else "INTENSITA'"
-    met2_val   = contr_max if contr_max != "—" else intensita
-    met3_label = "INVESTIMENTO"
-    met3_val   = inv_range if inv_range != "—" else intensita
-
-    metriche = [
-        {"label": "DOTAZIONE",  "valore": _sintetizza(dotazione),  "bg": "blue"},
-        {"label": met2_label,   "valore": _sintetizza(met2_val),   "bg": "orange"},
-        {"label": met3_label,   "valore": _sintetizza(met3_val),   "bg": "green"},
-        {"label": label_data,   "valore": _sintetizza(data_val),   "bg": "blue"},
-    ]
-
-    # Sezioni
-    sottotitolo = cv("sottotitolo", f"{area} · {stato_bando}" if area else stato_bando)
-    
-    # Tabella contributi se disponibile
-    tab_contrib = cv("struttura_agevolazione")
-    tabella = None
-    if isinstance(tab_contrib, list) and len(tab_contrib) > 1:
-        tabella = tab_contrib
-
-    # Sinistra
-    sinistra = [
-        {"titolo": "ENTE / FINALITA'",      "voci": _pulisci(cv("ente_finalita", []))},
-        {"titolo": "CHI PUO' PARTECIPARE",  "voci": _pulisci(cv("chi_partecipa", []))},
-        {"titolo": "COSA E' FINANZIABILE",  "voci": _pulisci(cv("cosa_finanziabile", []))},
-        {"titolo": "SPESE AMMISSIBILI",     "voci": _pulisci(cv("spese_ammissibili", []))},
-    ]
-
-    # Destra
-    destra = [
-        {"titolo": "CRITERI / VALUTAZIONE", "voci": _pulisci(cv("criteri_valutazione", []))},
-        {"titolo": "FASI E TEMPI",          "voci": _pulisci(cv("fasi_tempi", []))},
-        {"titolo": "COME PRESENTARE",       "voci": _pulisci(cv("come_presentare", []))},
-    ]
-
-    # CTA personalizzata
-    cta_testo = cv("cta_testo",
-        "Bando aperto: agisci ora, siamo a disposizione!" if "aperto" in stato_bando.lower()
-        else "Bando in arrivo: preparati ora con Energelia!")
-
-    fonte = cv("fonte", f"Elaborato da Energelia S.r.l. · {datetime.now().strftime('%B %Y')}")
+    stato_bg = "blue" if "prossima" in stato_bando.lower() else "orange"
 
     content = {
-        "titolo":             titolo.upper(),
-        "sottotitolo":        sottotitolo,
-        "metriche":           metriche,
-        "sinistra":           sinistra,
-        "tabella_contributi": tabella,
-        "destra":             destra,
-        "punti_forza":        _pulisci(cv("perche_interessante", [])),
-        "criticita":          _pulisci(cv("criticita", [])),
-        "cta_testo":          cta_testo,
-        "cta_tel":            "Tel. 010 8078800",
-        "cta_email":          "a.augusti@energelia.it",
-        "fonte":              fonte,
-        "mese_anno":          datetime.now().strftime("%B %Y"),
+        "titolo":      titolo.upper(),
+        "sottotitolo": sottotitolo,
+        "metriche": [
+            {"label":"DOTAZIONE",    "valore":_sintetizza(dotazione),  "bg":"blue"},
+            {"label":"INTENSITA'",   "valore":_sintetizza(intensita),  "bg":"orange"},
+            {"label":"CONTRIBUTO MAX","valore":_sintetizza(contr_max), "bg":"green"},
+            {"label":"SCADENZA",     "valore":_sintetizza(data_val),   "bg":stato_bg},
+        ],
+        "sinistra": [
+            {"titolo":"ENTE / FINALITA'",     "voci":_pulisci(cv("ente_finalita",[]))},
+            {"titolo":"CHI PUO' PARTECIPARE", "voci":_pulisci(cv("chi_partecipa",[]))},
+            {"titolo":"COSA E' FINANZIABILE", "voci":_pulisci(cv("cosa_finanziabile",[]))},
+            {"titolo":"SPESE NON AMMISSIBILI","voci":_pulisci(cv("spese_non_ammissibili",[]))},
+        ],
+        "tabella_contributi": None,
+        "destra": [
+            {"titolo":"CONTRIBUTO / INTENSITA'","voci":_pulisci(cv("contributo_voci",[]))},
+            {"titolo":"CRITERI / VALUTAZIONE",  "voci":_pulisci(cv("criteri_valutazione",[]))},
+            {"titolo":"FASI E TEMPI",           "voci":_pulisci(cv("fasi_tempi",[]))},
+            {"titolo":"COME PRESENTARE",        "voci":_pulisci(cv("come_presentare",[]))},
+        ],
+        "punti_forza": _pulisci(cv("perche_interessante",[])),
+        "criticita":   _pulisci(cv("criticita",[])),
+        "cta_testo":   cv("cta_testo",
+                          "Bando aperto: agisci ora!" if "aperto" in stato_bando.lower()
+                          else "Preparati ora con Energelia!"),
+        "cta_tel":    "Tel. 010 8078800",
+        "cta_email":  "a.augusti@energelia.it",
+        "fonte":      f"Fonte: {fonte[:80]}",
+        "mese_anno":  datetime.now().strftime("%B %Y"),
+        "_api_error": api_error,  # visibile nel traceback se qualcosa va storto
     }
 
     return content, titolo
