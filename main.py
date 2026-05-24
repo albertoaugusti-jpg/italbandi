@@ -506,26 +506,63 @@ function togglePreview(id) {{
   el.style.display = el.style.display === 'none' ? 'block' : 'none';
 }}
 async function generaScheda(id) {{
-  const btn   = document.getElementById('btn-' + id);
-  const sp    = document.getElementById('sp-'  + id);
-  const titolo = (_hits[id] && (_hits[id].post_title || _hits[id].title)) || id;
-  btn.disabled = true; sp.style.display = 'inline';
+  const btn = document.getElementById('btn-' + id);
+  const sp  = document.getElementById('sp-'  + id);
+  btn.disabled = true;
+  sp.style.display = 'inline';
+  sp.textContent = '⏳ Avvio elaborazione...';
+
   try {{
-    const resp = await fetch('/api/scheda/' + encodeURIComponent(id), {{
+    // 1. Avvia job
+    const r1 = await fetch('/api/scheda/' + encodeURIComponent(id), {{
       method: 'POST', headers: {{'Content-Type':'application/json'}},
       body: JSON.stringify({{hit: _hits[id]}})
     }});
-    if (!resp.ok) {{ alert('Errore: ' + (await resp.text()).substring(0,200)); return; }}
-    const blob = await resp.blob();
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    const nomeFile = 'Energelia_' + titolo.substring(0,40).replace(/[^a-zA-Z0-9]/g,'_') + '.pdf';
-    a.download = nomeFile;
-    document.body.appendChild(a); a.click(); a.remove();
-    URL.revokeObjectURL(url);
-  }} catch(e) {{ alert('Errore: ' + e.message); }}
-  finally {{ btn.disabled = false; sp.style.display = 'none'; }}
+    const j1 = await r1.json();
+    if (!j1.job_id) {{ alert('Errore avvio: ' + JSON.stringify(j1)); return; }}
+    const jobId = j1.job_id;
+
+    // 2. Polling ogni 5 secondi
+    let secondi = 0;
+    const poll = setInterval(async () => {{
+      secondi += 5;
+      sp.textContent = '⏳ Generazione in corso... (' + secondi + 's)';
+      try {{
+        const r2  = await fetch('/api/job/' + jobId);
+        const j2  = await r2.json();
+        if (j2.status === 'ready') {{
+          clearInterval(poll);
+          sp.textContent = '✅ Pronto! Download in corso...';
+          // 3. Scarica
+          const r3   = await fetch('/api/download/' + jobId);
+          const blob = await r3.blob();
+          const url  = URL.createObjectURL(blob);
+          const a    = document.createElement('a');
+          a.href     = url;
+          a.download = j2.nome || ('Energelia_' + id + '.pdf');
+          document.body.appendChild(a); a.click(); a.remove();
+          URL.revokeObjectURL(url);
+          sp.style.display = 'none';
+          btn.disabled = false;
+        }} else if (j2.status === 'error') {{
+          clearInterval(poll);
+          alert('Errore generazione scheda. Riprova.');
+          sp.style.display = 'none';
+          btn.disabled = false;
+        }} else if (secondi > 180) {{
+          clearInterval(poll);
+          alert('Timeout — la generazione sta impiegando troppo. Riprova tra un momento.');
+          sp.style.display = 'none';
+          btn.disabled = false;
+        }}
+      }} catch(e) {{ clearInterval(poll); alert('Errore polling: ' + e.message); btn.disabled=false; sp.style.display='none'; }}
+    }}, 5000);
+
+  }} catch(e) {{
+    alert('Errore: ' + e.message);
+    btn.disabled = false;
+    sp.style.display = 'none';
+  }}
 }}
 window.onload = cerca;
 </script>
@@ -889,35 +926,72 @@ async def cerca(
     except Exception as e:
         return JSONResponse({"error": str(e), "bandi": [], "totale": 0})
 
-@app.post("/api/scheda/{bando_id}")
-async def genera_scheda(bando_id: str, body: dict, session_id: str = Cookie(default=None)):
-    if not get_session(session_id):
-        return JSONResponse({"error": "Non autenticato"}, status_code=401)
-    try:
-        hit = body.get("hit", {})
-        content, titolo = be.genera_scheda_web(hit)
 
-        # Log errore API se presente
+# ── Job system asincrono ───────────────────────────────────────────────────────
+import threading
+JOBS = {}  # job_id → {"status": "pending"|"ready"|"error", "path": ..., "nome": ..., "error": ...}
+
+def _esegui_job(job_id, hit):
+    try:
+        content, titolo = be.genera_scheda_web(hit)
         api_error = content.pop("_api_error", "")
         if api_error:
             print(f"[CLAUDE API ERROR] {api_error}", flush=True)
 
-        # Logo Energelia per la scheda PDF
         base = os.path.dirname(os.path.abspath(__file__))
         for nome_logo in ["Logo Energelia realistico.png", "logo_energelia.png", "logo.png"]:
             logo_energelia = os.path.join(base, nome_logo)
             if os.path.exists(logo_energelia):
                 ENGINE.LOGO = logo_energelia
                 break
+
         ENGINE.CONTENT = content
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
             tmp_path = tmp.name
         ENGINE.generate(output_path=tmp_path, verbose=False)
+
         titolo_corto = re.sub(r'[^\w\s]', '', titolo)[:40].strip().replace(' ', '_')
         nome_file = f"Energelia_{titolo_corto}_{datetime.now().strftime('%Y%m%d')}.pdf"
-        return FileResponse(path=tmp_path, media_type="application/pdf", filename=nome_file)
+
+        JOBS[job_id] = {"status": "ready", "path": tmp_path, "nome": nome_file}
     except Exception as e:
-        return JSONResponse({"error": traceback.format_exc()}, status_code=500)
+        JOBS[job_id] = {"status": "error", "error": traceback.format_exc()}
+
+
+@app.post("/api/scheda/{bando_id}")
+async def genera_scheda(bando_id: str, body: dict, session_id: str = Cookie(default=None)):
+    if not get_session(session_id):
+        return JSONResponse({"error": "Non autenticato"}, status_code=401)
+    hit    = body.get("hit", {})
+    job_id = secrets.token_hex(8)
+    JOBS[job_id] = {"status": "pending"}
+    threading.Thread(target=_esegui_job, args=(job_id, hit), daemon=True).start()
+    return JSONResponse({"job_id": job_id})
+
+
+@app.get("/api/job/{job_id}")
+async def check_job(job_id: str, session_id: str = Cookie(default=None)):
+    if not get_session(session_id):
+        return JSONResponse({"error": "Non autenticato"}, status_code=401)
+    job = JOBS.get(job_id)
+    if not job:
+        return JSONResponse({"status": "error", "error": "Job non trovato"})
+    if job["status"] == "ready":
+        return JSONResponse({"status": "ready", "nome": job["nome"]})
+    if job["status"] == "error":
+        return JSONResponse({"status": "error", "error": job.get("error","")})
+    return JSONResponse({"status": "pending"})
+
+
+@app.get("/api/download/{job_id}")
+async def download_job(job_id: str, session_id: str = Cookie(default=None)):
+    if not get_session(session_id):
+        return JSONResponse({"error": "Non autenticato"}, status_code=401)
+    job = JOBS.get(job_id)
+    if not job or job["status"] != "ready":
+        return JSONResponse({"error": "File non pronto"}, status_code=404)
+    return FileResponse(path=job["path"], media_type="application/pdf", filename=job["nome"])
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
