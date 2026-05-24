@@ -20,28 +20,29 @@ app = FastAPI(title="ItalBandi")
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 def get_pg():
-    """Connessione PostgreSQL Neon."""
-    import psycopg2
-    return psycopg2.connect(DATABASE_URL, sslmode="require")
+    """Connessione PostgreSQL Neon via pg8000."""
+    import pg8000.native
+    import urllib.parse
+    u = urllib.parse.urlparse(DATABASE_URL)
+    return pg8000.native.Connection(
+        host=u.hostname, port=u.port or 5432,
+        database=u.path.lstrip('/'),
+        user=u.username, password=u.password,
+        ssl_context=True
+    )
 
 def init_cache_db():
-    """Crea la tabella bandi_cache se non esiste."""
-    if not DATABASE_URL:
-        return
+    if not DATABASE_URL: return
     try:
         con = get_pg()
-        cur = con.cursor()
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS bandi_cache (
-                object_id   TEXT PRIMARY KEY,
-                titolo      TEXT,
-                testo_pagina TEXT,
-                permalink   TEXT,
-                aggiornato  TIMESTAMP DEFAULT NOW()
-            )
-        """)
-        con.commit()
-        cur.close(); con.close()
+        con.run("""CREATE TABLE IF NOT EXISTS bandi_cache (
+            object_id    TEXT PRIMARY KEY,
+            titolo       TEXT,
+            testo_pagina TEXT,
+            permalink    TEXT,
+            aggiornato   TIMESTAMP DEFAULT NOW()
+        )""")
+        con.close()
     except Exception as e:
         print(f"[DB] init error: {e}", flush=True)
 
@@ -51,14 +52,12 @@ def salva_in_cache(object_id, titolo, testo, permalink):
     if not DATABASE_URL: return
     try:
         con = get_pg()
-        cur = con.cursor()
-        cur.execute("""
-            INSERT INTO bandi_cache (object_id, titolo, testo_pagina, permalink, aggiornato)
-            VALUES (%s, %s, %s, %s, NOW())
+        con.run("""INSERT INTO bandi_cache (object_id, titolo, testo_pagina, permalink, aggiornato)
+            VALUES (:oid, :tit, :tes, :per, NOW())
             ON CONFLICT (object_id) DO UPDATE
-            SET testo_pagina=%s, titolo=%s, permalink=%s, aggiornato=NOW()
-        """, (object_id, titolo, testo, permalink, testo, titolo, permalink))
-        con.commit(); cur.close(); con.close()
+            SET testo_pagina=:tes, titolo=:tit, permalink=:per, aggiornato=NOW()""",
+            oid=object_id, tit=titolo, tes=testo, per=permalink)
+        con.close()
     except Exception as e:
         print(f"[DB] save error: {e}", flush=True)
 
@@ -66,11 +65,9 @@ def leggi_da_cache(object_id):
     if not DATABASE_URL: return None
     try:
         con = get_pg()
-        cur = con.cursor()
-        cur.execute("SELECT testo_pagina FROM bandi_cache WHERE object_id=%s", (object_id,))
-        row = cur.fetchone()
-        cur.close(); con.close()
-        return row[0] if row else None
+        rows = con.run("SELECT testo_pagina FROM bandi_cache WHERE object_id=:oid", oid=object_id)
+        con.close()
+        return rows[0][0] if rows else None
     except:
         return None
 
@@ -78,11 +75,9 @@ def conta_cache():
     if not DATABASE_URL: return 0
     try:
         con = get_pg()
-        cur = con.cursor()
-        cur.execute("SELECT COUNT(*) FROM bandi_cache")
-        n = cur.fetchone()[0]
-        cur.close(); con.close()
-        return n
+        rows = con.run("SELECT COUNT(*) FROM bandi_cache")
+        con.close()
+        return rows[0][0] if rows else 0
     except:
         return 0
 
