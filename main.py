@@ -10,7 +10,7 @@ from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, Redirect
 import uvicorn
 
 import bandi_engine as be
-import energelia_scheda_engine as ENGINE
+import schede_engine as ENGINE
 
 LOGO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo_italbandi.png")
 
@@ -1063,16 +1063,17 @@ def _esegui_job(job_id, hit, testo_ce=""):
             print(f"[CLAUDE API ERROR] {api_error}", flush=True)
 
         base = os.path.dirname(os.path.abspath(__file__))
+        logo_energelia = None
         for nome_logo in ["Logo Energelia realistico.png", "logo_energelia.png", "logo.png"]:
-            logo_energelia = os.path.join(base, nome_logo)
-            if os.path.exists(logo_energelia):
-                ENGINE.LOGO = logo_energelia
+            candidato = os.path.join(base, nome_logo)
+            if os.path.exists(candidato):
+                logo_energelia = candidato
+                print(f"[LOGO] trovato: {nome_logo}", flush=True)
                 break
 
-        ENGINE.CONTENT = content
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
             tmp_path = tmp.name
-        ENGINE.generate(output_path=tmp_path, verbose=False)
+        ENGINE.generate(content, tmp_path, logo_energelia)
 
         titolo_corto = re.sub(r'[^\w\s]', '', titolo)[:40].strip().replace(' ', '_')
         nome_file = f"Energelia_{titolo_corto}_{datetime.now().strftime('%Y%m%d')}.pdf"
