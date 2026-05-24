@@ -16,60 +16,48 @@ LOGO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo_italb
 
 app = FastAPI(title="ItalBandi")
 
-# ── Database Neon (cache bandi) via psycopg2 ─────────────────────────────────
-DATABASE_URL = os.environ.get("DATABASE_URL", "")
-
-def _get_con():
-    import psycopg2
-    return psycopg2.connect(DATABASE_URL)
+# ── Cache bandi via SQLite ────────────────────────────────────────────────────
+CACHE_DB = "/tmp/bandi_cache.db"
 
 def init_cache_db():
-    if not DATABASE_URL: return
-    try:
-        con = _get_con()
-        cur = con.cursor()
-        cur.execute("""CREATE TABLE IF NOT EXISTS bandi_cache (
-            object_id    TEXT PRIMARY KEY,
-            titolo       TEXT,
-            testo_pagina TEXT,
-            permalink    TEXT,
-            aggiornato   TIMESTAMP DEFAULT NOW()
-        )""")
-        con.commit(); cur.close(); con.close()
-        print("[DB] init OK", flush=True)
-    except Exception as e:
-        print(f"[DB] init error: {e}", flush=True)
+    con = sqlite3.connect(CACHE_DB)
+    con.execute("""CREATE TABLE IF NOT EXISTS bandi_cache (
+        object_id    TEXT PRIMARY KEY,
+        titolo       TEXT,
+        testo_pagina TEXT,
+        permalink    TEXT,
+        aggiornato   TEXT
+    )""")
+    con.commit(); con.close()
+    print("[DB] SQLite cache init OK", flush=True)
 
 init_cache_db()
 
 def salva_in_cache(object_id, titolo, testo, permalink):
-    if not DATABASE_URL: return
     try:
-        con = _get_con(); cur = con.cursor()
-        cur.execute("""INSERT INTO bandi_cache (object_id,titolo,testo_pagina,permalink,aggiornato)
-            VALUES (%s,%s,%s,%s,NOW())
-            ON CONFLICT (object_id) DO UPDATE
-            SET testo_pagina=%s,titolo=%s,permalink=%s,aggiornato=NOW()""",
-            (object_id,titolo,testo,permalink,testo,titolo,permalink))
-        con.commit(); cur.close(); con.close()
+        con = sqlite3.connect(CACHE_DB)
+        con.execute("""INSERT OR REPLACE INTO bandi_cache
+            (object_id,titolo,testo_pagina,permalink,aggiornato)
+            VALUES (?,?,?,?,?)""",
+            (object_id, titolo, testo, permalink, datetime.now().isoformat()))
+        con.commit(); con.close()
     except Exception as e:
         print(f"[DB] save error: {e}", flush=True)
 
 def leggi_da_cache(object_id):
-    if not DATABASE_URL: return None
     try:
-        con = _get_con(); cur = con.cursor()
-        cur.execute("SELECT testo_pagina FROM bandi_cache WHERE object_id=%s", (object_id,))
-        row = cur.fetchone(); cur.close(); con.close()
+        con = sqlite3.connect(CACHE_DB)
+        row = con.execute("SELECT testo_pagina FROM bandi_cache WHERE object_id=?",
+                          (object_id,)).fetchone()
+        con.close()
         return row[0] if row else None
     except: return None
 
 def conta_cache():
-    if not DATABASE_URL: return 0
     try:
-        con = _get_con(); cur = con.cursor()
-        cur.execute("SELECT COUNT(*) FROM bandi_cache")
-        n = cur.fetchone()[0]; cur.close(); con.close()
+        con = sqlite3.connect(CACHE_DB)
+        n = con.execute("SELECT COUNT(*) FROM bandi_cache").fetchone()[0]
+        con.close()
         return n
     except: return 0
 
