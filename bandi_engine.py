@@ -295,7 +295,7 @@ def genera_scheda_web(hit):
                           else "Preparati ora con Energelia!"),
         "cta_tel":    "Tel. 010 8078800",
         "cta_email":  "a.augusti@energelia.it",
-        "fonte":      f"Fonte: {fonte[:80]}",
+        "fonte":      f"Elaborato da Energelia S.r.l. · {datetime.now().strftime('%B %Y')}",
         "mese_anno":  datetime.now().strftime("%B %Y"),
         "_api_error": api_error,  # visibile nel traceback se qualcosa va storto
     }
@@ -429,7 +429,7 @@ def genera_scheda_da_testo(hit, testo_cache):
         "cta_testo":   cv("cta_testo", "Bando aperto: agisci ora!" if "aperto" in stato_bando.lower() else "Preparati ora con Energelia!"),
         "cta_tel":    "Tel. 010 8078800",
         "cta_email":  "a.augusti@energelia.it",
-        "fonte":      f"Fonte: {fonte[:80]}",
+        "fonte":      f"Elaborato da Energelia S.r.l. · {datetime.now().strftime('%B %Y')}",
         "mese_anno":  datetime.now().strftime("%B %Y"),
         "_api_error": api_error,
     }
