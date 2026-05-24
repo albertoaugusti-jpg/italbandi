@@ -539,7 +539,7 @@ async function cerca() {{
       </div>
       <div style="display:flex;align-items:center;gap:12px;margin-top:12px">
         <button class="btn-scheda" id="btn-${{b.id}}" onclick="generaScheda('${{b.id}}')">📄 Genera Scheda PDF</button>
-        <button onclick="togglePreview('${{b.id}}')" id="arrow-${{b.id}}" style="background:none;border:1px solid #1E3A5F;color:#C9A84C;border-radius:4px;padding:6px 10px;cursor:pointer;font-size:0.9rem" title="Espandi dettagli">▼</button>
+        <button onclick="togglePreview('${{b.id}}')" id="arrow-${{b.id}}" style="background:none;border:1px solid #1E3A5F;color:#C9A84C;border-radius:4px;padding:6px 14px;cursor:pointer;font-size:0.78rem;font-weight:700;letter-spacing:0.5px" title="Vedi dettagli">PREVIEW</button>
         <span class="spinner" id="sp-${{b.id}}">⏳ Generazione in corso...</span>
       </div>
     </div>`).join('');
@@ -549,7 +549,7 @@ function togglePreview(id) {{
   const arrow = document.getElementById('arrow-' + id);
   const open  = el.style.display === 'none';
   el.style.display    = open ? 'block' : 'none';
-  arrow.textContent   = open ? '▲' : '▼';
+  arrow.textContent   = open ? 'CHIUDI' : 'PREVIEW';
 }}
 async function generaScheda(id) {{
   const btn = document.getElementById('btn-' + id);
