@@ -234,29 +234,64 @@ a:hover { text-decoration: underline; }
 .bando-card {
   background: #0F2035;
   border: 1px solid #1E3A5F;
-  border-left: 4px solid #C9A84C;
-  border-radius: 8px; padding: 20px 24px;
-  margin-bottom: 12px;
-  transition: border-color 0.2s;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  overflow: hidden;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
 }
-.bando-card:hover { border-color: #C9A84C; box-shadow: 0 0 20px rgba(201,168,76,0.1); }
-.card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
-.card-titolo { font-size: 0.95rem; font-weight: 700; color: #D4E8FF; flex: 1; line-height: 1.4; }
-.badge { font-size: 0.68rem; font-weight: 700; padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
+.bando-card:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(0,0,0,0.4); }
+.card-img {
+  height: 90px;
+  background-size: cover;
+  background-position: center;
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  padding: 10px 16px;
+}
+.card-img::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(10,22,40,0.2) 0%, rgba(10,22,40,0.85) 100%);
+}
+.card-img-badge {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+}
+.card-body { padding: 16px 20px 20px; }
+.card-titolo { font-size: 0.92rem; font-weight: 700; color: #D4E8FF; line-height: 1.4; margin-bottom: 12px; }
+.badge { font-size: 0.65rem; font-weight: 700; padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
 .badge-aperto   { background: #0D3321; color: #4ADE80; border: 1px solid #4ADE80; }
 .badge-prossimo { background: #0D1F40; color: #60A5FA; border: 1px solid #60A5FA; }
-.card-meta { display: flex; gap: 24px; margin-top: 10px; flex-wrap: wrap; }
-.meta-item label { display: block; font-size: 0.65rem; font-weight: 700; color: #5A7A9A; text-transform: uppercase; letter-spacing: 0.05em; }
-.meta-item span  { font-size: 0.82rem; color: #A8C8E8; font-weight: 500; }
+.badge-livello  { background: rgba(201,168,76,0.15); color: #C9A84C; border: 1px solid rgba(201,168,76,0.3); font-size: 0.62rem; }
+.card-meta { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 14px; }
+.meta-item label { display: block; font-size: 0.62rem; font-weight: 700; color: #5A7A9A; text-transform: uppercase; letter-spacing: 0.05em; }
+.meta-item span  { font-size: 0.8rem; color: #A8C8E8; font-weight: 500; }
+.card-actions { display: flex; align-items: center; gap: 10px; }
 .btn-scheda {
-  margin-top: 14px; padding: 8px 20px;
+  padding: 8px 18px;
   background: #C9A84C; color: #0A1628;
   border: none; border-radius: 5px;
-  font-size: 0.85rem; font-weight: 700; cursor: pointer;
+  font-size: 0.82rem; font-weight: 700; cursor: pointer;
+  white-space: nowrap;
 }
 .btn-scheda:hover { background: #E0BF6A; }
 .btn-scheda:disabled { background: #3A4A5A; color: #6A8AA8; cursor: not-allowed; }
-.spinner { display: none; margin-left: 10px; font-size: 0.8rem; color: #6A8AA8; }
+.btn-preview {
+  padding: 8px 14px;
+  background: none; color: #C9A84C;
+  border: 1px solid #1E3A5F; border-radius: 5px;
+  font-size: 0.75rem; font-weight: 700; cursor: pointer;
+  white-space: nowrap;
+}
+.btn-preview:hover { border-color: #C9A84C; }
+.spinner { display: none; font-size: 0.78rem; color: #6A8AA8; }
 .loader  { text-align: center; padding: 40px; color: #5A7A9A; }
 
 /* Auth forms */
@@ -562,31 +597,48 @@ async function cerca() {{
   document.getElementById('risultati-header').textContent = `${{data.totale}} bandi trovati`;
   _hits = {{}};
   data.bandi.forEach(b => {{ _hits[b.id] = b._hit; }});
-  document.getElementById('risultati').innerHTML = data.bandi.map(b => `
+  // Foto tematiche per categoria
+  const foto = [
+    'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=600&q=80', // edifici
+    'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=600&q=80', // lavoro
+    'https://images.unsplash.com/photo-1565514020179-026b92b84bb6?w=600&q=80', // industria
+    'https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=600&q=80', // ufficio
+    'https://images.unsplash.com/photo-1509391366360-2e959784a276?w=600&q=80', // energie
+    'https://images.unsplash.com/photo-1542744173-8e7e53415bb0?w=600&q=80', // business
+    'https://images.unsplash.com/photo-1464938050520-ef2270bb8ce8?w=600&q=80', // agricoltura
+    'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=600&q=80', // città
+  ];
+  document.getElementById('risultati').innerHTML = data.bandi.map((b, i) => {{
+    const imgUrl = foto[i % foto.length];
+    return `
     <div class="bando-card">
-      <div class="card-top">
-        <div class="card-titolo">${{b.titolo}}</div>
-        <span class="badge ${{b.stato.includes('prossima') ? 'badge-prossimo' : 'badge-aperto'}}">${{b.stato}}</span>
-      </div>
-      <div class="card-meta">
-        <div class="meta-item"><label>Livello</label><span>${{b.livello}}</span></div>
-        <div class="meta-item"><label>Scadenza</label><span>${{b.scadenza}}</span></div>
-        <div class="meta-item"><label>Destinatari</label><span>${{(b.beneficiari||'').substring(0,60)}}</span></div>
-      </div>
-      <div id="preview-${{b.id}}" style="display:none;margin-top:12px;padding:14px;background:#0A1628;border-radius:6px;border:1px solid #1E3A5F">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:0.82rem;color:#A8C8E8">
-          <div><span style="color:#C9A84C;font-weight:700">Stato:</span> ${{b.stato}}</div>
-          <div><span style="color:#C9A84C;font-weight:700">Livello:</span> ${{b.livello}}</div>
-          <div><span style="color:#C9A84C;font-weight:700">Scadenza:</span> ${{b.scadenza}}</div>
-          <div><span style="color:#C9A84C;font-weight:700">Destinatari:</span> ${{b.beneficiari || '—'}}</div>
+      <div class="card-img" style="background-image:url('${{imgUrl}}')">
+        <div class="card-img-badge">
+          <span class="badge ${{b.stato.includes('prossima') ? 'badge-prossimo' : 'badge-aperto'}}">${{b.stato}}</span>
+          <span class="badge badge-livello">${{b.livello}}</span>
         </div>
       </div>
-      <div style="display:flex;align-items:center;gap:12px;margin-top:12px">
-        <button class="btn-scheda" id="btn-${{b.id}}" onclick="generaScheda('${{b.id}}')">📄 Genera Scheda PDF</button>
-        <button onclick="togglePreview('${{b.id}}')" id="arrow-${{b.id}}" style="background:none;border:1px solid #1E3A5F;color:#C9A84C;border-radius:4px;padding:6px 14px;cursor:pointer;font-size:0.78rem;font-weight:700;letter-spacing:0.5px" title="Vedi dettagli">PREVIEW</button>
-        <span class="spinner" id="sp-${{b.id}}">⏳ Generazione in corso...</span>
+      <div class="card-body">
+        <div class="card-titolo">${{b.titolo}}</div>
+        <div class="card-meta">
+          <div class="meta-item"><label>Scadenza</label><span>${{b.scadenza}}</span></div>
+          <div class="meta-item"><label>Destinatari</label><span>${{(b.beneficiari||'—').substring(0,45)}}</span></div>
+        </div>
+        <div id="preview-${{b.id}}" style="display:none;margin-bottom:14px;padding:12px;background:#0A1628;border-radius:6px;border:1px solid #1E3A5F;font-size:0.82rem;color:#A8C8E8">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div><span style="color:#C9A84C;font-weight:700">Stato:</span> ${{b.stato}}</div>
+            <div><span style="color:#C9A84C;font-weight:700">Livello:</span> ${{b.livello}}</div>
+            <div><span style="color:#C9A84C;font-weight:700">Scadenza:</span> ${{b.scadenza}}</div>
+            <div><span style="color:#C9A84C;font-weight:700">Destinatari:</span> ${{b.beneficiari || '—'}}</div>
+          </div>
+        </div>
+        <div class="card-actions">
+          <button class="btn-scheda" id="btn-${{b.id}}" onclick="generaScheda('${{b.id}}')">📄 Genera Scheda</button>
+          <button class="btn-preview" onclick="togglePreview('${{b.id}}')" id="arrow-${{b.id}}">PREVIEW</button>
+          <span class="spinner" id="sp-${{b.id}}">⏳ Elaborazione...</span>
+        </div>
       </div>
-    </div>`).join('');
+    </div>`;}}).join('');
 }}
 function togglePreview(id) {{
   const el    = document.getElementById('preview-' + id);
