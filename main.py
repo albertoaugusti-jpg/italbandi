@@ -18,8 +18,10 @@ app = FastAPI(title="ItalBandi")
 
 @app.get("/logo")
 async def serve_logo():
-    if os.path.exists(LOGO_PATH):
-        return FileResponse(LOGO_PATH, media_type="image/png")
+    for nome in ["Logo Bellissimo ItalBandi.png", "logo_italbandi.png", "logo.png"]:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), nome)
+        if os.path.exists(path):
+            return FileResponse(path, media_type="image/png")
     return Response(status_code=404)
 
 DB_PATH  = "/tmp/italbandi.db"
@@ -900,9 +902,13 @@ async def genera_scheda(bando_id: str, body: dict, session_id: str = Cookie(defa
         if api_error:
             print(f"[CLAUDE API ERROR] {api_error}", flush=True)
 
-        # Imposta logo Energelia
-        logo_energelia = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Logo Energelia realistico.png")
-        ENGINE.LOGO    = logo_energelia if os.path.exists(logo_energelia) else ENGINE.LOGO
+        # Logo Energelia per la scheda PDF
+        base = os.path.dirname(os.path.abspath(__file__))
+        for nome_logo in ["Logo Energelia realistico.png", "logo_energelia.png", "logo.png"]:
+            logo_energelia = os.path.join(base, nome_logo)
+            if os.path.exists(logo_energelia):
+                ENGINE.LOGO = logo_energelia
+                break
         ENGINE.CONTENT = content
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
             tmp_path = tmp.name
