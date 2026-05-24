@@ -10,9 +10,9 @@ from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, Redirect
 import uvicorn
 
 import bandi_engine as be
-import energelia_scheda_engine as ENGINE
+import schede_engine as ENGINE
 
-LOGO_PATH = os.path.join(os.path.dirname(__file__), "logo_italbandi.png")
+LOGO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo_italbandi.png")
 
 app = FastAPI(title="ItalBandi")
 
@@ -880,7 +880,7 @@ async def genera_scheda(bando_id: str, body: dict, session_id: str = Cookie(defa
         ENGINE.CONTENT = content
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
             tmp_path = tmp.name
-        ENGINE.generate(output_path=tmp_path, verbose=False)
+        ENGINE.generate(content, tmp_path, LOGO_PATH)
         nome_file = f"Scheda_{bando_id[:30]}_{datetime.now().strftime('%Y%m%d')}.pdf"
         return FileResponse(path=tmp_path, media_type="application/pdf", filename=nome_file)
     except Exception as e:
