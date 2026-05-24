@@ -1063,13 +1063,17 @@ def _esegui_job(job_id, hit, testo_ce=""):
             print(f"[CLAUDE API ERROR] {api_error}", flush=True)
 
         base = os.path.dirname(os.path.abspath(__file__))
+        print(f"[LOGO] cercando in: {base}", flush=True)
+        print(f"[LOGO] file disponibili: {[f for f in os.listdir(base) if f.lower().endswith('.png')]}", flush=True)
         logo_energelia = None
-        for nome_logo in ["Logo Energelia realistico.png", "logo_energelia.png", "logo.png"]:
+        for nome_logo in ["Logo_Energelia_realistico.png", "Logo Energelia realistico.png", "logo_energelia.png", "logo.png"]:
             candidato = os.path.join(base, nome_logo)
             if os.path.exists(candidato):
                 logo_energelia = candidato
                 print(f"[LOGO] trovato: {nome_logo}", flush=True)
                 break
+        if not logo_energelia:
+            print(f"[LOGO] NON TROVATO — scheda senza logo", flush=True)
 
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
             tmp_path = tmp.name
