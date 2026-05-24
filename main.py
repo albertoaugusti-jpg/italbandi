@@ -24,27 +24,23 @@ def _neon_query(sql, params=None):
     if not DATABASE_URL:
         return None
     try:
-        import urllib.parse, base64, requests as req
-        u = urllib.parse.urlparse(DATABASE_URL)
+        import urllib.parse, requests as req
+        u    = urllib.parse.urlparse(DATABASE_URL)
         host = u.hostname
-        user = u.username
         pwd  = u.password
-        db   = u.path.lstrip("/")
-        # Neon HTTP endpoint
         url  = f"https://{host}/sql"
-        auth = base64.b64encode(f"{user}:{pwd}".encode()).decode()
         payload = {"query": sql}
         if params:
-            payload["params"] = [str(p) if p is not None else None for p in params]
+            payload["params"] = params
         r = req.post(url, json=payload,
-                     headers={"Authorization": f"Basic {auth}",
+                     headers={"Authorization": f"Bearer {pwd}",
                                "Neon-Connection-String": DATABASE_URL,
                                "Content-Type": "application/json"},
                      timeout=10)
         if r.status_code == 200:
             return r.json()
         else:
-            print(f"[DB] HTTP error {r.status_code}: {r.text[:100]}", flush=True)
+            print(f"[DB] HTTP error {r.status_code}: {r.text[:150]}", flush=True)
             return None
     except Exception as e:
         print(f"[DB] query error: {e}", flush=True)
