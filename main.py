@@ -19,30 +19,34 @@ app = FastAPI(title="ItalBandi")
 # ── Database Neon (cache bandi) ───────────────────────────────────────────────
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
-def get_pg():
-    """Connessione PostgreSQL Neon via pg8000."""
-    import pg8000.native
-    import urllib.parse
-    u = urllib.parse.urlparse(DATABASE_URL)
-    return pg8000.native.Connection(
-        host=u.hostname, port=u.port or 5432,
-        database=u.path.lstrip('/'),
-        user=u.username, password=u.password,
-        ssl_context=True
-    )
+def _run_async(coro):
+    import asyncio
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        return loop.run_until_complete(coro)
+    except RuntimeError:
+        import asyncio
+        return asyncio.run(coro)
 
 def init_cache_db():
     if not DATABASE_URL: return
-    try:
-        con = get_pg()
-        con.run("""CREATE TABLE IF NOT EXISTS bandi_cache (
+    async def _f():
+        import asyncpg
+        con = await asyncpg.connect(DATABASE_URL)
+        await con.execute("""CREATE TABLE IF NOT EXISTS bandi_cache (
             object_id    TEXT PRIMARY KEY,
             titolo       TEXT,
             testo_pagina TEXT,
             permalink    TEXT,
             aggiornato   TIMESTAMP DEFAULT NOW()
         )""")
-        con.close()
+        await con.close()
+        print("[DB] init OK", flush=True)
+    try:
+        _run_async(_f())
     except Exception as e:
         print(f"[DB] init error: {e}", flush=True)
 
@@ -50,34 +54,43 @@ init_cache_db()
 
 def salva_in_cache(object_id, titolo, testo, permalink):
     if not DATABASE_URL: return
-    try:
-        con = get_pg()
-        con.run("""INSERT INTO bandi_cache (object_id, titolo, testo_pagina, permalink, aggiornato)
-            VALUES (:oid, :tit, :tes, :per, NOW())
+    async def _f():
+        import asyncpg
+        con = await asyncpg.connect(DATABASE_URL)
+        await con.execute("""INSERT INTO bandi_cache (object_id,titolo,testo_pagina,permalink,aggiornato)
+            VALUES ($1,$2,$3,$4,NOW())
             ON CONFLICT (object_id) DO UPDATE
-            SET testo_pagina=:tes, titolo=:tit, permalink=:per, aggiornato=NOW()""",
-            oid=object_id, tit=titolo, tes=testo, per=permalink)
-        con.close()
+            SET testo_pagina=$3,titolo=$2,permalink=$4,aggiornato=NOW()""",
+            object_id, titolo, testo, permalink)
+        await con.close()
+    try:
+        _run_async(_f())
     except Exception as e:
         print(f"[DB] save error: {e}", flush=True)
 
 def leggi_da_cache(object_id):
     if not DATABASE_URL: return None
+    async def _f():
+        import asyncpg
+        con = await asyncpg.connect(DATABASE_URL)
+        row = await con.fetchrow("SELECT testo_pagina FROM bandi_cache WHERE object_id=$1", object_id)
+        await con.close()
+        return row["testo_pagina"] if row else None
     try:
-        con = get_pg()
-        rows = con.run("SELECT testo_pagina FROM bandi_cache WHERE object_id=:oid", oid=object_id)
-        con.close()
-        return rows[0][0] if rows else None
+        return _run_async(_f())
     except:
         return None
 
 def conta_cache():
     if not DATABASE_URL: return 0
+    async def _f():
+        import asyncpg
+        con = await asyncpg.connect(DATABASE_URL)
+        n = await con.fetchval("SELECT COUNT(*) FROM bandi_cache")
+        await con.close()
+        return n or 0
     try:
-        con = get_pg()
-        rows = con.run("SELECT COUNT(*) FROM bandi_cache")
-        con.close()
-        return rows[0][0] if rows else 0
+        return _run_async(_f())
     except:
         return 0
 
@@ -1079,7 +1092,28 @@ def _aggiorna_cache():
         CACHE_STATUS["running"] = False
 
 
-@app.get("/admin/cache", response_class=HTMLResponse)
+@app.get("/admin/db-check")
+async def db_check(session_id: str = Cookie(default=None)):
+    user = get_session(session_id)
+    if not user or not user.get("is_admin"):
+        return RedirectResponse("/login")
+    risultati = {}
+    # Test connessione
+    try:
+        con = get_pg()
+        rows = con.run("SELECT COUNT(*) FROM bandi_cache")
+        n = rows[0][0] if rows else 0
+        risultati["connessione"] = "✅ OK"
+        risultati["bandi_in_cache"] = n
+        # Mostra 3 esempi
+        esempi = con.run("SELECT object_id, titolo, LENGTH(testo_pagina) FROM bandi_cache LIMIT 3")
+        risultati["esempi"] = [{"id": r[0], "titolo": r[1], "chars": r[2]} for r in esempi]
+        con.close()
+    except Exception as e:
+        risultati["connessione"] = f"❌ ERRORE: {e}"
+        risultati["bandi_in_cache"] = 0
+        risultati["esempi"] = []
+    return JSONResponse(risultati)
 async def admin_cache_page(session_id: str = Cookie(default=None)):
     user = get_session(session_id)
     if not user or not user.get("is_admin"):
