@@ -965,6 +965,39 @@ LANDING_HTML = lambda: f"""<!DOCTYPE html><html lang="it"><head>
 </body></html>"""
 
 
+import requests as _req
+
+# Sessione autenticata su ContributiEuropa — si autentica una volta sola
+_ce_session = _req.Session()
+_ce_session.headers.update({
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "Accept-Language": "it-IT,it;q=0.9",
+})
+_ce_logged_in = False
+
+def _ce_login():
+    global _ce_logged_in
+    if _ce_logged_in:
+        return True
+    try:
+        # Prima carica la pagina di login per i cookie
+        _ce_session.get("https://www.contributieuropa.com/login/", timeout=15)
+        # Poi fa il login WordPress
+        r = _ce_session.post("https://www.contributieuropa.com/wp-login.php", data={
+            "log": "Alberto Augusti",
+            "pwd": "Samp1946,",
+            "wp-submit": "Accedi",
+            "redirect_to": "https://www.contributieuropa.com/area-riservata/",
+            "testcookie": "1",
+        }, timeout=15, allow_redirects=True)
+        _ce_logged_in = "area-riservata" in r.url or "logout" in r.text.lower()
+        print(f"[CE LOGIN] {'OK' if _ce_logged_in else 'FAILED'} — {r.url[:60]}", flush=True)
+        return _ce_logged_in
+    except Exception as e:
+        print(f"[CE LOGIN] error: {e}", flush=True)
+        return False
+
+
 @app.get("/api/fetch-testo")
 async def fetch_testo(url: str = Query(""), session_id: str = Cookie(default=None)):
     if not get_session(session_id):
@@ -972,12 +1005,8 @@ async def fetch_testo(url: str = Query(""), session_id: str = Cookie(default=Non
     if not url:
         return JSONResponse({"testo": ""})
     try:
-        import requests as req
-        r = req.get(url, headers={
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Accept-Language": "it-IT,it;q=0.9",
-            "Referer": "https://www.contributieuropa.com/",
-        }, timeout=15)
+        _ce_login()
+        r = _ce_session.get(url, timeout=15, allow_redirects=True)
         html = r.text
         html = re.sub(r'<script[^>]*>.*?</script>', ' ', html, flags=re.DOTALL|re.IGNORECASE)
         html = re.sub(r'<style[^>]*>.*?</style>', ' ', html, flags=re.DOTALL|re.IGNORECASE)
