@@ -232,49 +232,86 @@ a:hover { text-decoration: underline; }
 .risultati-header { font-size: 0.82rem; color: #6A8AA8; margin-bottom: 16px; font-weight: 600; letter-spacing: 0.5px; }
 
 .bando-card {
+  border-radius: var(--border-radius-lg, 12px);
+  overflow: hidden;
+  margin-bottom: 16px;
   background: #0F2035;
   border: 1px solid #1E3A5F;
-  border-left: 3px solid #1E3A5F;
-  border-radius: 8px;
-  padding: 18px 20px 16px;
-  margin-bottom: 10px;
-  transition: border-left-color 0.2s, box-shadow 0.2s;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+  transition: transform 0.2s, box-shadow 0.2s;
 }
-.bando-card:hover { border-left-color: #C9A84C; box-shadow: 0 2px 12px rgba(0,0,0,0.3); }
-.card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.card-cat { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #5A7A9A; }
-.card-titolo { font-size: 0.9rem; font-weight: 700; color: #D4E8FF; line-height: 1.45; margin-bottom: 10px; }
-.card-info { display: flex; gap: 20px; margin-bottom: 12px; flex-wrap: wrap; }
-.card-info-item { font-size: 0.8rem; color: #6A8AA8; display: flex; align-items: center; gap: 5px; }
-.card-info-item strong { color: #A8C8E8; font-weight: 600; }
-.card-divider { border: none; border-top: 1px solid #1A3050; margin: 12px 0; }
+.bando-card:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(0,0,0,0.5); }
+.card-img {
+  height: 110px;
+  background-size: cover;
+  background-position: center;
+  position: relative;
+}
+.card-img-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(10,22,40,0.15) 0%, rgba(10,22,40,0.82) 100%);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 10px 14px;
+}
+.card-cat-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.card-badges { display: flex; gap: 6px; }
+.card-body { padding: 14px 16px 16px; }
+.card-titolo { font-size: 0.88rem; font-weight: 700; color: #D4E8FF; line-height: 1.4; margin-bottom: 12px; }
+.card-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.card-metric {
+  background: rgba(10,22,40,0.6);
+  border: 1px solid #1E3A5F;
+  border-radius: 6px;
+  padding: 7px 10px;
+}
+.card-metric-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: #5A7A9A; margin-bottom: 2px; }
+.card-metric-val { font-size: 11px; font-weight: 600; color: #A8C8E8; }
 .card-actions { display: flex; gap: 8px; align-items: center; }
 .btn-scheda {
   flex: 1; padding: 8px 14px;
   background: #C9A84C; color: #0A1628;
   border: none; border-radius: 5px;
-  font-size: 0.82rem; font-weight: 700; cursor: pointer;
+  font-size: 0.8rem; font-weight: 700; cursor: pointer;
 }
 .btn-scheda:hover { background: #E0BF6A; }
 .btn-scheda:disabled { background: #3A4A5A; color: #6A8AA8; cursor: not-allowed; }
 .btn-preview {
-  padding: 8px 14px; background: none;
-  color: #C9A84C; border: 1px solid #2A4A6A;
-  border-radius: 5px; font-size: 0.75rem; font-weight: 700; cursor: pointer;
+  padding: 8px 12px;
+  background: none; color: #C9A84C;
+  border: 1px solid #2A4A6A; border-radius: 5px;
+  font-size: 0.75rem; font-weight: 700; cursor: pointer;
+  white-space: nowrap;
 }
-.btn-preview:hover { border-color: #C9A84C; }
+.btn-preview:hover { border-color: #C9A84C; background: rgba(201,168,76,0.08); }
 .badge { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 20px; white-space: nowrap; }
-.badge-aperto   { background: rgba(74,222,128,0.12); color: #4ADE80; border: 1px solid rgba(74,222,128,0.35); }
-.badge-prossimo { background: rgba(96,165,250,0.12); color: #60A5FA; border: 1px solid rgba(96,165,250,0.35); }
+.badge-aperto   { background: rgba(74,222,128,0.15); color: #4ADE80; border: 1px solid rgba(74,222,128,0.4); }
+.badge-prossimo { background: rgba(96,165,250,0.15); color: #60A5FA; border: 1px solid rgba(96,165,250,0.4); }
 .spinner { display: none; font-size: 0.75rem; color: #6A8AA8; white-space: nowrap; }
 .loader  { text-align: center; padding: 40px; color: #5A7A9A; }
 .preview-panel {
   display: none;
-  margin: 0 0 12px;
+  margin: 0 16px 14px;
   padding: 12px 14px;
   background: rgba(10,22,40,0.7);
   border: 1px solid #1E3A5F;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 0.8rem;
   color: #A8C8E8;
   line-height: 1.6;
@@ -487,167 +524,46 @@ def registrati_page(error="", ok=""):
 def index_page(user):
     return f"""<!DOCTYPE html><html lang="it"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ItalBandi — Bandi e Incentivi per le Imprese</title>{CSS_BASE}
-<style>
-#view-ricerca {{
-  min-height: calc(100vh - 80px);
-  display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  padding: 40px 20px; text-align: center;
-}}
-.search-hero-logo {{
-  width: 150px; height: 150px; object-fit: cover;
-  border-radius: 18px; margin-bottom: 24px;
-  box-shadow: 0 0 50px rgba(201,168,76,0.25), 0 16px 32px rgba(0,0,0,0.5);
-}}
-.search-hero-title {{
-  font-size: 2.6rem; font-weight: 900;
-  letter-spacing: 0.04em; color: #fff; margin-bottom: 8px;
-}}
-.search-hero-title span {{ color: #C9A84C; }}
-.search-hero-sub {{
-  font-size: 0.95rem; color: #5A7A9A; margin-bottom: 36px; max-width: 420px;
-}}
-.search-box {{
-  background: #0F2035; border: 1px solid #1E3A5F;
-  border-radius: 14px; padding: 28px 30px;
-  width: 100%; max-width: 640px; text-align: left;
-}}
-.search-box-label {{
-  display: block; font-size: 0.65rem; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.1em;
-  color: #5A7A9A; margin-bottom: 5px;
-}}
-.search-box input, .search-box select {{
-  width: 100%; padding: 10px 12px;
-  background: #0A1628; color: #E8E8E8;
-  border: 1px solid #1E3A5F; border-radius: 6px;
-  font-size: 0.88rem; font-family: inherit; outline: none;
-  margin-bottom: 14px;
-}}
-.search-box input:focus, .search-box select:focus {{ border-color: #C9A84C; }}
-.search-box select option {{ background: #0A1628; }}
-.search-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }}
-.btn-cerca-hero {{
-  width: 100%; padding: 13px;
-  background: #C9A84C; color: #0A1628;
-  border: none; border-radius: 8px;
-  font-size: 0.95rem; font-weight: 800; cursor: pointer;
-  margin-top: 6px; letter-spacing: 0.02em;
-}}
-.btn-cerca-hero:hover {{ background: #E0BF6A; }}
-#view-risultati {{ display: none; }}
-.results-topbar {{
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  padding: 12px 20px; background: #0A1628;
-  border-bottom: 1px solid #1E3A5F; position: sticky; top: 0; z-index: 100;
-}}
-.results-topbar input, .results-topbar select {{
-  padding: 7px 10px; background: #0F2035; color: #E8E8E8;
-  border: 1px solid #1E3A5F; border-radius: 5px;
-  font-size: 0.8rem; font-family: inherit; outline: none;
-}}
-.results-topbar input {{ flex: 1; min-width: 120px; }}
-.results-topbar input:focus, .results-topbar select:focus {{ border-color: #C9A84C; }}
-.btn-cerca-top {{
-  padding: 7px 16px; background: #C9A84C; color: #0A1628;
-  border: none; border-radius: 5px; font-size: 0.8rem; font-weight: 700; cursor: pointer;
-}}
-.btn-nuova-ricerca {{
-  margin-left: auto; padding: 7px 14px; background: none;
-  color: #C9A84C; border: 1px solid #C9A84C; border-radius: 5px;
-  font-size: 0.75rem; font-weight: 700; cursor: pointer;
-}}
-.btn-nuova-ricerca:hover {{ background: rgba(201,168,76,0.1); }}
-</style>
-</head><body>
+<title>ItalBandi — Bandi e Incentivi per le Imprese</title>{CSS_BASE}</head><body>
 {NAVBAR_LOGGED(user)}
-
-<div id="view-ricerca">
-  <img src="/logo" class="search-hero-logo" alt="ItalBandi">
-  <div class="search-hero-title">ITAL<span>BANDI</span></div>
-  <p class="search-hero-sub">Trova i bandi giusti per la tua impresa.<br>Filtra per territorio, settore e stato di apertura.</p>
-  <div class="search-box">
-    <label class="search-box-label">Parola chiave</label>
-    <input id="keyword" type="text" placeholder="es. formazione, energia, welfare, digitale...">
-    <div class="search-grid">
-      <div>
-        <label class="search-box-label">Stato bando</label>
-        <select id="stato">
-          <option value="aperto">Bandi aperti</option>
-          <option value="prossimo">Prossima apertura</option>
-          <option value="tutti">Tutti</option>
-        </select>
-      </div>
-      <div>
-        <label class="search-box-label">Livello</label>
-        <select id="livello" onchange="aggiornaFiltri()">
-          <option value="">Tutti i bandi</option>
-          <option value="europeo">Europeo</option>
-          <option value="nazionale">Nazionale</option>
-          <option value="regionale">Regionale</option>
-        </select>
-      </div>
-      <div id="regione-wrap" style="display:none">
-        <label class="search-box-label">Regione</label>
-        <select id="regione" onchange="aggiornaProvince()">
-          <option value="">-- Scegli regione --</option>
-          <option>Abruzzo</option><option>Basilicata</option><option>Calabria</option>
-          <option>Campania</option><option>Emilia-Romagna</option><option>Friuli-Venezia-Giulia</option>
-          <option>Lazio</option><option>Liguria</option><option>Lombardia</option>
-          <option>Marche</option><option>Molise</option><option>Piemonte</option>
-          <option>Puglia</option><option>Sardegna</option><option>Sicilia</option>
-          <option>Toscana</option><option>Trentino-Alto-Adige</option><option>Umbria</option>
-          <option>Valle d&apos;Aosta</option><option>Veneto</option>
-        </select>
-      </div>
-      <div id="provincia-wrap" style="display:none">
-        <label class="search-box-label">Provincia</label>
-        <select id="provincia"><option value="">(tutte)</option></select>
-      </div>
-    </div>
-    <button class="btn-cerca-hero" onclick="cercaEMostra()">Cerca bandi</button>
-  </div>
+<div class="hero">
+  <h2>Ricerca Bandi</h2>
+  <p>Trova le opportunità di finanziamento per la tua impresa. Filtra per livello geografico e scarica la scheda PDF professionale.</p>
 </div>
-
-<div id="view-risultati">
-  <div class="results-topbar">
-    <input id="keyword2" type="text" placeholder="Parola chiave...">
-    <select id="stato2">
-      <option value="aperto">Aperti</option>
-      <option value="prossimo">Prossima apertura</option>
-      <option value="tutti">Tutti</option>
+<div class="search-bar">
+  <input id="keyword" type="text" placeholder="Parola chiave (es. formazione, energia, PMI...)">
+  <select id="stato">
+    <option value="aperto">Bandi aperti</option>
+    <option value="prossimo">Prossima apertura</option>
+    <option value="tutti">Tutti</option>
+  </select>
+  <select id="livello" onchange="aggiornaFiltri()">
+    <option value="">Tutti i bandi</option>
+    <option value="europeo">Europeo</option>
+    <option value="nazionale">Nazionale</option>
+    <option value="regionale">Regionale</option>
+  </select>
+  <span id="regione-wrap" style="display:none">
+    <select id="regione" onchange="aggiornaProvince()">
+      <option value="">-- Scegli regione --</option>
+      <option>Abruzzo</option><option>Basilicata</option><option>Calabria</option>
+      <option>Campania</option><option>Emilia-Romagna</option><option>Friuli-Venezia-Giulia</option>
+      <option>Lazio</option><option>Liguria</option><option>Lombardia</option>
+      <option>Marche</option><option>Molise</option><option>Piemonte</option>
+      <option>Puglia</option><option>Sardegna</option><option>Sicilia</option>
+      <option>Toscana</option><option>Trentino-Alto-Adige</option><option>Umbria</option>
+      <option>Valle d'Aosta</option><option>Veneto</option>
     </select>
-    <select id="livello2" onchange="aggiornaFiltri2()">
-      <option value="">Tutti</option>
-      <option value="europeo">Europeo</option>
-      <option value="nazionale">Nazionale</option>
-      <option value="regionale">Regionale</option>
-    </select>
-    <span id="regione-wrap2" style="display:none">
-      <select id="regione2" onchange="aggiornaProvince2()">
-        <option value="">-- Regione --</option>
-        <option>Abruzzo</option><option>Basilicata</option><option>Calabria</option>
-        <option>Campania</option><option>Emilia-Romagna</option><option>Friuli-Venezia-Giulia</option>
-        <option>Lazio</option><option>Liguria</option><option>Lombardia</option>
-        <option>Marche</option><option>Molise</option><option>Piemonte</option>
-        <option>Puglia</option><option>Sardegna</option><option>Sicilia</option>
-        <option>Toscana</option><option>Trentino-Alto-Adige</option><option>Umbria</option>
-        <option>Valle d&apos;Aosta</option><option>Veneto</option>
-      </select>
-    </span>
-    <span id="provincia-wrap2" style="display:none">
-      <select id="provincia2"><option value="">(tutte)</option></select>
-    </span>
-    <button class="btn-cerca-top" onclick="cerca()">Cerca</button>
-    <button class="btn-nuova-ricerca" onclick="nuovaRicerca()">&#8617; Nuova ricerca</button>
-  </div>
-  <div class="container">
-    <div id="risultati-header" class="risultati-header"></div>
-    <div id="risultati"></div>
-  </div>
+  </span>
+  <span id="provincia-wrap" style="display:none">
+    <select id="provincia"><option value="">(tutte le province)</option></select>
+  </span>
+  <button class="btn-cerca" onclick="cerca()">🔍 Cerca</button>
 </div>
-
+<div class="container">
+  <div id="risultati-header" class="risultati-header"></div>
+  <div id="risultati"></div>
+</div>
 {FOOTER_HTML}
 <script>
 const PROVINCE = {{
@@ -674,58 +590,29 @@ const PROVINCE = {{
 }};
 let _hits = {{}};
 function aggiornaFiltri() {{
-  const v = document.getElementById('livello').value;
-  document.getElementById('regione-wrap').style.display   = v === 'regionale' ? 'block' : 'none';
+  const livello = document.getElementById('livello').value;
+  document.getElementById('regione-wrap').style.display   = livello === 'regionale' ? 'inline' : 'none';
   document.getElementById('provincia-wrap').style.display = 'none';
-  if (v !== 'regionale') document.getElementById('regione').value = '';
-}}
-function aggiornaFiltri2() {{
-  const v = document.getElementById('livello2').value;
-  document.getElementById('regione-wrap2').style.display   = v === 'regionale' ? 'inline' : 'none';
-  document.getElementById('provincia-wrap2').style.display = 'none';
-  if (v !== 'regionale') document.getElementById('regione2').value = '';
+  if (livello !== 'regionale') {{ document.getElementById('regione').value = ''; }}
 }}
 function aggiornaProvince() {{
-  const reg = document.getElementById('regione').value;
-  const sel = document.getElementById('provincia');
+  const regione = document.getElementById('regione').value;
   const wrap = document.getElementById('provincia-wrap');
-  if (reg && PROVINCE[reg]) {{
-    sel.innerHTML = '<option value="">(tutte)</option>' + PROVINCE[reg].map(p=>`<option>${{p}}</option>`).join('');
-    wrap.style.display = 'block';
-  }} else wrap.style.display = 'none';
-}}
-function aggiornaProvince2() {{
-  const reg = document.getElementById('regione2').value;
-  const sel = document.getElementById('provincia2');
-  const wrap = document.getElementById('provincia-wrap2');
-  if (reg && PROVINCE[reg]) {{
-    sel.innerHTML = '<option value="">(tutte)</option>' + PROVINCE[reg].map(p=>`<option>${{p}}</option>`).join('');
+  const sel  = document.getElementById('provincia');
+  if (regione && PROVINCE[regione]) {{
+    sel.innerHTML = '<option value="">(tutte le province)</option>' +
+      PROVINCE[regione].map(p => `<option value="${{p}}">${{p}}</option>`).join('');
     wrap.style.display = 'inline';
-  }} else wrap.style.display = 'none';
-}}
-function cercaEMostra() {{
-  // Copia filtri dalla view ricerca alla topbar risultati
-  document.getElementById('keyword2').value = document.getElementById('keyword').value;
-  document.getElementById('stato2').value   = document.getElementById('stato').value;
-  document.getElementById('livello2').value = document.getElementById('livello').value;
-  aggiornaFiltri2();
-  // Mostra view risultati
-  document.getElementById('view-ricerca').style.display  = 'none';
-  document.getElementById('view-risultati').style.display = 'block';
-  cerca();
-}}
-function nuovaRicerca() {{
-  document.getElementById('view-risultati').style.display = 'none';
-  document.getElementById('view-ricerca').style.display   = 'flex';
-}}
+  }} else {{ wrap.style.display = 'none'; }}
 }}
 async function cerca() {{
-  const kw  = document.getElementById('keyword2').value || document.getElementById('keyword').value;
-  const st  = document.getElementById('stato2').value   || document.getElementById('stato').value;
-  const lv  = document.getElementById('livello2').value;
-  const reg = document.getElementById('regione2') ? document.getElementById('regione2').value : document.getElementById('regione').value;
-  const prv = document.getElementById('provincia2') ? document.getElementById('provincia2').value : document.getElementById('provincia').value;
-  const params = new URLSearchParams({{ keyword:kw, stato:st, livello:lv, regione:reg, provincia:prv }});
+  const params = new URLSearchParams({{
+    keyword:  document.getElementById('keyword').value,
+    stato:    document.getElementById('stato').value,
+    livello:  document.getElementById('livello').value,
+    regione:  document.getElementById('regione').value,
+    provincia:document.getElementById('provincia').value,
+  }});
   document.getElementById('risultati').innerHTML = '<div class="loader">⏳ Ricerca in corso...</div>';
   document.getElementById('risultati-header').textContent = '';
   const resp = await fetch('/api/cerca?' + params);
@@ -759,25 +646,28 @@ async function cerca() {{
 
   document.getElementById('risultati').innerHTML = data.bandi.map(b => {{
     const cat = getCat(b.titolo);
-    const aperto = b.stato.includes('prossima') ? false : true;
     return `<div class="bando-card">
-      <div class="card-top">
-        <span class="card-cat" style="color:${{cat.t}}">${{cat.i}} ${{cat.l}}</span>
-        <div style="display:flex;gap:6px;align-items:center">
-          <span class="badge ${{aperto ? 'badge-aperto' : 'badge-prossimo'}}">${{b.stato}}</span>
-          <span style="font-size:10px;color:#3A5A7A">${{b.livello}}</span>
+      <div class="card-img" style="background-image:url('${{cat.foto}}')">
+        <div class="card-cat-header">
+          <div class="card-cat-label" style="color:${{cat.t}};background:${{cat.c}};display:inline-flex;padding:4px 8px;border-radius:20px;backdrop-filter:blur(4px)">${{cat.i}} ${{cat.l}}</div>
+          <div class="card-badges">
+            <span class="badge ${{b.stato.includes('prossima') ? 'badge-prossimo' : 'badge-aperto'}}">${{b.stato}}</span>
+            <span class="badge" style="background:rgba(201,168,76,0.2);color:#C9A84C;border:1px solid rgba(201,168,76,0.4)">${{b.livello}}</span>
+          </div>
         </div>
       </div>
-      <div class="card-titolo">${{b.titolo}}</div>
-      <div class="card-info">
-        <div class="card-info-item">📅 <strong>${{b.scadenza}}</strong></div>
-        <div class="card-info-item">👤 <strong>${{(b.beneficiari||'—').substring(0,45)}}</strong></div>
+      <div class="card-body">
+        <div class="card-titolo">${{b.titolo}}</div>
+        <div class="card-metrics">
+          <div class="card-metric"><div class="card-metric-label">Scadenza</div><div class="card-metric-val">${{b.scadenza}}</div></div>
+          <div class="card-metric"><div class="card-metric-label">Livello</div><div class="card-metric-val">${{b.livello}}</div></div>
+          <div class="card-metric" style="grid-column:1/-1"><div class="card-metric-label">Destinatari</div><div class="card-metric-val">${{(b.beneficiari||'—').substring(0,55)}}</div></div>
+        </div>
       </div>
-      <hr class="card-divider">
       <div class="preview-panel" id="preview-${{b.id}}">
         <span class="preview-loading" id="prev-msg-${{b.id}}">Clicca Preview per scoprire se questo bando fa per te...</span>
       </div>
-      <div class="card-actions">
+      <div class="card-actions" style="padding:0 16px 16px">
         <button class="btn-scheda" id="btn-${{b.id}}" onclick="generaScheda('${{b.id}}')">📄 Genera Scheda</button>
         <button class="btn-preview" id="arrow-${{b.id}}" onclick="togglePreview('${{b.id}}')">PREVIEW</button>
         <span class="spinner" id="sp-${{b.id}}">⏳ Elaborazione...</span>
@@ -905,7 +795,7 @@ function mostraCtaDownload() {{
 function chiudiCta() {{
   document.getElementById('cta-modal').style.display = 'none';
 }}
-// Non carica bandi all'avvio — mostra pagina ricerca
+window.onload = cerca;
 </script>
 
 <div id="cta-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;align-items:center;justify-content:center">
