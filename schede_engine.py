@@ -111,12 +111,6 @@ def _build_story(p, content, logo_path):
     story = []
 
     # ── HEADER ────────────────────────────────────────────────────────────────
-    logo_sz = 13 * mm
-    if logo_path and os.path.exists(logo_path):
-        logo_cell = RLImage(logo_path, width=logo_sz, height=logo_sz)
-    else:
-        logo_cell = Paragraph("<b>ENERGELIA</b>", S["company"])
-
     txt_rows = [
         [Paragraph("Energelia S.r.l.", S["company"])],
         [Paragraph("Consulenza in Finanza Agevolata · Bandi &amp; Incentivi · Sostenibilita'", S["tagline"])],
@@ -124,18 +118,12 @@ def _build_story(p, content, logo_path):
         [Paragraph("a.augusti@energelia.it · b.legger@energelia.it · a.castagnaro@energelia.it", S["mail"])],
         [Paragraph("Tel. 010 8078800 · www.energelia.it", S["pec"])],
     ]
-    txt_tbl = Table(txt_rows, colWidths=[CW - logo_sz - 5*mm])
+    txt_tbl = Table(txt_rows, colWidths=[CW])
     txt_tbl.setStyle(TableStyle([
         ("LEFTPADDING",(0,0),(-1,-1),0), ("RIGHTPADDING",(0,0),(-1,-1),0),
         ("TOPPADDING",(0,0),(-1,-1),0),  ("BOTTOMPADDING",(0,0),(-1,-1),0.8),
     ]))
-    hdr = Table([[logo_cell, txt_tbl]], colWidths=[logo_sz + 5*mm, CW - logo_sz - 5*mm])
-    hdr.setStyle(TableStyle([
-        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
-        ("LEFTPADDING",(0,0),(-1,-1),0), ("RIGHTPADDING",(0,0),(-1,-1),0),
-        ("TOPPADDING",(0,0),(-1,-1),0),  ("BOTTOMPADDING",(0,0),(-1,-1),0),
-    ]))
-    story.append(hdr)
+    story.append(txt_tbl)
     story.append(HRFlowable(width=CW, thickness=1.5, color=TEAL, spaceAfter=p["sp_after_hr"]))
 
     # ── TITOLO ────────────────────────────────────────────────────────────────
