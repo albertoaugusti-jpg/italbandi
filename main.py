@@ -232,86 +232,49 @@ a:hover { text-decoration: underline; }
 .risultati-header { font-size: 0.82rem; color: #6A8AA8; margin-bottom: 16px; font-weight: 600; letter-spacing: 0.5px; }
 
 .bando-card {
-  border-radius: var(--border-radius-lg, 12px);
-  overflow: hidden;
-  margin-bottom: 16px;
   background: #0F2035;
   border: 1px solid #1E3A5F;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.35);
-  transition: transform 0.2s, box-shadow 0.2s;
+  border-left: 3px solid #1E3A5F;
+  border-radius: 8px;
+  padding: 18px 20px 16px;
+  margin-bottom: 10px;
+  transition: border-left-color 0.2s, box-shadow 0.2s;
 }
-.bando-card:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(0,0,0,0.5); }
-.card-img {
-  height: 110px;
-  background-size: cover;
-  background-position: center;
-  position: relative;
-}
-.card-img-overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(to bottom, rgba(10,22,40,0.15) 0%, rgba(10,22,40,0.82) 100%);
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  padding: 10px 14px;
-}
-.card-cat-label {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  margin-bottom: 6px;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-.card-badges { display: flex; gap: 6px; }
-.card-body { padding: 14px 16px 16px; }
-.card-titolo { font-size: 0.88rem; font-weight: 700; color: #D4E8FF; line-height: 1.4; margin-bottom: 12px; }
-.card-metrics {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-  margin-bottom: 12px;
-}
-.card-metric {
-  background: rgba(10,22,40,0.6);
-  border: 1px solid #1E3A5F;
-  border-radius: 6px;
-  padding: 7px 10px;
-}
-.card-metric-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: #5A7A9A; margin-bottom: 2px; }
-.card-metric-val { font-size: 11px; font-weight: 600; color: #A8C8E8; }
+.bando-card:hover { border-left-color: #C9A84C; box-shadow: 0 2px 12px rgba(0,0,0,0.3); }
+.card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.card-cat { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #5A7A9A; }
+.card-titolo { font-size: 0.9rem; font-weight: 700; color: #D4E8FF; line-height: 1.45; margin-bottom: 10px; }
+.card-info { display: flex; gap: 20px; margin-bottom: 12px; flex-wrap: wrap; }
+.card-info-item { font-size: 0.8rem; color: #6A8AA8; display: flex; align-items: center; gap: 5px; }
+.card-info-item strong { color: #A8C8E8; font-weight: 600; }
+.card-divider { border: none; border-top: 1px solid #1A3050; margin: 12px 0; }
 .card-actions { display: flex; gap: 8px; align-items: center; }
 .btn-scheda {
   flex: 1; padding: 8px 14px;
   background: #C9A84C; color: #0A1628;
   border: none; border-radius: 5px;
-  font-size: 0.8rem; font-weight: 700; cursor: pointer;
+  font-size: 0.82rem; font-weight: 700; cursor: pointer;
 }
 .btn-scheda:hover { background: #E0BF6A; }
 .btn-scheda:disabled { background: #3A4A5A; color: #6A8AA8; cursor: not-allowed; }
 .btn-preview {
-  padding: 8px 12px;
-  background: none; color: #C9A84C;
-  border: 1px solid #2A4A6A; border-radius: 5px;
-  font-size: 0.75rem; font-weight: 700; cursor: pointer;
-  white-space: nowrap;
+  padding: 8px 14px; background: none;
+  color: #C9A84C; border: 1px solid #2A4A6A;
+  border-radius: 5px; font-size: 0.75rem; font-weight: 700; cursor: pointer;
 }
-.btn-preview:hover { border-color: #C9A84C; background: rgba(201,168,76,0.08); }
+.btn-preview:hover { border-color: #C9A84C; }
 .badge { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 20px; white-space: nowrap; }
-.badge-aperto   { background: rgba(74,222,128,0.15); color: #4ADE80; border: 1px solid rgba(74,222,128,0.4); }
-.badge-prossimo { background: rgba(96,165,250,0.15); color: #60A5FA; border: 1px solid rgba(96,165,250,0.4); }
+.badge-aperto   { background: rgba(74,222,128,0.12); color: #4ADE80; border: 1px solid rgba(74,222,128,0.35); }
+.badge-prossimo { background: rgba(96,165,250,0.12); color: #60A5FA; border: 1px solid rgba(96,165,250,0.35); }
 .spinner { display: none; font-size: 0.75rem; color: #6A8AA8; white-space: nowrap; }
 .loader  { text-align: center; padding: 40px; color: #5A7A9A; }
 .preview-panel {
   display: none;
-  margin: 0 16px 14px;
+  margin: 0 0 12px;
   padding: 12px 14px;
   background: rgba(10,22,40,0.7);
   border: 1px solid #1E3A5F;
-  border-radius: 8px;
+  border-radius: 6px;
   font-size: 0.8rem;
   color: #A8C8E8;
   line-height: 1.6;
@@ -646,28 +609,25 @@ async function cerca() {{
 
   document.getElementById('risultati').innerHTML = data.bandi.map(b => {{
     const cat = getCat(b.titolo);
+    const aperto = b.stato.includes('prossima') ? false : true;
     return `<div class="bando-card">
-      <div class="card-img" style="background-image:url('${{cat.foto}}')">
-        <div class="card-cat-header">
-          <div class="card-cat-label" style="color:${{cat.t}};background:${{cat.c}};display:inline-flex;padding:4px 8px;border-radius:20px;backdrop-filter:blur(4px)">${{cat.i}} ${{cat.l}}</div>
-          <div class="card-badges">
-            <span class="badge ${{b.stato.includes('prossima') ? 'badge-prossimo' : 'badge-aperto'}}">${{b.stato}}</span>
-            <span class="badge" style="background:rgba(201,168,76,0.2);color:#C9A84C;border:1px solid rgba(201,168,76,0.4)">${{b.livello}}</span>
-          </div>
+      <div class="card-top">
+        <span class="card-cat" style="color:${{cat.t}}">${{cat.i}} ${{cat.l}}</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span class="badge ${{aperto ? 'badge-aperto' : 'badge-prossimo'}}">${{b.stato}}</span>
+          <span style="font-size:10px;color:#3A5A7A">${{b.livello}}</span>
         </div>
       </div>
-      <div class="card-body">
-        <div class="card-titolo">${{b.titolo}}</div>
-        <div class="card-metrics">
-          <div class="card-metric"><div class="card-metric-label">Scadenza</div><div class="card-metric-val">${{b.scadenza}}</div></div>
-          <div class="card-metric"><div class="card-metric-label">Livello</div><div class="card-metric-val">${{b.livello}}</div></div>
-          <div class="card-metric" style="grid-column:1/-1"><div class="card-metric-label">Destinatari</div><div class="card-metric-val">${{(b.beneficiari||'—').substring(0,55)}}</div></div>
-        </div>
+      <div class="card-titolo">${{b.titolo}}</div>
+      <div class="card-info">
+        <div class="card-info-item">📅 <strong>${{b.scadenza}}</strong></div>
+        <div class="card-info-item">👤 <strong>${{(b.beneficiari||'—').substring(0,45)}}</strong></div>
       </div>
+      <hr class="card-divider">
       <div class="preview-panel" id="preview-${{b.id}}">
         <span class="preview-loading" id="prev-msg-${{b.id}}">Clicca Preview per scoprire se questo bando fa per te...</span>
       </div>
-      <div class="card-actions" style="padding:0 16px 16px">
+      <div class="card-actions">
         <button class="btn-scheda" id="btn-${{b.id}}" onclick="generaScheda('${{b.id}}')">📄 Genera Scheda</button>
         <button class="btn-preview" id="arrow-${{b.id}}" onclick="togglePreview('${{b.id}}')">PREVIEW</button>
         <span class="spinner" id="sp-${{b.id}}">⏳ Elaborazione...</span>
