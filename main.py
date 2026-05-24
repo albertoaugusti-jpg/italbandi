@@ -555,19 +555,54 @@ async function generaScheda(id) {{
   const sp  = document.getElementById('sp-'  + id);
   btn.disabled = true;
   sp.style.display = 'inline';
-  sp.textContent = '⏳ Avvio elaborazione...';
+async function leggiPaginaCE(url) {{
+  try {{
+    // Legge la pagina CE tramite il browser (bypassa il blocco server)
+    const r = await fetch(url, {{mode: 'no-cors'}});
+    // no-cors non restituisce il body — usiamo un proxy locale
+    const rp = await fetch('/api/fetch-testo?url=' + encodeURIComponent(url));
+    if (rp.ok) {{
+      const d = await rp.json();
+      return d.testo || '';
+    }}
+  }} catch(e) {{}}
+  return '';
+}}
+
+async function generaScheda(id) {{
+  const btn = document.getElementById('btn-' + id);
+  const sp  = document.getElementById('sp-'  + id);
+  btn.disabled = true;
+  sp.style.display = 'inline';
+  sp.textContent = '⏳ Lettura bando...';
 
   try {{
-    // 1. Avvia job
+    // 1. Il browser legge la pagina CE
+    const hit = _hits[id];
+    const urlCE = hit.permalink || hit.link || hit.url || '';
+    let testoCE = '';
+    if (urlCE) {{
+      try {{
+        const rTesto = await fetch('/api/fetch-testo?url=' + encodeURIComponent(urlCE));
+        if (rTesto.ok) {{
+          const dTesto = await rTesto.json();
+          testoCE = dTesto.testo || '';
+        }}
+      }} catch(e) {{}}
+    }}
+
+    sp.textContent = '⏳ Avvio elaborazione...';
+
+    // 2. Avvia job passando anche il testo
     const r1 = await fetch('/api/scheda/' + encodeURIComponent(id), {{
       method: 'POST', headers: {{'Content-Type':'application/json'}},
-      body: JSON.stringify({{hit: _hits[id]}})
+      body: JSON.stringify({{hit: hit, testo_ce: testoCE}})
     }});
     const j1 = await r1.json();
     if (!j1.job_id) {{ alert('Errore avvio: ' + JSON.stringify(j1)); return; }}
     const jobId = j1.job_id;
 
-    // 2. Polling ogni 5 secondi
+    // 3. Polling ogni 5 secondi
     let secondi = 0;
     const poll = setInterval(async () => {{
       secondi += 5;
@@ -578,7 +613,6 @@ async function generaScheda(id) {{
         if (j2.status === 'ready') {{
           clearInterval(poll);
           sp.textContent = '✅ Pronto! Download in corso...';
-          // 3. Scarica
           const r3   = await fetch('/api/download/' + jobId);
           const blob = await r3.blob();
           const url  = URL.createObjectURL(blob);
@@ -596,11 +630,11 @@ async function generaScheda(id) {{
           btn.disabled = false;
         }} else if (secondi > 180) {{
           clearInterval(poll);
-          alert('Timeout — la generazione sta impiegando troppo. Riprova tra un momento.');
+          alert('Timeout — riprova tra un momento.');
           sp.style.display = 'none';
           btn.disabled = false;
         }}
-      }} catch(e) {{ clearInterval(poll); alert('Errore polling: ' + e.message); btn.disabled=false; sp.style.display='none'; }}
+      }} catch(e) {{ clearInterval(poll); alert('Errore: ' + e.message); btn.disabled=false; sp.style.display='none'; }}
     }}, 5000);
 
   }} catch(e) {{
@@ -952,7 +986,39 @@ LANDING_HTML = lambda: f"""<!DOCTYPE html><html lang="it"><head>
 </body></html>"""
 
 
-@app.get("/api/cerca")
+@app.get("/api/fetch-testo")
+async def fetch_testo(url: str = Query(""), session_id: str = Cookie(default=None)):
+    """Il browser chiama questo endpoint che fa da proxy verso la pagina CE."""
+    if not get_session(session_id):
+        return JSONResponse({"error": "Non autenticato"}, status_code=401)
+    if not url:
+        return JSONResponse({"testo": ""})
+    try:
+        import requests as req
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "it-IT,it;q=0.9",
+            "Referer": "https://www.contributieuropa.com/",
+        }
+        r = req.get(url, headers=headers, timeout=15, allow_redirects=True)
+        html = r.text
+        # Estrae solo il contenuto del bando (non menu, footer, script)
+        html = re.sub(r'<script[^>]*>.*?</script>', ' ', html, flags=re.DOTALL|re.IGNORECASE)
+        html = re.sub(r'<style[^>]*>.*?</style>', ' ', html, flags=re.DOTALL|re.IGNORECASE)
+        # Cerca il contenuto principale del bando
+        import re as _re
+        match = _re.search(r'<div[^>]+class=["\'][^"\']*(?:bando-contenuto|box_intro_bando|paragrafo-bando|post.content)[^"\']*["\'][^>]*>(.*?)</div>', html, _re.DOTALL|_re.IGNORECASE)
+        if match:
+            testo = _re.sub(r'<[^>]+>', ' ', match.group(0))
+        else:
+            testo = re.sub(r'<[^>]+>', ' ', html)
+        testo = re.sub(r'\s+', ' ', testo).strip()
+        print(f"[FETCH] {url[:60]} — {len(testo)} chars", flush=True)
+        return JSONResponse({"testo": testo[:12000]})
+    except Exception as e:
+        print(f"[FETCH] error: {e}", flush=True)
+        return JSONResponse({"testo": ""})
 async def cerca(
     request: Request,
     keyword: str = Query(""), stato: str = Query("aperto"),
@@ -975,20 +1041,22 @@ async def cerca(
 # ── Job system asincrono ─────────────────────────────────────────────────────
 JOBS = {}
 
-def _esegui_job(job_id, hit):
+def _esegui_job(job_id, hit, testo_ce=""):
     try:
         object_id = hit.get("objectID", "")
 
-        # 1. Cerca testo in cache locale
-        testo_cache = leggi_da_cache(object_id) if object_id else None
-
-        if testo_cache:
-            print(f"[CACHE HIT] {object_id}", flush=True)
-            # Usa testo dalla cache — chiama Claude SENZA web_search
-            content, titolo = be.genera_scheda_da_testo(hit, testo_cache)
+        if testo_ce and len(testo_ce) > 200:
+            print(f"[TESTO CE] {object_id} — {len(testo_ce)} chars", flush=True)
+            content, titolo = be.genera_scheda_da_testo(hit, testo_ce)
         else:
-            print(f"[CACHE MISS] {object_id} — uso web_search", flush=True)
-            content, titolo = be.genera_scheda_web(hit)
+            # Fallback: cache SQLite o web_search
+            testo_cache = leggi_da_cache(object_id) if object_id else None
+            if testo_cache and len(testo_cache) > 200 and "allowlist" not in testo_cache:
+                print(f"[CACHE HIT] {object_id}", flush=True)
+                content, titolo = be.genera_scheda_da_testo(hit, testo_cache)
+            else:
+                print(f"[CACHE MISS] {object_id} — uso web_search", flush=True)
+                content, titolo = be.genera_scheda_web(hit)
 
         api_error = content.pop("_api_error", "")
         if api_error:
@@ -1197,10 +1265,11 @@ async def cache_status(session_id: str = Cookie(default=None)):
 async def genera_scheda(bando_id: str, body: dict, session_id: str = Cookie(default=None)):
     if not get_session(session_id):
         return JSONResponse({"error": "Non autenticato"}, status_code=401)
-    hit    = body.get("hit", {})
-    job_id = secrets.token_hex(8)
+    hit     = body.get("hit", {})
+    testo_ce = body.get("testo_ce", "")
+    job_id  = secrets.token_hex(8)
     JOBS[job_id] = {"status": "pending"}
-    threading.Thread(target=_esegui_job, args=(job_id, hit), daemon=True).start()
+    threading.Thread(target=_esegui_job, args=(job_id, hit, testo_ce), daemon=True).start()
     return JSONResponse({"job_id": job_id})
 
 
