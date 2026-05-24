@@ -487,168 +487,46 @@ def registrati_page(error="", ok=""):
 def index_page(user):
     return f"""<!DOCTYPE html><html lang="it"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ItalBandi — Bandi e Incentivi per le Imprese</title>{CSS_BASE}
-<style>
-#view-ricerca {{
-  min-height: calc(100vh - 80px);
-  display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  padding: 40px 20px; text-align: center;
-}}
-.search-hero-logo {{
-  width: 150px; height: 150px; object-fit: cover;
-  border-radius: 18px; margin-bottom: 24px;
-  box-shadow: 0 0 50px rgba(201,168,76,0.25), 0 16px 32px rgba(0,0,0,0.5);
-}}
-.search-hero-title {{
-  font-size: 2.6rem; font-weight: 900;
-  letter-spacing: 0.04em; color: #fff; margin-bottom: 8px;
-}}
-.search-hero-title span {{ color: #C9A84C; }}
-.search-hero-sub {{
-  font-size: 0.95rem; color: #5A7A9A; margin-bottom: 36px; max-width: 420px;
-}}
-.search-box {{
-  background: #0F2035; border: 1px solid #1E3A5F;
-  border-radius: 14px; padding: 28px 30px;
-  width: 100%; max-width: 640px; text-align: left;
-}}
-.search-box-label {{
-  display: block; font-size: 0.65rem; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.1em;
-  color: #5A7A9A; margin-bottom: 5px;
-}}
-.search-box input, .search-box select {{
-  width: 100%; padding: 10px 12px;
-  background: #0A1628; color: #E8E8E8;
-  border: 1px solid #1E3A5F; border-radius: 6px;
-  font-size: 0.88rem; font-family: inherit; outline: none;
-  margin-bottom: 14px;
-}}
-.search-box input:focus, .search-box select:focus {{ border-color: #C9A84C; }}
-.search-box select option {{ background: #0A1628; }}
-.search-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }}
-.btn-cerca-hero {{
-  width: 100%; padding: 13px;
-  background: #C9A84C; color: #0A1628;
-  border: none; border-radius: 8px;
-  font-size: 0.95rem; font-weight: 800; cursor: pointer;
-  margin-top: 6px; letter-spacing: 0.02em;
-}}
-.btn-cerca-hero:hover {{ background: #E0BF6A; }}
-#view-risultati {{ display: none; }}
-.results-topbar {{
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  padding: 12px 20px; background: #0A1628;
-  border-bottom: 1px solid #1E3A5F; position: sticky; top: 0; z-index: 100;
-}}
-.results-topbar input, .results-topbar select {{
-  padding: 7px 10px; background: #0F2035; color: #E8E8E8;
-  border: 1px solid #1E3A5F; border-radius: 5px;
-  font-size: 0.8rem; font-family: inherit; outline: none;
-}}
-.results-topbar input {{ flex: 1; min-width: 120px; }}
-.results-topbar input:focus, .results-topbar select:focus {{ border-color: #C9A84C; }}
-.btn-cerca-top {{
-  padding: 7px 16px; background: #C9A84C; color: #0A1628;
-  border: none; border-radius: 5px; font-size: 0.8rem; font-weight: 700; cursor: pointer;
-}}
-.btn-nuova-ricerca {{
-  margin-left: auto; padding: 7px 14px; background: none;
-  color: #C9A84C; border: 1px solid #C9A84C; border-radius: 5px;
-  font-size: 0.75rem; font-weight: 700; cursor: pointer;
-}}
-.btn-nuova-ricerca:hover {{ background: rgba(201,168,76,0.1); }}
-</style>
-</head><body>
+<title>ItalBandi — Bandi e Incentivi per le Imprese</title>{CSS_BASE}</head><body>
 {NAVBAR_LOGGED(user)}
-
-<div id="view-ricerca">
-  <img src="/logo" class="search-hero-logo" alt="ItalBandi">
-  <div class="search-hero-title">ITAL<span>BANDI</span></div>
-  <p class="search-hero-sub">Trova i bandi giusti per la tua impresa.<br>Filtra per territorio, settore e stato di apertura.</p>
-  <div class="search-box">
-    <label class="search-box-label">Parola chiave</label>
-    <input id="keyword" type="text" placeholder="es. formazione, energia, welfare, digitale...">
-    <div class="search-grid">
-      <div>
-        <label class="search-box-label">Stato bando</label>
-        <select id="stato">
-          <option value="aperto">Bandi aperti</option>
-          <option value="prossimo">Prossima apertura</option>
-          <option value="tutti">Tutti</option>
-        </select>
-      </div>
-      <div>
-        <label class="search-box-label">Livello</label>
-        <select id="livello" onchange="aggiornaFiltri()">
-          <option value="">Tutti i bandi</option>
-          <option value="europeo">Europeo</option>
-          <option value="nazionale">Nazionale</option>
-          <option value="regionale">Regionale</option>
-        </select>
-      </div>
-      <div id="regione-wrap" style="display:none;grid-column:1/-1">
-        <label class="search-box-label">Regione <span style="color:#F87171">*</span></label>
-        <select id="regione" onchange="aggiornaProvince()">
-          <option value="">-- Scegli regione --</option>
-          <option>Abruzzo</option><option>Basilicata</option><option>Calabria</option>
-          <option>Campania</option><option>Emilia-Romagna</option><option>Friuli-Venezia-Giulia</option>
-          <option>Lazio</option><option>Liguria</option><option>Lombardia</option>
-          <option>Marche</option><option>Molise</option><option>Piemonte</option>
-          <option>Puglia</option><option>Sardegna</option><option>Sicilia</option>
-          <option>Toscana</option><option>Trentino-Alto-Adige</option><option>Umbria</option>
-          <option>Valle d&apos;Aosta</option><option>Veneto</option>
-        </select>
-      </div>
-      <div id="provincia-wrap" style="display:none;grid-column:1/-1">
-        <label class="search-box-label">Provincia (opzionale)</label>
-        <select id="provincia"><option value="">(tutte)</option></select>
-      </div>
-    </div>
-    <div id="err-ricerca" style="display:none;color:#F87171;font-size:0.8rem;margin-bottom:8px">Seleziona una regione per cercare bandi regionali.</div>
-    <button class="btn-cerca-hero" onclick="cercaEMostra()">Cerca bandi</button>
-  </div>
+<div class="hero">
+  <h2>Ricerca Bandi</h2>
+  <p>Trova le opportunità di finanziamento per la tua impresa. Filtra per livello geografico e scarica la scheda PDF professionale.</p>
 </div>
-
-<div id="view-risultati">
-  <div class="results-topbar">
-    <input id="keyword2" type="text" placeholder="Parola chiave...">
-    <select id="stato2">
-      <option value="aperto">Aperti</option>
-      <option value="prossimo">Prossima apertura</option>
-      <option value="tutti">Tutti</option>
+<div class="search-bar">
+  <input id="keyword" type="text" placeholder="Parola chiave (es. formazione, energia, PMI...)">
+  <select id="stato">
+    <option value="aperto">Bandi aperti</option>
+    <option value="prossimo">Prossima apertura</option>
+    <option value="tutti">Tutti</option>
+  </select>
+  <select id="livello" onchange="aggiornaFiltri()">
+    <option value="">Tutti i bandi</option>
+    <option value="europeo">Europeo</option>
+    <option value="nazionale">Nazionale</option>
+    <option value="regionale">Regionale</option>
+  </select>
+  <span id="regione-wrap" style="display:none">
+    <select id="regione" onchange="aggiornaProvince()">
+      <option value="">-- Scegli regione --</option>
+      <option>Abruzzo</option><option>Basilicata</option><option>Calabria</option>
+      <option>Campania</option><option>Emilia-Romagna</option><option>Friuli-Venezia-Giulia</option>
+      <option>Lazio</option><option>Liguria</option><option>Lombardia</option>
+      <option>Marche</option><option>Molise</option><option>Piemonte</option>
+      <option>Puglia</option><option>Sardegna</option><option>Sicilia</option>
+      <option>Toscana</option><option>Trentino-Alto-Adige</option><option>Umbria</option>
+      <option>Valle d&apos;Aosta</option><option>Veneto</option>
     </select>
-    <select id="livello2" onchange="aggiornaFiltri2()">
-      <option value="">Tutti</option>
-      <option value="europeo">Europeo</option>
-      <option value="nazionale">Nazionale</option>
-      <option value="regionale">Regionale</option>
-    </select>
-    <span id="regione-wrap2" style="display:none">
-      <select id="regione2" onchange="aggiornaProvince2()">
-        <option value="">-- Regione --</option>
-        <option>Abruzzo</option><option>Basilicata</option><option>Calabria</option>
-        <option>Campania</option><option>Emilia-Romagna</option><option>Friuli-Venezia-Giulia</option>
-        <option>Lazio</option><option>Liguria</option><option>Lombardia</option>
-        <option>Marche</option><option>Molise</option><option>Piemonte</option>
-        <option>Puglia</option><option>Sardegna</option><option>Sicilia</option>
-        <option>Toscana</option><option>Trentino-Alto-Adige</option><option>Umbria</option>
-        <option>Valle d&apos;Aosta</option><option>Veneto</option>
-      </select>
-    </span>
-    <span id="provincia-wrap2" style="display:none">
-      <select id="provincia2"><option value="">(tutte)</option></select>
-    </span>
-    <button class="btn-cerca-top" onclick="cerca()">Cerca</button>
-    <button class="btn-nuova-ricerca" onclick="nuovaRicerca()">&#8617; Nuova ricerca</button>
-  </div>
-  <div class="container">
-    <div id="risultati-header" class="risultati-header"></div>
-    <div id="risultati"></div>
-  </div>
+  </span>
+  <span id="provincia-wrap" style="display:none">
+    <select id="provincia"><option value="">(tutte le province)</option></select>
+  </span>
+  <button class="btn-cerca" onclick="cerca()">Cerca</button>
 </div>
-
+<div class="container">
+  <div id="risultati-header" class="risultati-header"></div>
+  <div id="risultati"></div>
+</div>
 {FOOTER_HTML}
 <script>
 const PROVINCE = {{
@@ -676,70 +554,28 @@ const PROVINCE = {{
 let _hits = {{}};
 function aggiornaFiltri() {{
   const v = document.getElementById('livello').value;
-  document.getElementById('regione-wrap').style.display   = v === 'regionale' ? 'block' : 'none';
+  document.getElementById('regione-wrap').style.display   = v === 'regionale' ? 'inline' : 'none';
   document.getElementById('provincia-wrap').style.display = 'none';
-  document.getElementById('err-ricerca').style.display    = 'none';
   if (v !== 'regionale') document.getElementById('regione').value = '';
-}}
-function aggiornaFiltri2() {{
-  const v = document.getElementById('livello2').value;
-  document.getElementById('regione-wrap2').style.display   = v === 'regionale' ? 'inline' : 'none';
-  document.getElementById('provincia-wrap2').style.display = 'none';
-  if (v !== 'regionale') document.getElementById('regione2').value = '';
 }}
 function aggiornaProvince() {{
   const reg = document.getElementById('regione').value;
   const sel = document.getElementById('provincia');
   const wrap = document.getElementById('provincia-wrap');
   if (reg && PROVINCE[reg]) {{
-    sel.innerHTML = '<option value="">(tutte)</option>' + PROVINCE[reg].map(p=>`<option>${{p}}</option>`).join('');
-    wrap.style.display = 'block';
-  }} else wrap.style.display = 'none';
-}}
-function aggiornaProvince2() {{
-  const reg = document.getElementById('regione2').value;
-  const sel = document.getElementById('provincia2');
-  const wrap = document.getElementById('provincia-wrap2');
-  if (reg && PROVINCE[reg]) {{
-    sel.innerHTML = '<option value="">(tutte)</option>' + PROVINCE[reg].map(p=>`<option>${{p}}</option>`).join('');
+    sel.innerHTML = '<option value="">(tutte le province)</option>' + PROVINCE[reg].map(p=>`<option>${{p}}</option>`).join('');
     wrap.style.display = 'inline';
   }} else wrap.style.display = 'none';
 }}
-function cercaEMostra() {{
-  // Validazione: se regionale, regione obbligatoria
-  const livello = document.getElementById('livello').value;
-  const regione = document.getElementById('regione').value;
-  if (livello === 'regionale' && !regione) {{
-    document.getElementById('err-ricerca').style.display = 'block';
-    document.getElementById('regione').focus();
-    return;
-  }}
-  document.getElementById('err-ricerca').style.display = 'none';
-  // Copia filtri alla topbar risultati
-  document.getElementById('keyword2').value = document.getElementById('keyword').value;
-  document.getElementById('stato2').value   = document.getElementById('stato').value;
-  document.getElementById('livello2').value = livello;
-  aggiornaFiltri2();
-  if (livello === 'regionale' && regione) {{
-    document.getElementById('regione2').value = regione;
-  }}
-  // Mostra view risultati
-  document.getElementById('view-ricerca').style.display  = 'none';
-  document.getElementById('view-risultati').style.display = 'block';
-  cerca();
-}}
-function nuovaRicerca() {{
-  document.getElementById('view-risultati').style.display = 'none';
-  document.getElementById('view-ricerca').style.display   = 'flex';
-}}
 }}
 async function cerca() {{
-  const kw  = document.getElementById('keyword2').value || document.getElementById('keyword').value;
-  const st  = document.getElementById('stato2').value   || document.getElementById('stato').value;
-  const lv  = document.getElementById('livello2').value;
-  const reg = document.getElementById('regione2') ? document.getElementById('regione2').value : document.getElementById('regione').value;
-  const prv = document.getElementById('provincia2') ? document.getElementById('provincia2').value : document.getElementById('provincia').value;
-  const params = new URLSearchParams({{ keyword:kw, stato:st, livello:lv, regione:reg, provincia:prv }});
+  const params = new URLSearchParams({{
+    keyword:  document.getElementById('keyword').value,
+    stato:    document.getElementById('stato').value,
+    livello:  document.getElementById('livello').value,
+    regione:  document.getElementById('regione').value,
+    provincia:document.getElementById('provincia').value,
+  }});
   document.getElementById('risultati').innerHTML = '<div class="loader">⏳ Ricerca in corso...</div>';
   document.getElementById('risultati-header').textContent = '';
   const resp = await fetch('/api/cerca?' + params);
@@ -919,7 +755,7 @@ function mostraCtaDownload() {{
 function chiudiCta() {{
   document.getElementById('cta-modal').style.display = 'none';
 }}
-// Non carica bandi all'avvio — mostra pagina ricerca
+window.onload = cerca;
 </script>
 
 <div id="cta-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;align-items:center;justify-content:center">
