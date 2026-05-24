@@ -1078,6 +1078,56 @@ def _aggiorna_cache():
         CACHE_STATUS["running"] = False
 
 
+@app.get("/admin/cache", response_class=HTMLResponse)
+async def admin_cache_page(session_id: str = Cookie(default=None)):
+    user = get_session(session_id)
+    if not user or not user.get("is_admin"):
+        return RedirectResponse("/login")
+    n = conta_cache()
+    return HTMLResponse(f"""<!DOCTYPE html><html lang="it"><head>
+<meta charset="UTF-8"><title>Admin Cache — ItalBandi</title>{CSS_BASE}</head><body>
+{NAVBAR_LOGGED(user)}
+<div class="container" style="max-width:700px;margin-top:40px">
+  <h2 style="color:#C9A84C;margin-bottom:20px">⚙️ Gestione Cache Bandi</h2>
+  <div style="background:#0F2035;border:1px solid #1E3A5F;border-radius:8px;padding:24px;margin-bottom:20px">
+    <p style="color:#A8C8E8;margin-bottom:8px">Bandi in cache: <strong style="color:#C9A84C">{n}</strong></p>
+    <p style="color:#6A8AA8;font-size:0.85rem">Aggiornare la cache scarica tutte le pagine dei bandi aperti e le salva nel database. Le schede generate useranno questi dati senza web_search — costo 1-2 centesimi invece di 8-12.</p>
+  </div>
+  <button onclick="avviaCache()" id="btn-cache" style="background:#C9A84C;color:#0A1628;border:none;padding:14px 32px;border-radius:6px;font-weight:700;font-size:1rem;cursor:pointer">
+    🔄 Aggiorna Cache Adesso
+  </button>
+  <div id="stato" style="margin-top:20px;padding:16px;background:#0F2035;border-radius:6px;display:none">
+    <p id="msg" style="color:#A8C8E8;font-size:0.9rem"></p>
+    <div style="margin-top:8px;height:6px;background:#1E3A5F;border-radius:3px">
+      <div id="bar" style="height:6px;background:#C9A84C;border-radius:3px;width:0%;transition:width 0.5s"></div>
+    </div>
+  </div>
+</div>
+<script>
+async function avviaCache() {{
+  document.getElementById('btn-cache').disabled = true;
+  document.getElementById('stato').style.display = 'block';
+  document.getElementById('msg').textContent = 'Avvio...';
+  await fetch('/admin/cache/avvia', {{method:'POST'}});
+  const poll = setInterval(async () => {{
+    const r = await fetch('/admin/cache/status');
+    const d = await r.json();
+    document.getElementById('msg').textContent = d.messaggio;
+    if (d.totale > 0) {{
+      const pct = Math.round(d.fatti / d.totale * 100);
+      document.getElementById('bar').style.width = pct + '%';
+    }}
+    if (!d.running) {{
+      clearInterval(poll);
+      document.getElementById('btn-cache').disabled = false;
+      setTimeout(() => location.reload(), 2000);
+    }}
+  }}, 2000);
+}}
+</script>
+</body></html>""")
+
+
 @app.get("/admin/db-check")
 async def db_check(session_id: str = Cookie(default=None)):
     user = get_session(session_id)
