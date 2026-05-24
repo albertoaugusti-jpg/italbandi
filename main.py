@@ -643,7 +643,7 @@ async function generaScheda(id) {{
     sp.style.display = 'none';
   }}
 }}
-window.onload = cerca;
+document.addEventListener('DOMContentLoaded', cerca);
 </script>
 </body></html>"""
 
