@@ -3,7 +3,7 @@ ItalBandi — main.py
 Portale web con autenticazione, registrazione, privacy, cookie policy
 Proprietà: Energelia S.r.l. — Responsabile privacy: Bruno Massimo Legger
 """
-import os, tempfile, traceback, sqlite3, hashlib, secrets, json, re
+import os, tempfile, traceback, sqlite3, hashlib, secrets, json, re, threading
 from datetime import datetime, timedelta
 from fastapi import FastAPI, Query, Request, Form, Cookie
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, RedirectResponse, Response
@@ -15,6 +15,76 @@ import energelia_scheda_engine as ENGINE
 LOGO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo_italbandi.png")
 
 app = FastAPI(title="ItalBandi")
+
+# ── Database Neon (cache bandi) ───────────────────────────────────────────────
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
+
+def get_pg():
+    """Connessione PostgreSQL Neon."""
+    import psycopg2
+    return psycopg2.connect(DATABASE_URL, sslmode="require")
+
+def init_cache_db():
+    """Crea la tabella bandi_cache se non esiste."""
+    if not DATABASE_URL:
+        return
+    try:
+        con = get_pg()
+        cur = con.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS bandi_cache (
+                object_id   TEXT PRIMARY KEY,
+                titolo      TEXT,
+                testo_pagina TEXT,
+                permalink   TEXT,
+                aggiornato  TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        con.commit()
+        cur.close(); con.close()
+    except Exception as e:
+        print(f"[DB] init error: {e}", flush=True)
+
+init_cache_db()
+
+def salva_in_cache(object_id, titolo, testo, permalink):
+    if not DATABASE_URL: return
+    try:
+        con = get_pg()
+        cur = con.cursor()
+        cur.execute("""
+            INSERT INTO bandi_cache (object_id, titolo, testo_pagina, permalink, aggiornato)
+            VALUES (%s, %s, %s, %s, NOW())
+            ON CONFLICT (object_id) DO UPDATE
+            SET testo_pagina=%s, titolo=%s, permalink=%s, aggiornato=NOW()
+        """, (object_id, titolo, testo, permalink, testo, titolo, permalink))
+        con.commit(); cur.close(); con.close()
+    except Exception as e:
+        print(f"[DB] save error: {e}", flush=True)
+
+def leggi_da_cache(object_id):
+    if not DATABASE_URL: return None
+    try:
+        con = get_pg()
+        cur = con.cursor()
+        cur.execute("SELECT testo_pagina FROM bandi_cache WHERE object_id=%s", (object_id,))
+        row = cur.fetchone()
+        cur.close(); con.close()
+        return row[0] if row else None
+    except:
+        return None
+
+def conta_cache():
+    if not DATABASE_URL: return 0
+    try:
+        con = get_pg()
+        cur = con.cursor()
+        cur.execute("SELECT COUNT(*) FROM bandi_cache")
+        n = cur.fetchone()[0]
+        cur.close(); con.close()
+        return n
+    except:
+        return 0
 
 @app.get("/logo")
 async def serve_logo():
@@ -927,13 +997,24 @@ async def cerca(
         return JSONResponse({"error": str(e), "bandi": [], "totale": 0})
 
 
-# ── Job system asincrono ───────────────────────────────────────────────────────
-import threading
-JOBS = {}  # job_id → {"status": "pending"|"ready"|"error", "path": ..., "nome": ..., "error": ...}
+# ── Job system asincrono ─────────────────────────────────────────────────────
+JOBS = {}
 
 def _esegui_job(job_id, hit):
     try:
-        content, titolo = be.genera_scheda_web(hit)
+        object_id = hit.get("objectID", "")
+
+        # 1. Cerca testo in cache locale
+        testo_cache = leggi_da_cache(object_id) if object_id else None
+
+        if testo_cache:
+            print(f"[CACHE HIT] {object_id}", flush=True)
+            # Usa testo dalla cache — chiama Claude SENZA web_search
+            content, titolo = be.genera_scheda_da_testo(hit, testo_cache)
+        else:
+            print(f"[CACHE MISS] {object_id} — uso web_search", flush=True)
+            content, titolo = be.genera_scheda_web(hit)
+
         api_error = content.pop("_api_error", "")
         if api_error:
             print(f"[CLAUDE API ERROR] {api_error}", flush=True)
@@ -952,10 +1033,118 @@ def _esegui_job(job_id, hit):
 
         titolo_corto = re.sub(r'[^\w\s]', '', titolo)[:40].strip().replace(' ', '_')
         nome_file = f"Energelia_{titolo_corto}_{datetime.now().strftime('%Y%m%d')}.pdf"
-
         JOBS[job_id] = {"status": "ready", "path": tmp_path, "nome": nome_file}
     except Exception as e:
         JOBS[job_id] = {"status": "error", "error": traceback.format_exc()}
+
+
+# ── Cache admin ───────────────────────────────────────────────────────────────
+CACHE_STATUS = {"running": False, "totale": 0, "fatti": 0, "errori": 0, "messaggio": ""}
+
+def _aggiorna_cache():
+    """Scarica le pagine CE di tutti i bandi aperti e le salva in Neon."""
+    import requests as req
+    CACHE_STATUS.update({"running": True, "fatti": 0, "errori": 0, "messaggio": "Avvio..."})
+
+    session = req.Session()
+    session.headers.update({"User-Agent": "Mozilla/5.0", "Accept-Language": "it-IT,it;q=0.9"})
+
+    try:
+        # Prende tutti i bandi aperti + prossima apertura
+        hits, totale = be.cerca_bandi_web(stato="tutti", max_hits=500)
+        CACHE_STATUS["totale"] = totale
+        CACHE_STATUS["messaggio"] = f"Trovati {totale} bandi. Scaricamento in corso..."
+
+        for i, hit in enumerate(hits):
+            oid      = hit.get("objectID", "")
+            titolo   = hit.get("post_title", "") or ""
+            link     = hit.get("permalink", "") or hit.get("link", "") or ""
+            if not oid or not link:
+                continue
+            try:
+                r = session.get(link, timeout=12)
+                html  = r.text
+                # Pulisce l'HTML
+                html  = re.sub(r'<script[^>]*>.*?</script>', ' ', html, flags=re.DOTALL|re.IGNORECASE)
+                html  = re.sub(r'<style[^>]*>.*?</style>',  ' ', html, flags=re.DOTALL|re.IGNORECASE)
+                testo = re.sub(r'<[^>]+>', ' ', html)
+                testo = re.sub(r'\s+', ' ', testo).strip()
+                if len(testo) > 200:
+                    salva_in_cache(oid, titolo, testo[:15000], link)
+                    CACHE_STATUS["fatti"] += 1
+            except:
+                CACHE_STATUS["errori"] += 1
+
+            CACHE_STATUS["messaggio"] = f"{i+1}/{totale} — salvati: {CACHE_STATUS['fatti']}, errori: {CACHE_STATUS['errori']}"
+
+        CACHE_STATUS["messaggio"] = f"✅ Completato! {CACHE_STATUS['fatti']} bandi in cache."
+    except Exception as e:
+        CACHE_STATUS["messaggio"] = f"❌ Errore: {e}"
+    finally:
+        CACHE_STATUS["running"] = False
+
+
+@app.get("/admin/cache", response_class=HTMLResponse)
+async def admin_cache_page(session_id: str = Cookie(default=None)):
+    user = get_session(session_id)
+    if not user or not user.get("is_admin"):
+        return RedirectResponse("/login")
+    n = conta_cache()
+    return HTMLResponse(f"""<!DOCTYPE html><html lang="it"><head>
+<meta charset="UTF-8"><title>Admin Cache — ItalBandi</title>{CSS_BASE}</head><body>
+{NAVBAR_LOGGED(user)}
+<div class="container" style="max-width:700px;margin-top:40px">
+  <h2 style="color:#C9A84C;margin-bottom:20px">⚙️ Gestione Cache Bandi</h2>
+  <div style="background:#0F2035;border:1px solid #1E3A5F;border-radius:8px;padding:24px;margin-bottom:20px">
+    <p style="color:#A8C8E8;margin-bottom:8px">Bandi attualmente in cache: <strong style="color:#C9A84C">{n}</strong></p>
+    <p style="color:#6A8AA8;font-size:0.85rem">Aggiornare la cache scarica le pagine di tutti i bandi aperti da ContributiEuropa e le salva nel database. Le schede generate useranno questi dati senza cercare su internet — costo API ridotto a 1-2 centesimi per scheda.</p>
+  </div>
+  <button onclick="avviaCache()" id="btn-cache" style="background:#C9A84C;color:#0A1628;border:none;padding:14px 32px;border-radius:6px;font-weight:700;font-size:1rem;cursor:pointer">
+    🔄 Aggiorna Cache Adesso
+  </button>
+  <div id="stato" style="margin-top:20px;padding:16px;background:#0F2035;border-radius:6px;display:none">
+    <p id="msg" style="color:#A8C8E8;font-size:0.9rem"></p>
+    <div id="progress" style="margin-top:8px;height:6px;background:#1E3A5F;border-radius:3px">
+      <div id="bar" style="height:6px;background:#C9A84C;border-radius:3px;width:0%;transition:width 0.5s"></div>
+    </div>
+  </div>
+</div>
+<script>
+async function avviaCache() {{
+  document.getElementById('btn-cache').disabled = true;
+  document.getElementById('stato').style.display = 'block';
+  await fetch('/admin/cache/avvia', {{method:'POST'}});
+  const poll = setInterval(async () => {{
+    const r = await fetch('/admin/cache/status');
+    const d = await r.json();
+    document.getElementById('msg').textContent = d.messaggio;
+    if (d.totale > 0) {{
+      const pct = Math.round(d.fatti / d.totale * 100);
+      document.getElementById('bar').style.width = pct + '%';
+    }}
+    if (!d.running) {{
+      clearInterval(poll);
+      document.getElementById('btn-cache').disabled = false;
+    }}
+  }}, 2000);
+}}
+</script>
+</body></html>""")
+
+
+@app.post("/admin/cache/avvia")
+async def avvia_cache(session_id: str = Cookie(default=None)):
+    user = get_session(session_id)
+    if not user or not user.get("is_admin"):
+        return JSONResponse({"error": "Non autorizzato"}, status_code=403)
+    if not CACHE_STATUS["running"]:
+        threading.Thread(target=_aggiorna_cache, daemon=True).start()
+    return JSONResponse({"ok": True})
+
+
+@app.get("/admin/cache/status")
+async def cache_status(session_id: str = Cookie(default=None)):
+    return JSONResponse(CACHE_STATUS)
 
 
 @app.post("/api/scheda/{bando_id}")
