@@ -469,7 +469,21 @@ def registrati_page(error="", ok=""):
         <div class="form-group"><label>Cognome *</label><input type="text" name="cognome" required placeholder="Rossi"></div>
       </div>
       <div class="form-group"><label>Email *</label><input type="email" name="email" required placeholder="mario.rossi@azienda.it"></div>
-      <div class="form-group"><label>Password *</label><input type="password" name="password" required placeholder="Min. 8 caratteri"></div>
+      <div class="form-group">
+        <label>Password *</label>
+        <div style="position:relative">
+          <input type="password" name="password" id="pwd1" required placeholder="Min. 8 caratteri" style="width:100%;padding-right:40px">
+          <button type="button" onclick="togglePwd('pwd1','eye1')" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#8899AA;font-size:1rem" id="eye1">&#128065;</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Ripeti password *</label>
+        <div style="position:relative">
+          <input type="password" name="password2" id="pwd2" required placeholder="Ripeti la password" style="width:100%;padding-right:40px">
+          <button type="button" onclick="togglePwd('pwd2','eye2')" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#8899AA;font-size:1rem" id="eye2">&#128065;</button>
+        </div>
+        <div id="pwd-err" style="display:none;color:#DC2626;font-size:0.78rem;margin-top:4px">Le password non coincidono.</div>
+      </div>
       <div class="form-group"><label>Telefono</label><input type="tel" name="telefono" placeholder="+39 010 000000"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
         <div class="form-group">
@@ -495,8 +509,25 @@ def registrati_page(error="", ok=""):
           </span>
         </label>
       </div>
-      <button class="btn-primary" type="submit">Crea account</button>
+      <button class="btn-primary" type="submit" onclick="return validaForm()">Crea account</button>
     </form>
+    <script>
+    function togglePwd(inputId, btnId) {{
+      const input = document.getElementById(inputId);
+      input.type = input.type === 'password' ? 'text' : 'password';
+    }}
+    function validaForm() {{
+      const p1 = document.getElementById('pwd1').value;
+      const p2 = document.getElementById('pwd2').value;
+      if (p1 !== p2) {{
+        document.getElementById('pwd-err').style.display = 'block';
+        document.getElementById('pwd2').focus();
+        return false;
+      }}
+      document.getElementById('pwd-err').style.display = 'none';
+      return true;
+    }}
+    </script>
     <div class="auth-footer">Hai già un account? <a href="/login">Accedi</a></div>
   </div>
 </div>
