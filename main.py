@@ -61,11 +61,6 @@ def conta_cache():
         return n
     except: return 0
 
-@app.api_route("/health", methods=["GET", "HEAD"])
-def health():
-    return {"status": "ok"}
-
-
 @app.get("/logo")
 async def serve_logo():
     for nome in ["Logo Bellissimo ItalBandi.png", "logo_italbandi.png", "logo.png"]:
@@ -78,7 +73,7 @@ DB_PATH  = "/tmp/italbandi.db"
 SESSIONS = {}  # session_id → {user_id, username, is_admin}
 
 # ── Database ───────────────────────────────────────────────────────────────────
-POSTMARK_KEY = "a874721e-db42-4173-af5e-5f77a74bdfbc"
+POSTMARK_KEY = "531003f7-031d-4a46-9866-331f7e74dfc4"
 BASE_URL     = "https://italbandi.onrender.com"
 
 def init_db():
@@ -109,21 +104,6 @@ def init_db():
 
 init_db()
 
-# ── Keepalive ────────────────────────────────────────────────────────────────
-def _keepalive():
-    import time, requests as req
-    time.sleep(60)
-    while True:
-        try:
-            req.get(f"{BASE_URL}/health", timeout=10)
-            print("[KEEPALIVE] ping OK", flush=True)
-        except Exception as e:
-            print(f"[KEEPALIVE] errore: {e}", flush=True)
-        time.sleep(600)
-
-threading.Thread(target=_keepalive, daemon=True).start()
-
-
 def invia_email_verifica(email, nome, token):
     """Manda email di verifica via Postmark."""
     try:
@@ -133,8 +113,7 @@ def invia_email_verifica(email, nome, token):
             headers={"X-Postmark-Server-Token": POSTMARK_KEY,
                      "Content-Type": "application/json"},
             json={
-                "From": "bandieincentivi@energelia.it",
-                "ReplyTo": "a.castagnaro@energelia.it",
+                "From": "noreply@energelia.it",
                 "To": email,
                 "Subject": "Conferma la tua email — ItalBandi",
                 "HtmlBody": f"""
@@ -150,11 +129,7 @@ def invia_email_verifica(email, nome, token):
 </div>""",
                 "TextBody": f"Benvenuto su ItalBandi, {nome}!\n\nConferma la tua email cliccando questo link:\n{link}\n\nIl link è valido per 24 ore.",
             }, timeout=10)
-        result = resp.json()
-        if resp.status_code == 200 and result.get("ErrorCode", 0) == 0:
-            print(f"[EMAIL] verifica inviata a {email} — MessageID: {result.get('MessageID')}", flush=True)
-        else:
-            print(f"[EMAIL] ERRORE Postmark: {result}", flush=True)
+        print(f"[EMAIL] verifica inviata a {email}", flush=True)
     except Exception as e:
         print(f"[EMAIL] errore: {e}", flush=True)
 
@@ -415,7 +390,6 @@ NAVBAR_LOGGED = lambda user: f"""
     <span style="color:#6A8AA8;font-size:0.82rem">Ciao, {user['nome']}</span>
     <a href="/privacy">Privacy</a>
     <a href="/cookie">Cookie Policy</a>
-    {'<a href="/area-riservata" style="color:#C9A84C;font-weight:700;border:1px solid rgba(201,168,76,0.4);padding:5px 12px;border-radius:4px">&#9881; Area Riservata</a>' if user.get('is_admin') else ''}
     <form method="POST" action="/logout" style="margin:0">
       <button class="btn-logout" type="submit">Esci</button>
     </form>
@@ -479,7 +453,7 @@ def login_page(error=""):
       <div class="form-group"><label>Password *</label><input type="password" name="password" required placeholder="••••••••"></div>
       <button class="btn-primary" type="submit">Accedi</button>
     </form>
-    <div class="auth-footer">Non hai un account? <a href="/registrati">Registrati gratis</a> &nbsp;·&nbsp; <a href="/reset-password">Password dimenticata?</a></div>
+    <div class="auth-footer">Non hai un account? <a href="/registrati">Registrati gratis</a></div>
     <p class="privacy-note">Accedendo accetti la nostra <a href="/privacy">Privacy Policy</a>
     e la <a href="/cookie">Cookie Policy</a>.</p>
   </div>
@@ -557,19 +531,7 @@ def index_page(user):
   <p>Trova le opportunità di finanziamento per la tua impresa. Filtra per livello geografico e scarica la scheda PDF professionale.</p>
 </div>
 <div class="search-bar">
-  <div style="display:flex;flex:1;min-width:200px;flex-direction:column;gap:4px">
-    <input id="keyword" type="text" placeholder="Parola chiave (es. formazione, energia, PMI...)" style="width:100%">
-    <div style="display:flex;gap:6px">
-      <button id="btn-ampia" onclick="setRicerca('no')"
-        style="flex:1;padding:5px 10px;background:#1A2A4A;color:#fff;border:1px solid #1A2A4A;border-radius:4px;font-size:0.72rem;font-weight:700;cursor:pointer">
-        Nel testo
-      </button>
-      <button id="btn-precisa" onclick="setRicerca('si')"
-        style="flex:1;padding:5px 10px;background:#fff;color:#1A2A4A;border:1px solid #C8D4E4;border-radius:4px;font-size:0.72rem;font-weight:700;cursor:pointer">
-        Nel titolo
-      </button>
-    </div>
-  </div>
+  <input id="keyword" type="text" placeholder="Parola chiave (es. formazione, energia, PMI...)">
   <select id="stato">
     <option value="aperto">Bandi aperti</option>
     <option value="prossimo">Prossima apertura</option>
@@ -596,7 +558,7 @@ def index_page(user):
   <span id="provincia-wrap" style="display:none">
     <select id="provincia"><option value="">(tutte le province)</option></select>
   </span>
-  <button class="btn-cerca" onclick="cerca()">Cerca</button>
+  <button class="btn-cerca" onclick="cerca()">🔍 Cerca</button>
 </div>
 <div class="container">
   <div id="risultati-header" class="risultati-header"></div>
@@ -626,19 +588,6 @@ const PROVINCE = {{
   "Trentino-Alto-Adige": ["Provincia di Bolzano","Provincia di Trento"],
   "Valle d'Aosta": ["Provincia di Aosta"],
 }};
-let _soloTitolo = 'no';
-function setRicerca(val) {{
-  _soloTitolo = val;
-  const btnA = document.getElementById('btn-ampia');
-  const btnP = document.getElementById('btn-precisa');
-  if (val === 'no') {{
-    btnA.style.background='#1A2A4A'; btnA.style.color='#fff'; btnA.style.borderColor='#1A2A4A';
-    btnP.style.background='#fff'; btnP.style.color='#1A2A4A'; btnP.style.borderColor='#C8D4E4';
-  }} else {{
-    btnP.style.background='#C9A84C'; btnP.style.color='#1A2A4A'; btnP.style.borderColor='#C9A84C';
-    btnA.style.background='#fff'; btnA.style.color='#1A2A4A'; btnA.style.borderColor='#C8D4E4';
-  }}
-}}
 let _hits = {{}};
 function aggiornaFiltri() {{
   const livello = document.getElementById('livello').value;
@@ -663,7 +612,6 @@ async function cerca() {{
     livello:  document.getElementById('livello').value,
     regione:  document.getElementById('regione').value,
     provincia:document.getElementById('provincia').value,
-    solo_titolo: _soloTitolo,
   }});
   document.getElementById('risultati').innerHTML = '<div class="loader">⏳ Ricerca in corso...</div>';
   document.getElementById('risultati-header').textContent = '';
@@ -675,21 +623,21 @@ async function cerca() {{
   data.bandi.forEach(b => {{ _hits[b.id] = b._hit; }});
 
   const CATS = {{
-    agric:    {{ r:/agric|rurale|biolog|animale|zootec|bovino|suino|ovino|avicol|vitivin|vino|olio|ortofrut|pac |csr |sra|forest/, foto:'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=700&q=80', c:'#1E3A1A', t:'#6FCF5A', i:'🌿', l:'Agricoltura' }},
-    energy:   {{ r:/energia|rinnovab|fotovolt|efficienza energet|solare|eolico|idrogeno|green|feeri/, foto:'https://images.unsplash.com/photo-1548337138-e87d889cc369?w=700&q=80', c:'#0D2240', t:'#60A5FA', i:'⚡', l:'Energia' }},
-    turismo:  {{ r:/turismo|albergo|hotel|agriturismo|ristorant|hospitality|ricettiv|ospital/, foto:'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?w=700&q=80', c:'#2A1520', t:'#F9A8D4', i:'🏨', l:'Turismo' }},
-    digital:  {{ r:/digital|tecnolog|software|innovaz|startup|ricerca|sviluppo|intelligen|cloud|cyber|ict/, foto:'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=700&q=80', c:'#0D0D30', t:'#C4B5FD', i:'💻', l:'Digitale' }},
-    industria:{{ r:/macchin|impianti|manifattur|industria|produzion|artigian|metalmecc|tessile|moda|terz/, foto:'https://images.unsplash.com/photo-1581091226033-d5c48150dbaa?w=700&q=80', c:'#2A1A00', t:'#FCD34D', i:'🏭', l:'Industria' }},
-    commercio:{{ r:/commercio|negozio|bottega|retail|distribuz|mercato|fiera|duc|centro urban/, foto:'https://images.unsplash.com/photo-1555529669-e69e7aa0ba9a?w=700&q=80', c:'#0A2A0A', t:'#4ADE80', i:'🏪', l:'Commercio' }},
-    lavoro:   {{ r:/formazion|lavoro|occupaz|welfare|dipendenti|risorse umane|personal|stage|gol|par /, foto:'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=700&q=80', c:'#0A1A30', t:'#93C5FD', i:'👥', l:'Formazione' }},
-    intl:     {{ r:/internazion|export|estero|mercati intern|paesi terzi|simest/, foto:'https://images.unsplash.com/photo-1578575437130-527eed3abbec?w=700&q=80', c:'#0A0A2A', t:'#C4B5FD', i:'🌍', l:'Export' }},
-    sociale:  {{ r:/sociale|terzo settore|onlus|cooperat|comunit|inclusione|disabil|volont/, foto:'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=700&q=80', c:'#0A2A15', t:'#4ADE80', i:'🤝', l:'Sociale' }},
-    edilizia: {{ r:/edilizia|riqualif|ristruttur|immobil|edifici|patrimonio|sismica|cappotto/, foto:'https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=700&q=80', c:'#2A1500', t:'#FCD34D', i:'🏗️', l:'Edilizia' }},
-    cultura:  {{ r:/cultura|arte|musei|spettacolo|cinema|musica|patrimonio cultur|editoria/, foto:'https://images.unsplash.com/photo-1544967082-d9d25d867d66?w=700&q=80', c:'#2A001A', t:'#F9A8D4', i:'🎨', l:'Cultura' }},
-    pesca:    {{ r:/pesca|mare|acquacolt|marina|portuale|ittico/, foto:'https://images.unsplash.com/photo-1519614483-c6d3001943d8?w=700&q=80', c:'#001A30', t:'#93C5FD', i:'🐟', l:'Pesca' }},
-    export:   {{ r:/voucher|certificaz|competenz|digitale|under 35|giovani|disoccupat/, foto:'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=700&q=80', c:'#1A0A2A', t:'#C4B5FD', i:'🎓', l:'Formazione' }},
+    agric:    {{ r:/agric|rurale|biolog|animale|zootec|bovino|suino|ovino|avicol|vitivin|vino|olio|ortofrut|pac |csr |sra|forest/, t2:'#166534', i:'&#127807;', l:'Agricoltura' }},
+    energy:   {{ r:/energia|rinnovab|fotovolt|efficienza energet|solare|eolico|idrogeno|green|feeri/, t2:'#1D4ED8', i:'&#9889;', l:'Energia' }},
+    turismo:  {{ r:/turismo|albergo|hotel|agriturismo|ristorant|hospitality|ricettiv|ospital/, t2:'#9D174D', i:'&#127976;', l:'Turismo' }},
+    digital:  {{ r:/digital|tecnolog|software|innovaz|startup|ricerca|sviluppo|intelligen|cloud|cyber|ict/, t2:'#5B21B6', i:'&#128187;', l:'Digitale' }},
+    industria:{{ r:/macchin|impianti|manifattur|industria|produzion|artigian|metalmecc|tessile|moda|terz/, t2:'#92400E', i:'&#127981;', l:'Industria' }},
+    commercio:{{ r:/commercio|negozio|bottega|retail|distribuz|mercato|fiera|duc|centro urban/, t2:'#065F46', i:'&#127978;', l:'Commercio' }},
+    lavoro:   {{ r:/formazion|lavoro|occupaz|welfare|dipendenti|risorse umane|personal|stage|gol|par /, t2:'#1E40AF', i:'&#128101;', l:'Formazione' }},
+    intl:     {{ r:/internazion|export|estero|mercati intern|paesi terzi|simest/, t2:'#4C1D95', i:'&#127757;', l:'Export' }},
+    sociale:  {{ r:/sociale|terzo settore|onlus|cooperat|comunit|inclusione|disabil|volont/, t2:'#064E3B', i:'&#129309;', l:'Sociale' }},
+    edilizia: {{ r:/edilizia|riqualif|ristruttur|immobil|edifici|patrimonio|sismica|cappotto/, t2:'#7C2D12', i:'&#127959;', l:'Edilizia' }},
+    cultura:  {{ r:/cultura|arte|musei|spettacolo|cinema|musica|patrimonio cultur|editoria/, t2:'#831843', i:'&#127912;', l:'Cultura' }},
+    pesca:    {{ r:/pesca|mare|acquacolt|marina|portuale|ittico/, t2:'#0C4A6E', i:'&#128031;', l:'Pesca' }},
+    export:   {{ r:/voucher|certificaz|competenz|digitale|under 35|giovani|disoccupat/, t2:'#3730A3', i:'&#127891;', l:'Formazione' }},
   }};
-  const DEFCAT = {{ foto:'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=700&q=80', c:'#0A1628', t:'#A8C8E8', i:'📋', l:'Finanza Agevolata' }};
+  const DEFCAT = {{ t2:'#1A2A4A', i:'&#128203;', l:'Finanza Agevolata' }};
   function getCat(titolo) {{
     const t = (titolo||'').toLowerCase();
     for (const v of Object.values(CATS)) {{ if (v.r.test(t)) return v; }}
@@ -698,31 +646,28 @@ async function cerca() {{
 
   document.getElementById('risultati').innerHTML = data.bandi.map(b => {{
     const cat = getCat(b.titolo);
+    const aperto = !b.stato.includes('prossima');
     return `<div class="bando-card">
-      <div class="card-img" style="background-image:url('${{cat.foto}}')">
-        <div class="card-cat-header">
-          <div class="card-cat-label" style="color:${{cat.t}};background:${{cat.c}};display:inline-flex;padding:4px 8px;border-radius:20px;backdrop-filter:blur(4px)">${{cat.i}} ${{cat.l}}</div>
-          <div class="card-badges">
-            <span class="badge ${{b.stato.includes('prossima') ? 'badge-prossimo' : 'badge-aperto'}}">${{b.stato}}</span>
-            <span class="badge" style="background:rgba(201,168,76,0.2);color:#C9A84C;border:1px solid rgba(201,168,76,0.4)">${{b.livello}}</span>
-          </div>
+      <div class="card-top">
+        <span class="card-cat-tag" style="color:${{cat.t2}}">${{cat.i}} ${{cat.l}}</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span class="badge ${{aperto ? 'badge-aperto' : 'badge-prossimo'}}">${{b.stato}}</span>
+          <span style="font-size:10px;color:#8899AA">${{b.livello}}</span>
         </div>
       </div>
-      <div class="card-body">
-        <div class="card-titolo">${{b.titolo}}</div>
-        <div class="card-metrics">
-          <div class="card-metric"><div class="card-metric-label">Scadenza</div><div class="card-metric-val">${{b.scadenza}}</div></div>
-          <div class="card-metric"><div class="card-metric-label">Livello</div><div class="card-metric-val">${{b.livello}}</div></div>
-          <div class="card-metric" style="grid-column:1/-1"><div class="card-metric-label">Destinatari</div><div class="card-metric-val">${{(b.beneficiari||'—').substring(0,55)}}</div></div>
-        </div>
+      <div class="card-titolo">${{b.titolo}}</div>
+      <div class="card-info">
+        <div class="card-info-item">&#128197; <strong>${{b.scadenza}}</strong></div>
+        <div class="card-info-item">&#128100; <strong>${{(b.beneficiari||'—').substring(0,50)}}</strong></div>
       </div>
+      <hr class="card-divider">
       <div class="preview-panel" id="preview-${{b.id}}">
         <span class="preview-loading" id="prev-msg-${{b.id}}">Clicca Preview per scoprire se questo bando fa per te...</span>
       </div>
-      <div class="card-actions" style="padding:0 16px 16px">
-        <button class="btn-scheda" id="btn-${{b.id}}" onclick="generaScheda('${{b.id}}')">📄 Genera Scheda</button>
+      <div class="card-actions">
+        <button class="btn-scheda" id="btn-${{b.id}}" onclick="generaScheda('${{b.id}}')">Genera Scheda PDF</button>
         <button class="btn-preview" id="arrow-${{b.id}}" onclick="togglePreview('${{b.id}}')">PREVIEW</button>
-        <span class="spinner" id="sp-${{b.id}}">⏳ Elaborazione...</span>
+        <span class="spinner" id="sp-${{b.id}}">elaborazione...</span>
       </div>
     </div>`;
   }}).join('');
@@ -954,181 +899,6 @@ async def login_post(email: str = Form(""), password: str = Form("")):
     resp = RedirectResponse("/", status_code=302)
     resp.set_cookie("session_id", sid, max_age=86400*7, httponly=True)
     return resp
-
-
-@app.get("/reset-password", response_class=HTMLResponse)
-async def reset_password_get():
-    return HTMLResponse(f"""<!DOCTYPE html><html lang="it"><head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ItalBandi — Password dimenticata</title>{CSS_BASE}</head><body>
-<nav class="navbar">
-  <a href="/" style="display:flex;align-items:center;gap:12px;text-decoration:none">
-    <img src="/logo" style="height:60px;width:60px;object-fit:cover;border-radius:6px">
-    <span class="navbar-brand">ITAL<span>BANDI</span></span>
-  </a>
-  <div class="navbar-links"><a href="/login">Accedi</a></div>
-</nav>
-<div class="auth-wrap"><div class="auth-card">
-  <h2>Password dimenticata</h2>
-  <p class="sub">Inserisci la tua email e ti mandiamo un link per reimpostare la password.</p>
-  <form method="POST" action="/reset-password">
-    <div class="form-group"><label>Email *</label>
-    <input type="email" name="email" required placeholder="tuaemail@esempio.it"></div>
-    <button class="btn-primary" type="submit">Invia link di reset</button>
-  </form>
-  <div class="auth-footer"><a href="/login">Torna al login</a></div>
-</div></div>
-{FOOTER_HTML}</body></html>""")
-
-
-@app.post("/reset-password", response_class=HTMLResponse)
-async def reset_password_post(email: str = Form("")):
-    msg_ok = f"""<!DOCTYPE html><html lang="it"><head>
-<meta charset="UTF-8"><title>ItalBandi</title>{CSS_BASE}</head><body>
-<div class="auth-wrap"><div class="auth-card">
-  <div class="ok-msg">Se questa email e registrata riceverai a breve il link per reimpostare la password. Controlla anche lo spam.</div>
-  <div class="auth-footer"><a href="/login">Torna al login</a></div>
-</div></div>{FOOTER_HTML}</body></html>"""
-    try:
-        con = sqlite3.connect(DB_PATH)
-        row = con.execute("SELECT id, nome FROM utenti WHERE email=?", (email,)).fetchone()
-        if row:
-            token = secrets.token_urlsafe(32)
-            con.execute("UPDATE utenti SET token_verifica=? WHERE email=?", (token, email))
-            con.commit()
-            link = f"{BASE_URL}/nuova-password?token={token}"
-            import requests as req
-            req.post("https://api.postmarkapp.com/email",
-                headers={{"X-Postmark-Server-Token": POSTMARK_KEY, "Content-Type": "application/json"}},
-                json={{"From": "bandieincentivi@energelia.it", "To": email,
-                      "Subject": "Reset password — ItalBandi",
-                      "HtmlBody": f'<div style="font-family:Arial;max-width:500px;margin:0 auto;padding:20px"><h2 style="color:#1A2A4A">Reset della tua password</h2><p>Clicca per scegliere una nuova password.</p><a href="{link}" style="display:inline-block;background:#C9A84C;color:#1A2A4A;padding:14px 32px;border-radius:6px;font-weight:700;text-decoration:none;margin:20px 0">Reimposta password</a><p style="color:#888;font-size:0.85rem">Link valido 24 ore.</p></div>',
-                      "TextBody": f"Reimposta la tua password:\n{link}"}}, timeout=10)
-            print(f"[RESET] inviato a {email}", flush=True)
-        con.close()
-    except Exception as e:
-        print(f"[RESET] errore: {e}", flush=True)
-    return HTMLResponse(msg_ok)
-
-
-@app.get("/nuova-password", response_class=HTMLResponse)
-async def nuova_password_get(token: str = ""):
-    if not token: return RedirectResponse("/login")
-    return HTMLResponse(f"""<!DOCTYPE html><html lang="it"><head>
-<meta charset="UTF-8"><title>ItalBandi — Nuova password</title>{CSS_BASE}</head><body>
-<div class="auth-wrap"><div class="auth-card">
-  <h2>Scegli la nuova password</h2>
-  <form method="POST" action="/nuova-password">
-    <input type="hidden" name="token" value="{token}">
-    <div class="form-group"><label>Nuova password *</label>
-      <div style="position:relative">
-        <input type="password" name="password" id="np1" required placeholder="Min. 8 caratteri" style="width:100%;padding-right:40px">
-        <button type="button" onclick="document.getElementById('np1').type=document.getElementById('np1').type==='password'?'text':'password'"
-          style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#8899AA">&#128065;</button>
-      </div>
-    </div>
-    <div class="form-group"><label>Ripeti *</label>
-      <input type="password" name="password2" id="np2" required placeholder="Ripeti la password">
-      <div id="np-err" style="display:none;color:#DC2626;font-size:0.78rem;margin-top:4px">Le password non coincidono.</div>
-    </div>
-    <button class="btn-primary" type="submit"
-      onclick="if(document.getElementById('np1').value!==document.getElementById('np2').value){{document.getElementById('np-err').style.display='block';return false;}}">
-      Salva nuova password
-    </button>
-  </form>
-</div></div>{FOOTER_HTML}</body></html>""")
-
-
-@app.post("/nuova-password", response_class=HTMLResponse)
-async def nuova_password_post(token: str = Form(""), password: str = Form(""), password2: str = Form("")):
-    if not token or not password or password != password2 or len(password) < 8:
-        return HTMLResponse("<p>Dati non validi. <a href='/login'>Torna al login</a></p>")
-    pw_hash = hashlib.sha256(password.encode()).hexdigest()
-    con = sqlite3.connect(DB_PATH)
-    con.execute("UPDATE utenti SET password_hash=?, token_verifica=NULL WHERE token_verifica=?", (pw_hash, token))
-    con.commit(); con.close()
-    return HTMLResponse(f"""<!DOCTYPE html><html lang="it"><head>
-<meta charset="UTF-8"><title>ItalBandi</title>{CSS_BASE}</head><body>
-<div class="auth-wrap"><div class="auth-card">
-  <div class="ok-msg">Password aggiornata con successo!</div>
-  <a href="/login" class="btn-primary" style="display:block;text-align:center;text-decoration:none;margin-top:12px">Accedi ora</a>
-</div></div></body></html>""")
-
-
-@app.get("/area-riservata", response_class=HTMLResponse)
-async def area_riservata(session_id: str = Cookie(default=None)):
-    user = get_session(session_id)
-    if not user or not user.get("is_admin"):
-        return RedirectResponse("/login")
-    con = sqlite3.connect(DB_PATH)
-    utenti = con.execute("SELECT id,nome,cognome,email,impresa,ruolo,telefono,verificato,created_at FROM utenti ORDER BY created_at DESC").fetchall()
-    con.close()
-    n_verif = sum(1 for u in utenti if u[7])
-    righe = ""
-    for u in utenti:
-        id_,nome,cognome,email,impresa,ruolo,tel,verif,created = u
-        s = '<span style="color:#15803D">&#10003;</span>' if verif else '<span style="color:#DC2626">&#10007;</span>'
-        righe += f"<tr><td>{nome} {cognome}</td><td>{email}</td><td>{impresa or '—'}</td><td>{tel or '—'}</td><td style='text-align:center'>{s}</td><td style='color:#8899AA;font-size:0.75rem'>{(created or '')[:10]}</td><td><button onclick=\"eliminaUtente({id_},'{email}')\" style='background:#FEF2F2;color:#DC2626;border:1px solid #FECACA;border-radius:4px;padding:3px 10px;font-size:0.73rem;cursor:pointer'>Elimina</button></td></tr>"
-    return HTMLResponse(f"""<!DOCTYPE html><html lang="it"><head>
-<meta charset="UTF-8"><title>Area Riservata — ItalBandi</title>{CSS_BASE}
-<style>
-.ar-wrap{{max-width:1100px;margin:32px auto;padding:0 24px 60px}}
-.ar-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:32px}}
-.ar-card{{background:#fff;border:1px solid #D0DCF0;border-radius:10px;padding:20px 24px}}
-.ar-card h3{{font-size:0.72rem;text-transform:uppercase;letter-spacing:0.1em;color:#8899AA;margin-bottom:6px}}
-.ar-card .val{{font-size:2rem;font-weight:800;color:#1A2A4A}}
-.ar-section{{background:#fff;border:1px solid #D0DCF0;border-radius:10px;padding:24px;margin-bottom:24px}}
-table{{width:100%;border-collapse:collapse}}
-th{{font-size:0.7rem;text-transform:uppercase;color:#8899AA;padding:8px 12px;text-align:left;border-bottom:2px solid #EEF2F8}}
-td{{padding:10px 12px;font-size:0.82rem;border-bottom:1px solid #EEF2F8}}
-tr:hover td{{background:#F8FAFF}}
-.btn-ar{{padding:7px 16px;border-radius:5px;font-size:0.8rem;font-weight:700;cursor:pointer;font-family:inherit;border:none}}
-</style>
-</head><body>
-{NAVBAR_LOGGED(user)}
-<div class="ar-wrap">
-  <h1 style="font-size:1.4rem;font-weight:800;color:#1A2A4A;margin-bottom:24px">&#9881; Area Riservata</h1>
-  <div class="ar-grid">
-    <div class="ar-card"><h3>Utenti totali</h3><div class="val">{len(utenti)}</div><div style="font-size:0.75rem;color:#8899AA">{n_verif} verificati · {len(utenti)-n_verif} in attesa</div></div>
-    <div class="ar-card"><h3>Cache bandi</h3><div class="val" id="n-cache">...</div><div style="font-size:0.75rem;color:#8899AA">bandi in cache</div></div>
-    <div class="ar-card"><h3>Azioni rapide</h3>
-      <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
-        <button class="btn-ar" style="background:#1A2A4A;color:#fff" onclick="window.location='/admin/cache'">Aggiorna cache</button>
-        <button class="btn-ar" style="background:#C9A84C;color:#1A2A4A" onclick="window.location='/area-riservata/export'">Scarica CSV utenti</button>
-      </div>
-    </div>
-  </div>
-  <div class="ar-section">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-      <h2 style="font-size:1rem;font-weight:700;color:#1A2A4A">Utenti registrati ({len(utenti)})</h2>
-      <a href="/area-riservata/export" style="font-size:0.8rem;color:#1A3A6A;border:1px solid #C8D4E4;padding:5px 12px;border-radius:5px">Scarica CSV</a>
-    </div>
-    <div style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:6px;padding:10px 14px;font-size:0.78rem;color:#92400E;margin-bottom:16px">
-      &#9888; Il database si svuota ad ogni deploy Render. Scarica il CSV regolarmente.
-    </div>
-    <table>
-      <thead><tr><th>Nome</th><th>Email</th><th>Azienda</th><th>Telefono</th><th>Verif.</th><th>Data</th><th></th></tr></thead>
-      <tbody>{righe}</tbody>
-    </table>
-  </div>
-</div>
-<script>
-async function eliminaUtente(id, email) {{
-  if (!confirm('Eliminare ' + email + '?')) return;
-  const r = await fetch('/admin/utenti/' + id, {{method:'DELETE'}});
-  const d = await r.json();
-  if (d.ok) location.reload(); else alert('Errore: ' + d.error);
-}}
-fetch('/admin/cache/status').then(r=>r.json()).then(d=>{{
-  document.getElementById('n-cache').textContent = d.totale||0;
-}}).catch(()=>{{document.getElementById('n-cache').textContent='—'}});
-</script>
-</body></html>""")
-
-
-@app.get("/area-riservata/export")
-async def area_riservata_export(session_id: str = Cookie(default=None)):
-    return await admin_utenti_export(session_id=session_id)
 
 
 @app.get("/verifica", response_class=HTMLResponse)
