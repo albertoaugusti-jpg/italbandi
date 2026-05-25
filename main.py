@@ -98,21 +98,6 @@ def health():
     return {"status": "ok"}
 
 
-@app.get("/ico_eu.png")
-async def serve_ico_eu():
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ico_eu.png")
-    return FileResponse(path, media_type="image/png") if os.path.exists(path) else Response(status_code=404)
-
-@app.get("/ico_italia.png")
-async def serve_ico_italia():
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ico_italia.png")
-    return FileResponse(path, media_type="image/png") if os.path.exists(path) else Response(status_code=404)
-
-@app.get("/ico_regioni.png")
-async def serve_ico_regioni():
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ico_regioni.png")
-    return FileResponse(path, media_type="image/png") if os.path.exists(path) else Response(status_code=404)
-
 @app.get("/logo")
 async def serve_logo():
     for nome in ["Logo Bellissimo ItalBandi.png", "logo_italbandi.png", "logo.png"]:
@@ -654,28 +639,38 @@ def index_page(user):
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ItalBandi — Bandi e Incentivi per le Imprese</title>{CSS_BASE}</head><body>
 {NAVBAR_LOGGED(user)}
-<!-- HERO SECTION -->
-<div style="background:linear-gradient(160deg,#0D1E35 0%,#1A2A4A 60%,#0D1E35 100%);padding:40px 40px 32px;text-align:center">
-  <h1 style="font-size:2.4rem;font-weight:900;color:#FFFFFF;margin:0 0 8px;line-height:1.1">Trova il bando<br><span style="color:#C9A84C">giusto per te.</span></h1>
-  <p style="font-size:0.92rem;color:#6A8AA8;margin:0 0 32px">Il portale italiano dei bandi e delle opportunità per imprese, professionisti ed enti.</p>
-  <p style="font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:#5A7A9A;font-weight:600;margin:0 0 12px">Dove vuoi cercare?</p>
-  <div style="display:flex;gap:14px;justify-content:center;margin-bottom:20px;flex-wrap:wrap">
-    <div class="geo-card" id="geo-eu" onclick="selGeo('eu',this)">
-      <div style="width:64px;height:64px;background:rgba(255,255,255,0.15);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 8px;font-size:2.4rem;line-height:1">🇪🇺</div>
-      <div class="geo-lbl">Europeo</div><div class="geo-sub">Fondi UE</div>
-    </div>
-    <div class="geo-card" id="geo-nazionale" onclick="selGeo('nazionale',this)">
-      <div style="width:64px;height:64px;background:rgba(255,255,255,0.15);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 8px;font-size:2.4rem;line-height:1">🇮🇹</div>
-      <div class="geo-lbl">Nazionale</div><div class="geo-sub">Tutta Italia</div>
-    </div>
-    <div class="geo-card" id="geo-regionale" onclick="selGeo('regionale',this)">
-      <div style="width:64px;height:64px;background:rgba(255,255,255,0.15);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 8px;font-size:2.4rem;line-height:1">🏛️</div>
-      <div class="geo-lbl">Regionale</div><div class="geo-sub">La tua regione</div>
+<div class="hero">
+  <h2>Trova il bando giusto per la tua impresa</h2>
+  <p>Migliaia di opportunità di finanziamento — europee, nazionali e regionali. Cerca, filtra e scarica la scheda PDF in un click.</p>
+</div>
+<div class="search-bar">
+  <div style="display:flex;flex:1;min-width:200px;flex-direction:column;gap:4px">
+    <input id="keyword" type="text" placeholder="🔍  Di cosa hai bisogno? (es. macchinari, formazione, energia...)" style="width:100%">
+    <div style="display:flex;gap:6px">
+      <button id="btn-ampia" onclick="setRicerca('no')"
+        style="flex:1;padding:5px 10px;background:#1A2A4A;color:#fff;border:1px solid #1A2A4A;border-radius:4px;font-size:0.72rem;font-weight:700;cursor:pointer">
+        Nel testo
+      </button>
+      <button id="btn-precisa" onclick="setRicerca('si')"
+        style="flex:1;padding:5px 10px;background:#fff;color:#1A2A4A;border:1px solid #C8D4E4;border-radius:4px;font-size:0.72rem;font-weight:700;cursor:pointer">
+        Nel titolo
+      </button>
     </div>
   </div>
-  <div id="regione-box" style="display:none;margin-bottom:20px">
-    <select id="regione" style="padding:9px 16px;background:rgba(255,255,255,0.08);color:#E8E8E8;border:1px solid rgba(201,168,76,0.5);border-radius:8px;font-size:0.88rem;font-family:inherit;min-width:220px;outline:none">
-      <option value="">-- Scegli la tua regione --</option>
+  <select id="stato">
+    <option value="aperto">✅ Bandi aperti</option>
+    <option value="prossimo">🔜 In apertura</option>
+    <option value="tutti">📋 Tutti i bandi</option>
+  </select>
+  <select id="livello" onchange="aggiornaFiltri()">
+    <option value="">🌐 Qualsiasi livello</option>
+    <option value="europeo">🇪🇺 Europeo</option>
+    <option value="nazionale">🇮🇹 Nazionale</option>
+    <option value="regionale">📍 Regionale</option>
+  </select>
+  <span id="regione-wrap" style="display:none">
+    <select id="regione" onchange="aggiornaProvince()">
+      <option value="">-- Scegli regione --</option>
       <option>Abruzzo</option><option>Basilicata</option><option>Calabria</option>
       <option>Campania</option><option>Emilia-Romagna</option><option>Friuli-Venezia-Giulia</option>
       <option>Lazio</option><option>Liguria</option><option>Lombardia</option>
@@ -684,71 +679,77 @@ def index_page(user):
       <option>Toscana</option><option>Trentino-Alto-Adige</option><option>Umbria</option>
       <option>Valle d'Aosta</option><option>Veneto</option>
     </select>
-  </div>
-  <p style="font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:#5A7A9A;font-weight:600;margin:0 0 12px">Cosa vuoi finanziare?</p>
-  <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:8px">
-    <div class="s-icon" onclick="selSettore(this,'macchinari')"><div style="font-size:1.8rem">⚙️</div><div class="s-icon-lbl">Macchinari</div></div>
-    <div class="s-icon" onclick="selSettore(this,'digitale')"><div style="font-size:1.8rem">💻</div><div class="s-icon-lbl">Digitale</div></div>
-    <div class="s-icon" onclick="selSettore(this,'energia')"><div style="font-size:1.8rem">⚡</div><div class="s-icon-lbl">Energia</div></div>
-    <div class="s-icon" onclick="selSettore(this,'personale')"><div style="font-size:1.8rem">👥</div><div class="s-icon-lbl">Personale</div></div>
-    <div class="s-icon" onclick="selSettore(this,'export')"><div style="font-size:1.8rem">🌍</div><div class="s-icon-lbl">Export</div></div>
-    <div class="s-icon" onclick="selSettore(this,'agricoltura')"><div style="font-size:1.8rem">🌿</div><div class="s-icon-lbl">Agricoltura</div></div>
-    <div class="s-icon" onclick="selSettore(this,'edilizia')"><div style="font-size:1.8rem">🏗️</div><div class="s-icon-lbl">Edilizia</div></div>
-    <div class="s-icon" onclick="selSettore(this,'cultura')"><div style="font-size:1.8rem">🎨</div><div class="s-icon-lbl">Cultura</div></div>
-  </div>
-</div>
-<!-- BARRA RICERCA -->
-<div style="background:#FFFFFF;border-bottom:1px solid #D8E2EE;padding:14px 40px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;box-shadow:0 2px 12px rgba(26,42,74,0.1)">
-  <div style="flex:1;min-width:200px;position:relative">
-    <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#8899AA;font-size:14px">🔍</span>
-    <input id="keyword" type="text" placeholder="Aggiungi una parola chiave (opzionale)..."
-      style="width:100%;padding:9px 14px 9px 34px;background:#F4F6FA;border:1px solid #C8D4E4;border-radius:6px;font-size:0.88rem;color:#1A2A3A;font-family:inherit;outline:none;box-sizing:border-box">
-  </div>
-  <button onclick="cerca()" style="padding:9px 32px;background:#C9A84C;color:#1A2A4A;border:none;border-radius:6px;font-size:0.95rem;font-weight:800;cursor:pointer;white-space:nowrap">Cerca →</button>
+  </span>
+  <span id="provincia-wrap" style="display:none">
+    <select id="provincia"><option value="">(tutte le province)</option></select>
+  </span>
+  <input type="hidden" id="dove-tutto" value="no">
+  <button class="btn-cerca" onclick="cerca()">Cerca</button>
 </div>
 <div class="container">
   <div id="risultati-header" class="risultati-header"></div>
   <div id="risultati"></div>
 </div>
 {FOOTER_HTML}
-<style>
-.geo-card{{background:rgba(255,255,255,0.05);border:1.5px solid rgba(255,255,255,0.12);border-radius:14px;padding:14px 22px 10px;cursor:pointer;text-align:center;transition:all 0.18s;min-width:100px}}
-.geo-card:hover{{border-color:#C9A84C;background:rgba(201,168,76,0.08)}}
-.geo-card.on{{border-color:#C9A84C;background:rgba(201,168,76,0.15)}}
-.geo-lbl{{font-size:12px;font-weight:700;color:#D4E8FF;margin:0}}
-.geo-card.on .geo-lbl{{color:#C9A84C}}
-.geo-sub{{font-size:10px;color:#5A7A9A;margin:2px 0 0}}
-.s-icon{{background:rgba(255,255,255,0.05);border:1.5px solid rgba(255,255,255,0.1);border-radius:12px;padding:12px 16px 10px;cursor:pointer;text-align:center;transition:all 0.18s;min-width:80px}}
-.s-icon:hover{{border-color:#C9A84C;background:rgba(201,168,76,0.08)}}
-.s-icon.on{{border-color:#C9A84C;background:rgba(201,168,76,0.18)}}
-.s-icon-lbl{{font-size:11px;font-weight:600;color:#A8C8E8;margin-top:5px}}
-.s-icon.on .s-icon-lbl{{color:#C9A84C}}
-@media(max-width:600px){{.geo-card{{min-width:80px}}.s-icon{{min-width:64px}}.s-icon-lbl{{font-size:10px}}}}
-</style>
 <script>
-let _soloTitolo='no', _geoAttivo='', _settoreAttivo=null;
-const _settoriKw={{macchinari:'macchinari impianti',digitale:'digitale software innovazione',energia:'energia rinnovabile efficienza',personale:'formazione lavoro occupazione',export:'internazionalizzazione export estero',agricoltura:'agricoltura rurale biologico',edilizia:'edilizia riqualificazione ristrutturazione',cultura:'cultura arte musei spettacolo'}};
-const _geoLivello={{eu:'europeo',nazionale:'nazionale',regionale:'regionale'}};
-function selGeo(tipo,el){{
-  document.querySelectorAll('.geo-card').forEach(c=>c.classList.remove('on'));
-  const rb=document.getElementById('regione-box');
-  if(_geoAttivo===tipo){{_geoAttivo='';rb.style.display='none';}}
-  else{{el.classList.add('on');_geoAttivo=tipo;rb.style.display=tipo==='regionale'?'block':'none';if(tipo!=='regionale')document.getElementById('regione').value='';}}
+const PROVINCE = {{
+  "Liguria":    ["Provincia di Genova","Provincia di Imperia","Provincia di La-Spezia","Provincia di Savona"],
+  "Lombardia":  ["Provincia di Bergamo","Provincia di Brescia","Provincia di Como","Provincia di Cremona","Provincia di Lecco","Provincia di Lodi","Provincia di Mantova","Provincia di Milano","Provincia di Monza-Brianza","Provincia di Pavia","Provincia di Sondrio","Provincia di Varese"],
+  "Piemonte":   ["Provincia di Alessandria","Provincia di Asti","Provincia di Biella","Provincia di Cuneo","Provincia di Novara","Provincia di Torino","Provincia di Verbano-Cusio-Ossola","Provincia di Vercelli"],
+  "Veneto":     ["Provincia di Belluno","Provincia di Padova","Provincia di Rovigo","Provincia di Treviso","Provincia di Venezia","Provincia di Verona","Provincia di Vicenza"],
+  "Toscana":    ["Provincia di Arezzo","Provincia di Firenze","Provincia di Grosseto","Provincia di Livorno","Provincia di Lucca","Provincia di Massa-Carrara","Provincia di Pisa","Provincia di Pistoia","Provincia di Prato","Provincia di Siena"],
+  "Lazio":      ["Provincia di Frosinone","Provincia di Latina","Provincia di Rieti","Provincia di Roma","Provincia di Viterbo"],
+  "Campania":   ["Provincia di Avellino","Provincia di Benevento","Provincia di Caserta","Provincia di Napoli","Provincia di Salerno"],
+  "Emilia-Romagna": ["Provincia di Bologna","Provincia di Ferrara","Provincia di Forli-Cesena","Provincia di Modena","Provincia di Parma","Provincia di Piacenza","Provincia di Ravenna","Provincia di Reggio-Emilia","Provincia di Rimini"],
+  "Puglia":     ["Provincia di Bari","Provincia di Barletta-Andria-Trani","Provincia di Brindisi","Provincia di Foggia","Provincia di Lecce","Provincia di Taranto"],
+  "Sicilia":    ["Provincia di Agrigento","Provincia di Caltanissetta","Provincia di Catania","Provincia di Enna","Provincia di Messina","Provincia di Palermo","Provincia di Ragusa","Provincia di Siracusa","Provincia di Trapani"],
+  "Sardegna":   ["Provincia di Cagliari","Provincia di Nuoro","Provincia di Oristano","Provincia di Sassari"],
+  "Abruzzo":    ["Provincia di Chieti","Provincia di L'Aquila","Provincia di Pescara","Provincia di Teramo"],
+  "Marche":     ["Provincia di Ancona","Provincia di Ascoli Piceno","Provincia di Fermo","Provincia di Macerata","Provincia di Pesaro Urbino"],
+  "Friuli-Venezia-Giulia": ["Provincia di Gorizia","Provincia di Pordenone","Provincia di Trieste","Provincia di Udine"],
+  "Calabria":   ["Provincia di Catanzaro","Provincia di Cosenza","Provincia di Crotone","Provincia di Reggio-Calabria","Provincia di Vibo-Valentia"],
+  "Umbria":     ["Provincia di Perugia","Provincia di Terni"],
+  "Basilicata": ["Provincia di Matera","Provincia di Potenza"],
+  "Molise":     ["Provincia di Campobasso","Provincia di Isernia"],
+  "Trentino-Alto-Adige": ["Provincia di Bolzano","Provincia di Trento"],
+  "Valle d'Aosta": ["Provincia di Aosta"],
+}};
+let _soloTitolo = 'no';
+function setRicerca(val) {{
+  _soloTitolo = val;
+  const btnA = document.getElementById('btn-ampia');
+  const btnP = document.getElementById('btn-precisa');
+  if (val === 'no') {{
+    btnA.style.background = '#1A2A4A'; btnA.style.color = '#fff'; btnA.style.borderColor = '#1A2A4A';
+    btnP.style.background = '#fff'; btnP.style.color = '#1A2A4A'; btnP.style.borderColor = '#C8D4E4';
+  }} else {{
+    btnP.style.background = '#C9A84C'; btnP.style.color = '#1A2A4A'; btnP.style.borderColor = '#C9A84C';
+    btnA.style.background = '#fff'; btnA.style.color = '#1A2A4A'; btnA.style.borderColor = '#C8D4E4';
+  }}
 }}
-function selSettore(el,settore){{
-  document.querySelectorAll('.s-icon').forEach(c=>c.classList.remove('on'));
-  if(_settoreAttivo===settore){{_settoreAttivo=null;document.getElementById('keyword').value='';}}
-  else{{el.classList.add('on');_settoreAttivo=settore;document.getElementById('keyword').value=_settoriKw[settore]||'';}}
+function aggiornaFiltri() {{
+  const livello = document.getElementById('livello').value;
+  document.getElementById('regione-wrap').style.display   = livello === 'regionale' ? 'inline' : 'none';
+  document.getElementById('provincia-wrap').style.display = 'none';
+  if (livello !== 'regionale') {{ document.getElementById('regione').value = ''; }}
 }}
-function aggiornaFiltri(){{}}
-function aggiornaProvince(){{}}
+function aggiornaProvince() {{
+  const regione = document.getElementById('regione').value;
+  const wrap = document.getElementById('provincia-wrap');
+  const sel  = document.getElementById('provincia');
+  if (regione && PROVINCE[regione]) {{
+    sel.innerHTML = '<option value="">(tutte le province)</option>' +
+      PROVINCE[regione].map(p => `<option value="${{p}}">${{p}}</option>`).join('');
+    wrap.style.display = 'inline';
+  }} else {{ wrap.style.display = 'none'; }}
+}}
 async function cerca() {{
   const params = new URLSearchParams({{
     keyword:  document.getElementById('keyword').value,
-    stato:    'tutti',
-    livello:  _geoLivello[_geoAttivo]||'\0',
+    stato:    document.getElementById('stato').value,
+    livello:  document.getElementById('livello').value,
     regione:  document.getElementById('regione').value,
-    provincia: '',
+    provincia:document.getElementById('provincia').value,
     solo_titolo: _soloTitolo,
   }});
   document.getElementById('risultati').innerHTML = '<div class="loader">⏳ Ricerca in corso...</div>';
