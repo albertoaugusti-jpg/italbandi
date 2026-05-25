@@ -644,8 +644,8 @@ def index_page(user):
   <p>Migliaia di opportunità di finanziamento — europee, nazionali e regionali. Cerca, filtra e scarica la scheda PDF in un click.</p>
 </div>
 <div class="search-bar">
-  <div style="display:flex;flex:1;min-width:200px;flex-direction:column;gap:4px">
-    <input id="keyword" type="text" placeholder="🔍  Di cosa hai bisogno? (es. macchinari, formazione, energia...)" style="width:100%">
+  <div style="display:flex;flex:0 0 280px;flex-direction:column;gap:4px">
+    <input id="keyword" type="text" placeholder="🔍 Parola chiave..." style="width:100%">
     <div style="display:flex;gap:6px">
       <button id="btn-ampia" onclick="setRicerca('no')"
         style="flex:1;padding:5px 10px;background:#1A2A4A;color:#fff;border:1px solid #1A2A4A;border-radius:4px;font-size:0.72rem;font-weight:700;cursor:pointer">
@@ -686,6 +686,29 @@ def index_page(user):
   <input type="hidden" id="dove-tutto" value="no">
   <button class="btn-cerca" onclick="cerca()">Cerca</button>
 </div>
+
+<!-- Card suggerimenti ricerca -->
+<div style="background:#F0F4FB;border-bottom:1px solid #D8E2EE;padding:10px 40px">
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <span style="font-size:0.72rem;color:#8899AA;font-weight:600;white-space:nowrap">💡 Prova:</span>
+    <button onclick="suggerisci('energia rinnovabile')" class="chip-sug">⚡ energia rinnovabile</button>
+    <button onclick="suggerisci('formazione dipendenti')" class="chip-sug">👥 formazione dipendenti</button>
+    <button onclick="suggerisci('macchinari 4.0')" class="chip-sug">⚙️ macchinari 4.0</button>
+    <button onclick="suggerisci('internazionalizzazione')" class="chip-sug">🌍 internazionalizzazione</button>
+    <button onclick="suggerisci('agricoltura biologica')" class="chip-sug">🌿 agricoltura biologica</button>
+    <button onclick="suggerisci('startup innovativa')" class="chip-sug">🚀 startup innovativa</button>
+  </div>
+</div>
+
+<style>
+.chip-sug {{
+  padding:4px 12px;background:#FFFFFF;border:1px solid #C8D4E4;
+  border-radius:20px;font-size:0.75rem;color:#1A2A4A;cursor:pointer;
+  font-family:inherit;transition:all 0.15s;white-space:nowrap;
+}}
+.chip-sug:hover {{ background:#1A2A4A;color:#fff;border-color:#1A2A4A; }}
+</style>
+
 <div class="container">
   <div id="risultati-header" class="risultati-header"></div>
   <div id="risultati"></div>
@@ -714,6 +737,10 @@ const PROVINCE = {{
   "Trentino-Alto-Adige": ["Provincia di Bolzano","Provincia di Trento"],
   "Valle d'Aosta": ["Provincia di Aosta"],
 }};
+function suggerisci(kw) {{
+  document.getElementById('keyword').value = kw;
+  cerca();
+}}
 let _soloTitolo = 'no';
 function setRicerca(val) {{
   _soloTitolo = val;
