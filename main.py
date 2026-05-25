@@ -61,6 +61,38 @@ def conta_cache():
         return n
     except: return 0
 
+@app.post("/api/messaggio")
+async def api_messaggio(body: dict, session_id: str = Cookie(default=None)):
+    user = get_session(session_id)
+    if not user:
+        return JSONResponse({"error": "Non autenticato"}, status_code=401)
+    nome  = body.get("nome", "").strip()
+    testo = body.get("testo", "").strip()
+    if not nome or not testo:
+        return JSONResponse({"error": "Campi mancanti"})
+    try:
+        import requests as req
+        resp = req.post("https://api.postmarkapp.com/email",
+            headers={"X-Postmark-Server-Token": POSTMARK_KEY,
+                     "Content-Type": "application/json"},
+            json={
+                "From": "bandieincentivi@energelia.it",
+                "To": "a.castagnaro@energelia.it",
+                "Subject": f"ItalBandi - Richiesta da {nome}",
+                "TextBody": f"Nuovo messaggio da ItalBandi:\n\nUtente: {user.get('nome','')} {user.get('cognome','')} ({user.get('email','')})\nNome/Azienda: {nome}\n\nMessaggio:\n{testo}",
+            }, timeout=10)
+        result = resp.json()
+        if resp.status_code == 200 and result.get("ErrorCode", 0) == 0:
+            print(f"[MESSAGGIO] inviato da {user.get('email')} — {nome}", flush=True)
+            return JSONResponse({"ok": True})
+        else:
+            print(f"[MESSAGGIO] ERRORE: {result}", flush=True)
+            return JSONResponse({"error": "Errore Postmark"})
+    except Exception as e:
+        print(f"[MESSAGGIO] eccezione: {e}", flush=True)
+        return JSONResponse({"error": str(e)})
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -812,27 +844,89 @@ async function generaScheda(id) {{
 }}
 function mostraCtaDownload() {{
   document.getElementById('cta-modal').style.display = 'flex';
+  document.getElementById('cta-main').style.display = 'block';
+  document.getElementById('cta-form').style.display = 'none';
 }}
 function chiudiCta() {{
   document.getElementById('cta-modal').style.display = 'none';
+}}
+function mostraFormMsg() {{
+  document.getElementById('cta-main').style.display = 'none';
+  document.getElementById('cta-form').style.display = 'block';
+}}
+async function inviaMessaggio() {{
+  const nome  = document.getElementById('msg-nome').value.trim();
+  const testo = document.getElementById('msg-testo').value.trim();
+  const esito = document.getElementById('msg-esito');
+  if (!nome || !testo) {{
+    esito.style.display = 'block';
+    esito.style.background = '#2D1515';
+    esito.style.color = '#F87171';
+    esito.textContent = 'Compila tutti i campi.';
+    return;
+  }}
+  try {{
+    const r = await fetch('/api/messaggio', {{
+      method: 'POST', headers: {{'Content-Type':'application/json'}},
+      body: JSON.stringify({{nome, testo}})
+    }});
+    const d = await r.json();
+    if (d.ok) {{
+      esito.style.display = 'block';
+      esito.style.background = '#0D3321';
+      esito.style.color = '#4ADE80';
+      esito.textContent = 'Messaggio inviato! Ti contatteremo presto.';
+      document.getElementById('msg-nome').value = '';
+      document.getElementById('msg-testo').value = '';
+    }} else {{
+      throw new Error(d.error || 'Errore');
+    }}
+  }} catch(e) {{
+    esito.style.display = 'block';
+    esito.style.background = '#2D1515';
+    esito.style.color = '#F87171';
+    esito.textContent = 'Errore invio. Riprova o chiama il 010 8078800.';
+  }}
 }}
 window.onload = cerca;
 </script>
 
 <div id="cta-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;align-items:center;justify-content:center">
   <div style="background:#0F2035;border:1px solid #C9A84C;border-radius:12px;padding:36px 40px;max-width:480px;width:90%;text-align:center;position:relative">
-    <button onclick="chiudiCta()" style="position:absolute;top:12px;right:16px;background:none;border:none;color:#6A8AA8;font-size:1.2rem;cursor:pointer">✕</button>
-    <div style="font-size:2rem;margin-bottom:12px">📋</div>
-    <h3 style="color:#C9A84C;font-size:1.2rem;margin-bottom:12px">Hai trovato un bando interessante?</h3>
-    <p style="color:#A8C8E8;font-size:0.92rem;line-height:1.6;margin-bottom:24px">
-      I nostri consulenti valuteranno <strong>gratuitamente</strong> la candidatura della tua azienda.<br>
-      Contatta Antonio Castagnaro per una pre-istruttoria senza impegno.
-    </p>
-    <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
-      <a href="tel:+390108078800" style="background:#C9A84C;color:#0A1628;padding:12px 24px;border-radius:6px;font-weight:700;text-decoration:none;font-size:0.92rem">📞 010 8078800</a>
-      <a href="mailto:a.castagnaro@energelia.it" style="background:transparent;color:#C9A84C;border:1px solid #C9A84C;padding:12px 24px;border-radius:6px;font-weight:700;text-decoration:none;font-size:0.92rem">✉️ Scrivici</a>
+    <button onclick="chiudiCta()" style="position:absolute;top:12px;right:16px;background:none;border:none;color:#6A8AA8;font-size:1.2rem;cursor:pointer">X</button>
+
+    <!-- Vista principale -->
+    <div id="cta-main">
+      <div style="font-size:2rem;margin-bottom:12px">&#128203;</div>
+      <h3 style="color:#C9A84C;font-size:1.2rem;margin-bottom:12px">Hai trovato un bando interessante?</h3>
+      <p style="color:#A8C8E8;font-size:0.92rem;line-height:1.6;margin-bottom:24px">
+        I nostri consulenti valuteranno <strong>gratuitamente</strong> la candidatura della tua azienda.<br>
+        Contatta Antonio Castagnaro per una pre-istruttoria senza impegno.
+      </p>
+      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+        <span style="background:#C9A84C;color:#0A1628;padding:12px 24px;border-radius:6px;font-weight:700;font-size:0.92rem;cursor:default">&#128222; 010 8078800</span>
+        <button onclick="mostraFormMsg()" style="background:transparent;color:#C9A84C;border:1px solid #C9A84C;padding:12px 24px;border-radius:6px;font-weight:700;font-size:0.92rem;cursor:pointer">&#9993; Scrivici</button>
+      </div>
+      <p style="color:#3A5A7A;font-size:0.75rem;margin-top:16px">a.castagnaro@energelia.it</p>
     </div>
-    <p style="color:#3A5A7A;font-size:0.75rem;margin-top:16px">a.castagnaro@energelia.it</p>
+
+    <!-- Form messaggio -->
+    <div id="cta-form" style="display:none;text-align:left">
+      <h3 style="color:#C9A84C;font-size:1.1rem;margin-bottom:16px;text-align:center">Invia un messaggio</h3>
+      <div style="margin-bottom:12px">
+        <label style="display:block;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#6A8AA8;margin-bottom:4px">Nome e Azienda</label>
+        <input id="msg-nome" type="text" placeholder="Mario Rossi - Rossi S.r.l." style="width:100%;padding:9px 12px;background:#162840;border:1px solid #2A4A6B;border-radius:5px;color:#E8E8E8;font-size:0.88rem;font-family:inherit;outline:none">
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="display:block;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#6A8AA8;margin-bottom:4px">Messaggio</label>
+        <textarea id="msg-testo" rows="4" placeholder="Descrivici la tua azienda e cosa ti interessa..." style="width:100%;padding:9px 12px;background:#162840;border:1px solid #2A4A6B;border-radius:5px;color:#E8E8E8;font-size:0.88rem;font-family:inherit;outline:none;resize:vertical"></textarea>
+      </div>
+      <div id="msg-esito" style="display:none;font-size:0.82rem;margin-bottom:10px;padding:8px 12px;border-radius:5px"></div>
+      <div style="display:flex;gap:10px">
+        <button onclick="inviaMessaggio()" style="flex:1;padding:10px;background:#C9A84C;color:#0A1628;border:none;border-radius:5px;font-weight:700;cursor:pointer;font-family:inherit">Invia</button>
+        <button onclick="document.getElementById('cta-form').style.display='none';document.getElementById('cta-main').style.display='block'" style="padding:10px 16px;background:none;color:#6A8AA8;border:1px solid #2A4A6B;border-radius:5px;cursor:pointer;font-family:inherit">Indietro</button>
+      </div>
+    </div>
   </div>
 </div>
 
