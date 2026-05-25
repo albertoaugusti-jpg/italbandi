@@ -61,6 +61,11 @@ def conta_cache():
         return n
     except: return 0
 
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
 @app.get("/logo")
 async def serve_logo():
     for nome in ["Logo Bellissimo ItalBandi.png", "logo_italbandi.png", "logo.png"]:
@@ -73,7 +78,7 @@ DB_PATH  = "/tmp/italbandi.db"
 SESSIONS = {}  # session_id → {user_id, username, is_admin}
 
 # ── Database ───────────────────────────────────────────────────────────────────
-POSTMARK_KEY = "531003f7-031d-4a46-9866-331f7e74dfc4"
+POSTMARK_KEY = "a874721e-db42-4173-af5e-5f77a74bdfbc"
 BASE_URL     = "https://italbandi.onrender.com"
 
 def init_db():
@@ -103,6 +108,21 @@ def init_db():
     con.commit(); con.close()
 
 init_db()
+
+# ── Keepalive — evita sleeping Render free tier ──────────────────────────────
+def _keepalive():
+    import time
+    time.sleep(60)
+    while True:
+        try:
+            requests.get(f"{BASE_URL}/health", timeout=10)
+            print("[KEEPALIVE] ping OK", flush=True)
+        except Exception as e:
+            print(f"[KEEPALIVE] errore: {e}", flush=True)
+        time.sleep(600)
+
+threading.Thread(target=_keepalive, daemon=True).start()
+
 
 def invia_email_verifica(email, nome, token):
     """Manda email di verifica via Postmark."""
