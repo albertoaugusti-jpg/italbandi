@@ -535,7 +535,7 @@ def login_page(error=""):
       <div class="form-group"><label>Password *</label><input type="password" name="password" required placeholder="••••••••"></div>
       <button class="btn-primary" type="submit">Accedi</button>
     </form>
-    <div class="auth-footer">Non hai un account? <a href="/registrati">Registrati gratis</a></div>
+    <div class="auth-footer">Non hai un account? <a href="/registrati">Registrati gratis</a> &nbsp;·&nbsp; <a href="/reset-password">Password dimenticata?</a></div>
     <p class="privacy-note">Accedendo accetti la nostra <a href="/privacy">Privacy Policy</a>
     e la <a href="/cookie">Cookie Policy</a>.</p>
   </div>
@@ -1100,6 +1100,162 @@ async def login_post(email: str = Form(""), password: str = Form("")):
     resp = RedirectResponse("/", status_code=302)
     resp.set_cookie("session_id", sid, max_age=86400*7, httponly=True)
     return resp
+
+
+@app.get("/reset-password", response_class=HTMLResponse)
+async def reset_password_get(request: Request):
+    return HTMLResponse(f"""<!DOCTYPE html><html lang="it"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ItalBandi — Password dimenticata</title>{CSS_BASE}</head><body>
+<nav class="navbar">
+  <a href="/" style="display:flex;align-items:center;gap:12px;text-decoration:none">
+    <img src="/logo" alt="ItalBandi" style="height:60px;width:60px;object-fit:cover;border-radius:6px">
+    <span class="navbar-brand">ITAL<span>BANDI</span></span>
+  </a>
+  <div class="navbar-links"><a href="/login">Accedi</a></div>
+</nav>
+<div class="auth-wrap">
+  <div class="auth-card">
+    <h2>Password dimenticata</h2>
+    <p class="sub">Inserisci la tua email e ti mandiamo un link per reimpostare la password.</p>
+    <form method="POST" action="/reset-password">
+      <div class="form-group">
+        <label>Email *</label>
+        <input type="email" name="email" required placeholder="tuaemail@esempio.it">
+      </div>
+      <button class="btn-primary" type="submit">Invia link di reset</button>
+    </form>
+    <div class="auth-footer"><a href="/login">Torna al login</a></div>
+  </div>
+</div>
+{FOOTER_HTML}</body></html>""")
+
+
+@app.post("/reset-password", response_class=HTMLResponse)
+async def reset_password_post(email: str = Form("")):
+    msg_ok = f"""<!DOCTYPE html><html lang="it"><head>
+<meta charset="UTF-8"><title>ItalBandi — Reset inviato</title>{CSS_BASE}</head><body>
+<nav class="navbar">
+  <a href="/" style="display:flex;align-items:center;gap:12px;text-decoration:none">
+    <img src="/logo" style="height:60px;width:60px;object-fit:cover;border-radius:6px">
+    <span class="navbar-brand">ITAL<span>BANDI</span></span>
+  </a>
+</nav>
+<div class="auth-wrap"><div class="auth-card">
+  <div class="ok-msg">Se questa email e registrata, riceverai a breve il link per reimpostare la password. Controlla anche lo spam.</div>
+  <div class="auth-footer"><a href="/login">Torna al login</a></div>
+</div></div>
+{FOOTER_HTML}</body></html>"""
+
+    # Cerca utente (rispondiamo sempre OK per sicurezza)
+    try:
+        if _USE_PG:
+            import pg8000.native as pg
+            con = pg.Connection(**_pg_params)
+            rows = con.run("SELECT id, nome FROM utenti WHERE email=:e", e=email)
+            if rows:
+                token = secrets.token_urlsafe(32)
+                con.run("UPDATE utenti SET token_verifica=:t WHERE email=:e", t=token, e=email)
+            con.close()
+            row = rows[0] if rows else None
+        else:
+            con = sqlite3.connect(DB_PATH)
+            row = con.execute("SELECT id, nome FROM utenti WHERE email=?", (email,)).fetchone()
+            if row:
+                token = secrets.token_urlsafe(32)
+                con.execute("UPDATE utenti SET token_verifica=? WHERE email=?", (token, email))
+                con.commit()
+            con.close()
+
+        if row:
+            link = f"{BASE_URL}/nuova-password?token={token}"
+            import requests as req
+            req.post("https://api.postmarkapp.com/email",
+                headers={"X-Postmark-Server-Token": POSTMARK_KEY, "Content-Type": "application/json"},
+                json={
+                    "From": "bandieincentivi@energelia.it",
+                    "To": email,
+                    "Subject": "Reset password — ItalBandi",
+                    "HtmlBody": f"""<div style="font-family:Arial;max-width:500px;margin:0 auto;padding:20px">
+  <h2 style="color:#1A2A4A">Reset della tua password</h2>
+  <p>Clicca il pulsante qui sotto per scegliere una nuova password.</p>
+  <a href="{link}" style="display:inline-block;background:#C9A84C;color:#1A2A4A;padding:14px 32px;border-radius:6px;font-weight:700;text-decoration:none;margin:20px 0">
+    Reimposta password
+  </a>
+  <p style="color:#888;font-size:0.85rem">Il link e valido per 24 ore. Se non hai richiesto il reset, ignora questa email.</p>
+  <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
+  <p style="color:#888;font-size:0.8rem">ItalBandi - Energelia S.r.l. - Genova</p>
+</div>""",
+                    "TextBody": f"Reimposta la tua password:\n{link}\n\nIl link e valido per 24 ore.",
+                }, timeout=10)
+            print(f"[RESET] link inviato a {email}", flush=True)
+    except Exception as e:
+        print(f"[RESET] errore: {e}", flush=True)
+
+    return HTMLResponse(msg_ok)
+
+
+@app.get("/nuova-password", response_class=HTMLResponse)
+async def nuova_password_get(token: str = ""):
+    if not token:
+        return RedirectResponse("/login")
+    return HTMLResponse(f"""<!DOCTYPE html><html lang="it"><head>
+<meta charset="UTF-8"><title>ItalBandi — Nuova password</title>{CSS_BASE}</head><body>
+<nav class="navbar">
+  <a href="/" style="display:flex;align-items:center;gap:12px;text-decoration:none">
+    <img src="/logo" style="height:60px;width:60px;object-fit:cover;border-radius:6px">
+    <span class="navbar-brand">ITAL<span>BANDI</span></span>
+  </a>
+</nav>
+<div class="auth-wrap"><div class="auth-card">
+  <h2>Scegli la nuova password</h2>
+  <p class="sub">Inserisci la tua nuova password.</p>
+  <form method="POST" action="/nuova-password">
+    <input type="hidden" name="token" value="{token}">
+    <div class="form-group">
+      <label>Nuova password *</label>
+      <div style="position:relative">
+        <input type="password" name="password" id="npwd1" required placeholder="Min. 8 caratteri" style="width:100%;padding-right:40px">
+        <button type="button" onclick="document.getElementById('npwd1').type=document.getElementById('npwd1').type==='password'?'text':'password'"
+          style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#8899AA">&#128065;</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Ripeti password *</label>
+      <input type="password" name="password2" id="npwd2" required placeholder="Ripeti la password">
+      <div id="npwd-err" style="display:none;color:#DC2626;font-size:0.78rem;margin-top:4px">Le password non coincidono.</div>
+    </div>
+    <button class="btn-primary" type="submit" onclick="if(document.getElementById('npwd1').value!==document.getElementById('npwd2').value){{document.getElementById('npwd-err').style.display='block';return false;}}">Salva nuova password</button>
+  </form>
+</div></div>
+{FOOTER_HTML}</body></html>""")
+
+
+@app.post("/nuova-password", response_class=HTMLResponse)
+async def nuova_password_post(token: str = Form(""), password: str = Form(""), password2: str = Form("")):
+    if not token or not password or password != password2 or len(password) < 8:
+        return HTMLResponse("<p>Dati non validi. <a href='/login'>Torna al login</a></p>")
+    pw_hash = hashlib.sha256(password.encode()).hexdigest()
+    try:
+        if _USE_PG:
+            import pg8000.native as pg
+            con = pg.Connection(**_pg_params)
+            con.run("UPDATE utenti SET password_hash=:pw, token_verifica=NULL WHERE token_verifica=:t",
+                    pw=pw_hash, t=token)
+            con.close()
+        else:
+            con = sqlite3.connect(DB_PATH)
+            con.execute("UPDATE utenti SET password_hash=?, token_verifica=NULL WHERE token_verifica=?",
+                        (pw_hash, token))
+            con.commit(); con.close()
+        return HTMLResponse(f"""<!DOCTYPE html><html lang="it"><head>
+<meta charset="UTF-8"><title>ItalBandi</title>{CSS_BASE}</head><body>
+<div class="auth-wrap"><div class="auth-card">
+  <div class="ok-msg">Password aggiornata con successo!</div>
+  <div class="auth-footer"><a href="/login" class="btn-primary" style="display:block;text-align:center;text-decoration:none;margin-top:12px">Accedi ora</a></div>
+</div></div></body></html>""")
+    except Exception as e:
+        return HTMLResponse(f"<p>Errore: {e}. <a href='/login'>Torna al login</a></p>")
 
 
 @app.get("/verifica", response_class=HTMLResponse)
