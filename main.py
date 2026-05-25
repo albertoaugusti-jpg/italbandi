@@ -1541,6 +1541,131 @@ def _aggiorna_cache():
         CACHE_STATUS["running"] = False
 
 
+@app.get("/admin/utenti", response_class=HTMLResponse)
+async def admin_utenti(session_id: str = Cookie(default=None)):
+    user = get_session(session_id)
+    if not user or not user.get("is_admin"):
+        return RedirectResponse("/login")
+    con = sqlite3.connect(DB_PATH)
+    rows = con.execute("""
+        SELECT id, nome, cognome, email, impresa, ruolo, telefono,
+               verificato, created_at
+        FROM utenti ORDER BY created_at DESC
+    """).fetchall()
+    con.close()
+
+    righe_html = ""
+    for r in rows:
+        id_, nome, cognome, email, impresa, ruolo, tel, verificato, created = r
+        stato = '<span style="color:#15803D;font-weight:700">&#10003; Verificato</span>' if verificato else '<span style="color:#DC2626">&#10007; Non verificato</span>'
+        righe_html += f"""
+        <tr>
+          <td>{id_}</td>
+          <td>{nome} {cognome}</td>
+          <td>{email}</td>
+          <td>{impresa or '—'}</td>
+          <td>{ruolo or '—'}</td>
+          <td>{tel or '—'}</td>
+          <td>{stato}</td>
+          <td style="font-size:0.75rem;color:#6A8AA8">{(created or '')[:10]}</td>
+          <td>
+            <button onclick="eliminaUtente({id_}, '{email}')"
+              style="background:#DC2626;color:#fff;border:none;border-radius:4px;padding:4px 10px;font-size:0.75rem;cursor:pointer">
+              Elimina
+            </button>
+          </td>
+        </tr>"""
+
+    return HTMLResponse(f"""<!DOCTYPE html><html lang="it"><head>
+<meta charset="UTF-8"><title>Admin Utenti — ItalBandi</title>{CSS_BASE}
+<style>
+.admin-wrap {{ max-width:1100px;margin:32px auto;padding:0 20px }}
+table {{ width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(26,42,74,0.08); }}
+th {{ background:#1A2A4A;color:#C9A84C;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;padding:10px 12px;text-align:left; }}
+td {{ padding:10px 12px;font-size:0.82rem;border-bottom:1px solid #EEF2F8;color:#1A2A3A; }}
+tr:hover td {{ background:#F4F7FC; }}
+.admin-toolbar {{ display:flex;gap:12px;align-items:center;margin-bottom:20px;flex-wrap:wrap; }}
+</style>
+</head><body>
+<nav class="navbar">
+  <a href="/" style="display:flex;align-items:center;gap:12px;text-decoration:none">
+    <img src="/logo" alt="ItalBandi" style="height:60px;width:60px;object-fit:cover;border-radius:6px">
+    <span class="navbar-brand">ITAL<span>BANDI</span></span>
+  </a>
+  <div class="navbar-links">
+    <a href="/admin/cache">Cache</a>
+    <a href="/admin/utenti" style="color:#C9A84C">Utenti</a>
+    <form method="POST" action="/logout" style="margin:0">
+      <button class="btn-logout" type="submit">Esci</button>
+    </form>
+  </div>
+</nav>
+<div class="admin-wrap">
+  <div class="admin-toolbar">
+    <h2 style="color:#1A2A4A;font-size:1.2rem;font-weight:700">Utenti registrati ({len(rows)})</h2>
+    <a href="/admin/utenti/export" style="background:#1A2A4A;color:#fff;padding:8px 18px;border-radius:5px;font-size:0.82rem;font-weight:700;text-decoration:none">
+      Scarica CSV
+    </a>
+    <span style="font-size:0.78rem;color:#DC2626;font-weight:600">
+      Attenzione: il DB si svuota ad ogni deploy Render. Scarica il CSV regolarmente.
+    </span>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th><th>Nome</th><th>Email</th><th>Azienda</th>
+        <th>Ruolo</th><th>Telefono</th><th>Stato</th><th>Registrato</th><th></th>
+      </tr>
+    </thead>
+    <tbody>{righe_html}</tbody>
+  </table>
+</div>
+<script>
+async function eliminaUtente(id, email) {{
+  if (!confirm('Eliminare ' + email + '?')) return;
+  const r = await fetch('/admin/utenti/' + id, {{method:'DELETE'}});
+  const d = await r.json();
+  if (d.ok) location.reload();
+  else alert('Errore: ' + d.error);
+}}
+</script>
+</body></html>""")
+
+
+@app.get("/admin/utenti/export")
+async def admin_utenti_export(session_id: str = Cookie(default=None)):
+    user = get_session(session_id)
+    if not user or not user.get("is_admin"):
+        return RedirectResponse("/login")
+    con = sqlite3.connect(DB_PATH)
+    rows = con.execute("""
+        SELECT id, nome, cognome, email, impresa, ruolo, telefono,
+               verificato, created_at
+        FROM utenti ORDER BY created_at DESC
+    """).fetchall()
+    con.close()
+    lines = ["ID,Nome,Cognome,Email,Azienda,Ruolo,Telefono,Verificato,Registrato"]
+    for r in rows:
+        lines.append(",".join(f'"{str(v or "")}"' for v in r))
+    csv_content = "\n".join(lines)
+    return Response(
+        content=csv_content,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=italbandi_utenti_{datetime.now().strftime('%Y%m%d')}.csv"}
+    )
+
+
+@app.delete("/admin/utenti/{user_id}")
+async def admin_elimina_utente(user_id: int, session_id: str = Cookie(default=None)):
+    user = get_session(session_id)
+    if not user or not user.get("is_admin"):
+        return JSONResponse({"error": "Non autorizzato"}, status_code=403)
+    con = sqlite3.connect(DB_PATH)
+    con.execute("DELETE FROM utenti WHERE id=? AND is_admin=0", (user_id,))
+    con.commit(); con.close()
+    return JSONResponse({"ok": True})
+
+
 @app.get("/admin/cache", response_class=HTMLResponse)
 async def admin_cache_page(session_id: str = Cookie(default=None)):
     user = get_session(session_id)
