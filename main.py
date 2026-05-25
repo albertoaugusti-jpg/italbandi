@@ -1,4 +1,4 @@
-"""
+a"""
 ItalBandi — main.py
 Portale web con autenticazione, registrazione, privacy, cookie policy
 Proprietà: Energelia S.r.l. — Responsabile privacy: Bruno Massimo Legger
@@ -640,68 +640,48 @@ def index_page(user):
 <title>ItalBandi — Bandi e Incentivi per le Imprese</title>{CSS_BASE}</head><body>
 {NAVBAR_LOGGED(user)}
 <!-- HERO SECTION -->
-<div style="background:linear-gradient(160deg,#0D1E35 0%,#1A2A4A 60%,#0D1E35 100%);padding:48px 40px 32px;text-align:center">
-  <h1 style="font-size:2.6rem;font-weight:900;color:#FFFFFF;margin:0 0 10px;line-height:1.1">Trova il bando<br><span style="color:#C9A84C">giusto per te.</span></h1>
-  <p style="font-size:0.95rem;color:#6A8AA8;margin:0 0 36px">Il portale italiano dei bandi e delle opportunità per imprese, professionisti ed enti.</p>
-
-  <!-- Icone settore -->
-  <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:8px">
-    <div class="s-icon" onclick="selSettore(this,'macchinari')" title="Macchinari">
-      <div style="font-size:2rem">⚙️</div>
-      <div class="s-icon-lbl">Macchinari</div>
+<div style="background:linear-gradient(160deg,#0D1E35 0%,#1A2A4A 60%,#0D1E35 100%);padding:40px 40px 32px;text-align:center">
+  <h1 style="font-size:2.4rem;font-weight:900;color:#FFFFFF;margin:0 0 8px;line-height:1.1">Trova il bando<br><span style="color:#C9A84C">giusto per te.</span></h1>
+  <p style="font-size:0.92rem;color:#6A8AA8;margin:0 0 32px">Il portale italiano dei bandi e delle opportunità per imprese, professionisti ed enti.</p>
+  <p style="font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:#5A7A9A;font-weight:600;margin:0 0 12px">Dove vuoi cercare?</p>
+  <div style="display:flex;gap:14px;justify-content:center;margin-bottom:20px;flex-wrap:wrap">
+    <div class="geo-card" id="geo-eu" onclick="selGeo('eu',this)">
+      <svg viewBox="0 0 64 44" style="width:56px;height:38px;display:block;margin:0 auto 6px">
+        <ellipse cx="32" cy="22" rx="24" ry="17" fill="#1D4ED8" opacity="0.85"/>
+        <ellipse cx="32" cy="22" rx="24" ry="9" fill="none" stroke="#60A5FA" stroke-width="0.7" opacity="0.5"/>
+        <line x1="8" y1="22" x2="56" y2="22" stroke="#60A5FA" stroke-width="0.7" opacity="0.4"/>
+        <ellipse cx="32" cy="22" rx="24" ry="17" fill="none" stroke="#3B82F6" stroke-width="0.9"/>
+        <circle cx="25" cy="15" r="1.4" fill="#FCD34D"/>
+        <circle cx="32" cy="11" r="1.4" fill="#FCD34D"/>
+        <circle cx="39" cy="15" r="1.4" fill="#FCD34D"/>
+        <circle cx="42" cy="22" r="1.4" fill="#FCD34D"/>
+        <circle cx="39" cy="29" r="1.4" fill="#FCD34D"/>
+        <circle cx="32" cy="33" r="1.4" fill="#FCD34D"/>
+        <circle cx="25" cy="29" r="1.4" fill="#FCD34D"/>
+        <circle cx="22" cy="22" r="1.4" fill="#FCD34D"/>
+      </svg>
+      <div class="geo-lbl">Europeo</div><div class="geo-sub">Fondi UE</div>
     </div>
-    <div class="s-icon" onclick="selSettore(this,'digitale')" title="Digitale">
-      <div style="font-size:2rem">💻</div>
-      <div class="s-icon-lbl">Digitale</div>
+    <div class="geo-card" id="geo-nazionale" onclick="selGeo('nazionale',this)">
+      <svg viewBox="0 0 40 56" style="width:32px;height:44px;display:block;margin:0 auto 6px">
+        <path d="M20 3C15 4 11 9 9 15C7 20 9 23 8 28C6 33 4 35 6 40C8 45 11 47 13 52C15 57 13 61 16 63C18 65 20 64 23 61C26 58 26 54 28 50C31 46 33 46 34 42C36 37 33 32 33 27C33 22 35 19 34 14C32 9 28 5 24 3Z" fill="#2563EB" opacity="0.85"/>
+      </svg>
+      <div class="geo-lbl">Nazionale</div><div class="geo-sub">Tutta Italia</div>
     </div>
-    <div class="s-icon" onclick="selSettore(this,'energia')" title="Energia">
-      <div style="font-size:2rem">⚡</div>
-      <div class="s-icon-lbl">Energia</div>
-    </div>
-    <div class="s-icon" onclick="selSettore(this,'personale')" title="Personale">
-      <div style="font-size:2rem">👥</div>
-      <div class="s-icon-lbl">Personale</div>
-    </div>
-    <div class="s-icon" onclick="selSettore(this,'export')" title="Export">
-      <div style="font-size:2rem">🌍</div>
-      <div class="s-icon-lbl">Export</div>
-    </div>
-    <div class="s-icon" onclick="selSettore(this,'agricoltura')" title="Agricoltura">
-      <div style="font-size:2rem">🌿</div>
-      <div class="s-icon-lbl">Agricoltura</div>
-    </div>
-    <div class="s-icon" onclick="selSettore(this,'edilizia')" title="Edilizia">
-      <div style="font-size:2rem">🏗️</div>
-      <div class="s-icon-lbl">Edilizia</div>
-    </div>
-    <div class="s-icon" onclick="selSettore(this,'cultura')" title="Cultura">
-      <div style="font-size:2rem">🎨</div>
-      <div class="s-icon-lbl">Cultura</div>
+    <div class="geo-card" id="geo-regionale" onclick="selGeo('regionale',this)">
+      <svg viewBox="0 0 40 56" style="width:32px;height:44px;display:block;margin:0 auto 6px">
+        <path d="M20 3C15 4 11 9 9 15C7 20 9 23 8 28C6 33 4 35 6 40C8 45 11 47 13 52C15 57 13 61 16 63C18 65 20 64 23 61C26 58 26 54 28 50C31 46 33 46 34 42C36 37 33 32 33 27C33 22 35 19 34 14C32 9 28 5 24 3Z" fill="#374151" opacity="0.4"/>
+        <line x1="8" y1="25" x2="34" y2="25" stroke="#6B7280" stroke-width="0.8"/>
+        <line x1="7" y1="36" x2="34" y2="36" stroke="#6B7280" stroke-width="0.8"/>
+        <line x1="20" y1="3" x2="20" y2="64" stroke="#6B7280" stroke-width="0.8"/>
+        <path d="M20 3C15 4 11 9 9 15C7 20 9 23 8 28C6 33 4 35 6 40C8 45 11 47 13 52C15 57 13 61 16 63C18 65 20 64 23 61C26 58 26 54 28 50C31 46 33 46 34 42C36 37 33 32 33 27C33 22 35 19 34 14C32 9 28 5 24 3Z" fill="none" stroke="#9CA3AF" stroke-width="1.2"/>
+      </svg>
+      <div class="geo-lbl">Regionale</div><div class="geo-sub">La tua regione</div>
     </div>
   </div>
-</div>
-
-<!-- BARRA RICERCA -->
-<div style="background:#FFFFFF;border-bottom:1px solid #D8E2EE;padding:16px 40px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;box-shadow:0 2px 12px rgba(26,42,74,0.1)">
-  <div style="flex:1;min-width:200px;position:relative">
-    <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#8899AA;font-size:14px">🔍</span>
-    <input id="keyword" type="text" placeholder="Aggiungi una parola chiave..."
-      style="width:100%;padding:10px 14px 10px 34px;background:#F4F6FA;border:1px solid #C8D4E4;border-radius:6px;font-size:0.88rem;color:#1A2A3A;font-family:inherit;outline:none;box-sizing:border-box">
-  </div>
-  <select id="stato" style="padding:10px 14px;background:#F4F6FA;border:1px solid #C8D4E4;border-radius:6px;font-size:0.88rem;color:#1A2A3A;font-family:inherit;min-width:150px">
-    <option value="aperto">📋 Bandi aperti</option>
-    <option value="prossimo">🔜 Prossima apertura</option>
-    <option value="tutti">📁 Tutti</option>
-  </select>
-  <select id="livello" onchange="aggiornaFiltri()" style="padding:10px 14px;background:#F4F6FA;border:1px solid #C8D4E4;border-radius:6px;font-size:0.88rem;color:#1A2A3A;font-family:inherit;min-width:150px">
-    <option value="">📍 Tutte le regioni</option>
-    <option value="europeo">🌍 Europeo</option>
-    <option value="nazionale">🇮🇹 Nazionale</option>
-    <option value="regionale">📌 Regionale</option>
-  </select>
-  <span id="regione-wrap" style="display:none">
-    <select id="regione" style="padding:10px 14px;background:#F4F6FA;border:1px solid #C8D4E4;border-radius:6px;font-size:0.88rem;color:#1A2A3A;font-family:inherit">
-      <option value="">-- Scegli regione --</option>
+  <div id="regione-box" style="display:none;margin-bottom:20px">
+    <select id="regione" style="padding:9px 16px;background:rgba(255,255,255,0.08);color:#E8E8E8;border:1px solid rgba(201,168,76,0.5);border-radius:8px;font-size:0.88rem;font-family:inherit;min-width:220px;outline:none">
+      <option value="">-- Scegli la tua regione --</option>
       <option>Abruzzo</option><option>Basilicata</option><option>Calabria</option>
       <option>Campania</option><option>Emilia-Romagna</option><option>Friuli-Venezia-Giulia</option>
       <option>Lazio</option><option>Liguria</option><option>Lombardia</option>
@@ -710,76 +690,69 @@ def index_page(user):
       <option>Toscana</option><option>Trentino-Alto-Adige</option><option>Umbria</option>
       <option>Valle d'Aosta</option><option>Veneto</option>
     </select>
-  </span>
-  <button onclick="cerca()" style="padding:10px 32px;background:#C9A84C;color:#1A2A4A;border:none;border-radius:6px;font-size:0.95rem;font-weight:800;cursor:pointer;white-space:nowrap">Cerca →</button>
+  </div>
+  <p style="font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:#5A7A9A;font-weight:600;margin:0 0 12px">Cosa vuoi finanziare?</p>
+  <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:8px">
+    <div class="s-icon" onclick="selSettore(this,'macchinari')"><div style="font-size:1.8rem">⚙️</div><div class="s-icon-lbl">Macchinari</div></div>
+    <div class="s-icon" onclick="selSettore(this,'digitale')"><div style="font-size:1.8rem">💻</div><div class="s-icon-lbl">Digitale</div></div>
+    <div class="s-icon" onclick="selSettore(this,'energia')"><div style="font-size:1.8rem">⚡</div><div class="s-icon-lbl">Energia</div></div>
+    <div class="s-icon" onclick="selSettore(this,'personale')"><div style="font-size:1.8rem">👥</div><div class="s-icon-lbl">Personale</div></div>
+    <div class="s-icon" onclick="selSettore(this,'export')"><div style="font-size:1.8rem">🌍</div><div class="s-icon-lbl">Export</div></div>
+    <div class="s-icon" onclick="selSettore(this,'agricoltura')"><div style="font-size:1.8rem">🌿</div><div class="s-icon-lbl">Agricoltura</div></div>
+    <div class="s-icon" onclick="selSettore(this,'edilizia')"><div style="font-size:1.8rem">🏗️</div><div class="s-icon-lbl">Edilizia</div></div>
+    <div class="s-icon" onclick="selSettore(this,'cultura')"><div style="font-size:1.8rem">🎨</div><div class="s-icon-lbl">Cultura</div></div>
+  </div>
 </div>
-
+<!-- BARRA RICERCA -->
+<div style="background:#FFFFFF;border-bottom:1px solid #D8E2EE;padding:14px 40px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;box-shadow:0 2px 12px rgba(26,42,74,0.1)">
+  <div style="flex:1;min-width:200px;position:relative">
+    <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#8899AA;font-size:14px">🔍</span>
+    <input id="keyword" type="text" placeholder="Aggiungi una parola chiave (opzionale)..."
+      style="width:100%;padding:9px 14px 9px 34px;background:#F4F6FA;border:1px solid #C8D4E4;border-radius:6px;font-size:0.88rem;color:#1A2A3A;font-family:inherit;outline:none;box-sizing:border-box">
+  </div>
+  <button onclick="cerca()" style="padding:9px 32px;background:#C9A84C;color:#1A2A4A;border:none;border-radius:6px;font-size:0.95rem;font-weight:800;cursor:pointer;white-space:nowrap">Cerca →</button>
+</div>
 <div class="container">
   <div id="risultati-header" class="risultati-header"></div>
   <div id="risultati"></div>
 </div>
 {FOOTER_HTML}
 <style>
-.s-icon {{
-  background:rgba(255,255,255,0.06);
-  border:1.5px solid rgba(255,255,255,0.12);
-  border-radius:14px;
-  padding:16px 20px 12px;
-  cursor:pointer;
-  text-align:center;
-  transition:all 0.18s;
-  min-width:90px;
-}}
-.s-icon:hover {{ border-color:#C9A84C; background:rgba(201,168,76,0.1); }}
-.s-icon.on {{ border-color:#C9A84C; background:rgba(201,168,76,0.18); }}
-.s-icon-lbl {{
-  font-size:11px;font-weight:700;color:#A8C8E8;
-  margin-top:6px;letter-spacing:0.03em;
-}}
-.s-icon.on .s-icon-lbl {{ color:#C9A84C; }}
-@media(max-width:600px){{
-  .s-icon{{ min-width:70px;padding:12px 14px 10px; }}
-  .s-icon-lbl{{ font-size:10px; }}
-}}
+.geo-card{{background:rgba(255,255,255,0.05);border:1.5px solid rgba(255,255,255,0.12);border-radius:14px;padding:14px 22px 10px;cursor:pointer;text-align:center;transition:all 0.18s;min-width:100px}}
+.geo-card:hover{{border-color:#C9A84C;background:rgba(201,168,76,0.08)}}
+.geo-card.on{{border-color:#C9A84C;background:rgba(201,168,76,0.15)}}
+.geo-lbl{{font-size:12px;font-weight:700;color:#D4E8FF;margin:0}}
+.geo-card.on .geo-lbl{{color:#C9A84C}}
+.geo-sub{{font-size:10px;color:#5A7A9A;margin:2px 0 0}}
+.s-icon{{background:rgba(255,255,255,0.05);border:1.5px solid rgba(255,255,255,0.1);border-radius:12px;padding:12px 16px 10px;cursor:pointer;text-align:center;transition:all 0.18s;min-width:80px}}
+.s-icon:hover{{border-color:#C9A84C;background:rgba(201,168,76,0.08)}}
+.s-icon.on{{border-color:#C9A84C;background:rgba(201,168,76,0.18)}}
+.s-icon-lbl{{font-size:11px;font-weight:600;color:#A8C8E8;margin-top:5px}}
+.s-icon.on .s-icon-lbl{{color:#C9A84C}}
+@media(max-width:600px){{.geo-card{{min-width:80px}}.s-icon{{min-width:64px}}.s-icon-lbl{{font-size:10px}}}}
 </style>
 <script>
-const _settoriKeyword = {{
-  macchinari:'macchinari impianti',
-  digitale:'digitale software innovazione',
-  energia:'energia rinnovabile efficienza',
-  personale:'formazione lavoro occupazione',
-  export:'internazionalizzazione export estero',
-  agricoltura:'agricoltura rurale biologico',
-  edilizia:'edilizia riqualificazione ristrutturazione',
-  cultura:'cultura arte musei spettacolo',
-}};
-let _settoreAttivo = null;
-function selSettore(el, settore) {{
+let _soloTitolo='no', _geoAttivo='', _settoreAttivo=null;
+const _settoriKw={{macchinari:'macchinari impianti',digitale:'digitale software innovazione',energia:'energia rinnovabile efficienza',personale:'formazione lavoro occupazione',export:'internazionalizzazione export estero',agricoltura:'agricoltura rurale biologico',edilizia:'edilizia riqualificazione ristrutturazione',cultura:'cultura arte musei spettacolo'}};
+const _geoLivello={{eu:'europeo',nazionale:'nazionale',regionale:'regionale'}};
+function selGeo(tipo,el){{
+  document.querySelectorAll('.geo-card').forEach(c=>c.classList.remove('on'));
+  const rb=document.getElementById('regione-box');
+  if(_geoAttivo===tipo){{_geoAttivo='';rb.style.display='none';}}
+  else{{el.classList.add('on');_geoAttivo=tipo;rb.style.display=tipo==='regionale'?'block':'none';if(tipo!=='regionale')document.getElementById('regione').value='';}}
+}}
+function selSettore(el,settore){{
   document.querySelectorAll('.s-icon').forEach(c=>c.classList.remove('on'));
-  if (_settoreAttivo === settore) {{
-    _settoreAttivo = null;
-    document.getElementById('keyword').value = '';
-  }} else {{
-    el.classList.add('on');
-    _settoreAttivo = settore;
-    document.getElementById('keyword').value = _settoriKeyword[settore] || settore;
-    cerca();
-  }}
+  if(_settoreAttivo===settore){{_settoreAttivo=null;document.getElementById('keyword').value='';}}
+  else{{el.classList.add('on');_settoreAttivo=settore;document.getElementById('keyword').value=_settoriKw[settore]||'';}}
 }}
-</script>
-<script>
-let _soloTitolo = 'no';
-function aggiornaFiltri() {{
-  const v = document.getElementById('livello').value;
-  document.getElementById('regione-wrap').style.display = v === 'regionale' ? 'inline' : 'none';
-  if (v !== 'regionale') document.getElementById('regione').value = '';
-}}
-function aggiornaProvince() {{}}
+function aggiornaFiltri(){{}}
+function aggiornaProvince(){{}}
 async function cerca() {{
   const params = new URLSearchParams({{
     keyword:  document.getElementById('keyword').value,
-    stato:    document.getElementById('stato').value,
-    livello:  document.getElementById('livello').value,
+    stato:    'tutti',
+    livello:  _geoLivello[_geoAttivo]||'\0',
     regione:  document.getElementById('regione').value,
     provincia: '',
     solo_titolo: _soloTitolo,
