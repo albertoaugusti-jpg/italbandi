@@ -109,35 +109,83 @@ async def serve_logo():
 DB_PATH  = "/tmp/italbandi.db"
 SESSIONS = {}  # session_id → {user_id, username, is_admin}
 
-# ── Database ───────────────────────────────────────────────────────────────────
+# ── Database — Neon PostgreSQL con fallback SQLite ─────────────────────────────
 POSTMARK_KEY = "a874721e-db42-4173-af5e-5f77a74bdfbc"
 BASE_URL     = "https://italbandi.onrender.com"
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
+
+# Prova a connettersi a Neon
+_USE_PG = False
+_pg_params = {}
+if DATABASE_URL:
+    try:
+        import urllib.parse as _urlparse
+        _u = _urlparse.urlparse(DATABASE_URL)
+        _pg_params = dict(
+            user=_u.username, password=_u.password,
+            host=_u.hostname, port=_u.port or 5432,
+            database=_u.path.lstrip('/'),
+            ssl_context=True
+        )
+        import pg8000.native as _pg8000
+        _conn_test = _pg8000.Connection(**_pg_params)
+        _conn_test.run("SELECT 1")
+        _conn_test.close()
+        _USE_PG = True
+        print("[DB] Neon PostgreSQL connesso OK", flush=True)
+    except Exception as _e:
+        print(f"[DB] Neon fallback SQLite: {_e}", flush=True)
+
+def _db_conn():
+    """Restituisce una connessione DB — Neon o SQLite."""
+    if _USE_PG:
+        import pg8000.native as pg
+        return pg.Connection(**_pg_params)
+    return sqlite3.connect(DB_PATH)
 
 def init_db():
-    con = sqlite3.connect(DB_PATH)
-    con.execute("""CREATE TABLE IF NOT EXISTS utenti (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT NOT NULL, cognome TEXT NOT NULL,
-        email TEXT UNIQUE NOT NULL, telefono TEXT,
-        ruolo TEXT, impresa TEXT,
-        password_hash TEXT NOT NULL,
-        is_admin INTEGER DEFAULT 0,
-        verificato INTEGER DEFAULT 0,
-        token_verifica TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    )""")
-    # Migrazione: aggiungi colonne se non esistono
-    try:
-        con.execute("ALTER TABLE utenti ADD COLUMN verificato INTEGER DEFAULT 0")
-    except: pass
-    try:
-        con.execute("ALTER TABLE utenti ADD COLUMN token_verifica TEXT")
-    except: pass
-    # Admin fisso — già verificato
-    pw_hash = hashlib.sha256("Samp1946,".encode()).hexdigest()
-    con.execute("INSERT OR IGNORE INTO utenti (nome,cognome,email,password_hash,is_admin,verificato) VALUES (?,?,?,?,?,?)",
-                ("Admin","ItalBandi","admin@italbandi.it", pw_hash, 1, 1))
-    con.commit(); con.close()
+    if _USE_PG:
+        import pg8000.native as pg
+        con = pg.Connection(**_pg_params)
+        con.run("""CREATE TABLE IF NOT EXISTS utenti (
+            id SERIAL PRIMARY KEY,
+            nome TEXT NOT NULL, cognome TEXT NOT NULL,
+            email TEXT UNIQUE NOT NULL, telefono TEXT,
+            ruolo TEXT, impresa TEXT,
+            password_hash TEXT NOT NULL,
+            is_admin INTEGER DEFAULT 0,
+            verificato INTEGER DEFAULT 0,
+            token_verifica TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )""")
+        pw_hash = hashlib.sha256("Samp1946,".encode()).hexdigest()
+        con.run("""INSERT INTO utenti (nome,cognome,email,password_hash,is_admin,verificato)
+                   VALUES (:nome,:cognome,:email,:pw,:admin,:verif)
+                   ON CONFLICT (email) DO NOTHING""",
+                nome="Admin", cognome="ItalBandi",
+                email="admin@italbandi.it", pw=pw_hash, admin=1, verif=1)
+        con.close()
+    else:
+        con = sqlite3.connect(DB_PATH)
+        con.execute("""CREATE TABLE IF NOT EXISTS utenti (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT NOT NULL, cognome TEXT NOT NULL,
+            email TEXT UNIQUE NOT NULL, telefono TEXT,
+            ruolo TEXT, impresa TEXT,
+            password_hash TEXT NOT NULL,
+            is_admin INTEGER DEFAULT 0,
+            verificato INTEGER DEFAULT 0,
+            token_verifica TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )""")
+        try: con.execute("ALTER TABLE utenti ADD COLUMN verificato INTEGER DEFAULT 0")
+        except: pass
+        try: con.execute("ALTER TABLE utenti ADD COLUMN token_verifica TEXT")
+        except: pass
+        pw_hash = hashlib.sha256("Samp1946,".encode()).hexdigest()
+        con.execute("INSERT OR IGNORE INTO utenti (nome,cognome,email,password_hash,is_admin,verificato) VALUES (?,?,?,?,?,?)",
+                    ("Admin","ItalBandi","admin@italbandi.it", pw_hash, 1, 1))
+        con.commit(); con.close()
 
 init_db()
 
@@ -192,25 +240,43 @@ def invia_email_verifica(email, nome, token):
 
 def get_user(email, password):
     pw_hash = hashlib.sha256(password.encode()).hexdigest()
-    con = sqlite3.connect(DB_PATH)
-    row = con.execute("SELECT id,nome,cognome,email,is_admin,verificato FROM utenti WHERE email=? AND password_hash=?",
-                      (email, pw_hash)).fetchone()
-    con.close()
-    return row
+    if _USE_PG:
+        import pg8000.native as pg
+        con = pg.Connection(**_pg_params)
+        rows = con.run("SELECT id,nome,cognome,email,is_admin,verificato FROM utenti WHERE email=:e AND password_hash=:p",
+                       e=email, p=pw_hash)
+        con.close()
+        return rows[0] if rows else None
+    else:
+        con = sqlite3.connect(DB_PATH)
+        row = con.execute("SELECT id,nome,cognome,email,is_admin,verificato FROM utenti WHERE email=? AND password_hash=?",
+                          (email, pw_hash)).fetchone()
+        con.close()
+        return row
 
 def register_user(nome, cognome, email, password, telefono="", ruolo="", impresa=""):
     pw_hash = hashlib.sha256(password.encode()).hexdigest()
     token   = secrets.token_urlsafe(32)
     try:
-        con = sqlite3.connect(DB_PATH)
-        con.execute("INSERT INTO utenti (nome,cognome,email,password_hash,telefono,ruolo,impresa,verificato,token_verifica) VALUES (?,?,?,?,?,?,?,0,?)",
-                    (nome, cognome, email, pw_hash, telefono, ruolo, impresa, token))
-        con.commit(); con.close()
-        # Manda email di verifica in background
+        if _USE_PG:
+            import pg8000.native as pg
+            con = pg.Connection(**_pg_params)
+            con.run("""INSERT INTO utenti (nome,cognome,email,password_hash,telefono,ruolo,impresa,verificato,token_verifica)
+                       VALUES (:nome,:cognome,:email,:pw,:tel,:ruolo,:impresa,0,:token)""",
+                    nome=nome, cognome=cognome, email=email, pw=pw_hash,
+                    tel=telefono, ruolo=ruolo, impresa=impresa, token=token)
+            con.close()
+        else:
+            con = sqlite3.connect(DB_PATH)
+            con.execute("INSERT INTO utenti (nome,cognome,email,password_hash,telefono,ruolo,impresa,verificato,token_verifica) VALUES (?,?,?,?,?,?,?,0,?)",
+                        (nome, cognome, email, pw_hash, telefono, ruolo, impresa, token))
+            con.commit(); con.close()
         threading.Thread(target=invia_email_verifica, args=(email, nome, token), daemon=True).start()
         return True, ""
-    except sqlite3.IntegrityError:
-        return False, "Email già registrata."
+    except Exception as ex:
+        if "unique" in str(ex).lower() or "UNIQUE" in str(ex):
+            return False, "Email già registrata."
+        return False, str(ex)
 
 def create_session(user_row):
     sid = secrets.token_hex(32)
@@ -1040,17 +1106,32 @@ async def login_post(email: str = Form(""), password: str = Form("")):
 async def verifica_email(token: str = ""):
     if not token:
         return HTMLResponse("<h2>Link non valido.</h2>")
-    con = sqlite3.connect(DB_PATH)
-    row = con.execute("SELECT id, nome FROM utenti WHERE token_verifica=?", (token,)).fetchone()
-    if not row:
-        con.close()
-        return HTMLResponse(f"""<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Link non valido</title></head>
-<body style="font-family:Arial;text-align:center;padding:60px;background:#0A1628;color:#E8E8E8">
-<h2 style="color:#F87171">Link non valido o già utilizzato.</h2>
-<a href="/login" style="color:#C9A84C">Vai al login</a>
+    if _USE_PG:
+        import pg8000.native as pg
+        con = pg.Connection(**_pg_params)
+        rows = con.run("SELECT id, nome FROM utenti WHERE token_verifica=:t", t=token)
+        if not rows:
+            con.close()
+            return HTMLResponse(f"""<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
+<body style="font-family:Arial;text-align:center;padding:60px;background:#E8EEF7;color:#1A2A3A">
+<h2 style="color:#DC2626">Link non valido o già utilizzato.</h2>
+<a href="/login" style="color:#1A2A4A">Vai al login</a>
 </body></html>""")
-    con.execute("UPDATE utenti SET verificato=1, token_verifica=NULL WHERE id=?", (row[0],))
-    con.commit(); con.close()
+        row = rows[0]
+        con.run("UPDATE utenti SET verificato=1, token_verifica=NULL WHERE id=:id", id=row[0])
+        con.close()
+    else:
+        con = sqlite3.connect(DB_PATH)
+        row = con.execute("SELECT id, nome FROM utenti WHERE token_verifica=?", (token,)).fetchone()
+        if not row:
+            con.close()
+            return HTMLResponse(f"""<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
+<body style="font-family:Arial;text-align:center;padding:60px;background:#E8EEF7;color:#1A2A3A">
+<h2 style="color:#DC2626">Link non valido o già utilizzato.</h2>
+<a href="/login" style="color:#1A2A4A">Vai al login</a>
+</body></html>""")
+        con.execute("UPDATE utenti SET verificato=1, token_verifica=NULL WHERE id=?", (row[0],))
+        con.commit(); con.close()
     return HTMLResponse(f"""<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Email confermata</title></head>
 <body style="font-family:Arial;text-align:center;padding:60px;background:#0A1628;color:#E8E8E8">
 <div style="max-width:480px;margin:0 auto;background:#0F2035;border:1px solid #C9A84C;border-radius:12px;padding:40px">
@@ -1564,15 +1645,20 @@ async def area_riservata(session_id: str = Cookie(default=None)):
     if not user or not user.get("is_admin"):
         return RedirectResponse("/login")
 
-    con = sqlite3.connect(DB_PATH)
-    utenti = con.execute("""
-        SELECT id, nome, cognome, email, impresa, ruolo, telefono, verificato, created_at
-        FROM utenti ORDER BY created_at DESC
-    """).fetchall()
+    if _USE_PG:
+        import pg8000.native as pg
+        con = pg.Connection(**_pg_params)
+        utenti = con.run("""SELECT id, nome, cognome, email, impresa, ruolo, telefono,
+                verificato, created_at FROM utenti ORDER BY created_at DESC""")
+        con.close()
+    else:
+        con = sqlite3.connect(DB_PATH)
+        utenti = con.execute("""SELECT id, nome, cognome, email, impresa, ruolo, telefono,
+                verificato, created_at FROM utenti ORDER BY created_at DESC""").fetchall()
+        con.close()
+
     n_verificati = sum(1 for u in utenti if u[7])
     n_non_verif  = len(utenti) - n_verificati
-    con.close()
-
     righe_html = ""
     for u in utenti:
         id_, nome, cognome, email, impresa, ruolo, tel, verif, created = u
