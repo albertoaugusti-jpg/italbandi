@@ -746,7 +746,7 @@ async function cerca() {{
     stato:    document.getElementById('stato').value,
     livello:  document.getElementById('livello').value,
     regione:  document.getElementById('regione').value,
-    provincia:document.getElementById('provincia').value,
+    provincia: '',
     solo_titolo: _soloTitolo,
   }});
   document.getElementById('risultati').innerHTML = '<div class="loader">⏳ Ricerca in corso...</div>';
