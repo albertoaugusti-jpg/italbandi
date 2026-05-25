@@ -516,7 +516,15 @@ def index_page(user):
   <span id="provincia-wrap" style="display:none">
     <select id="provincia"><option value="">(tutte le province)</option></select>
   </span>
-  <button class="btn-cerca" onclick="cerca()">🔍 Cerca</button>
+  <span style="display:flex;align-items:center;gap:10px;font-size:0.78rem;color:#5A7A9A;border-left:1px solid #D0DCF0;padding-left:12px;white-space:nowrap">
+    <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+      <input type="radio" name="dove" id="dove-tutto" value="no" checked style="accent-color:#1A2A4A"> Tutto
+    </label>
+    <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+      <input type="radio" name="dove" id="dove-titolo" value="si" style="accent-color:#1A2A4A"> Solo titolo
+    </label>
+  </span>
+  <button class="btn-cerca" onclick="cerca()">Cerca</button>
 </div>
 <div class="container">
   <div id="risultati-header" class="risultati-header"></div>
@@ -564,12 +572,14 @@ function aggiornaProvince() {{
   }} else {{ wrap.style.display = 'none'; }}
 }}
 async function cerca() {{
+  const soloTitolo = document.querySelector('input[name="dove"]:checked')?.value || 'no';
   const params = new URLSearchParams({{
     keyword:  document.getElementById('keyword').value,
     stato:    document.getElementById('stato').value,
     livello:  document.getElementById('livello').value,
     regione:  document.getElementById('regione').value,
     provincia:document.getElementById('provincia').value,
+    solo_titolo: soloTitolo,
   }});
   document.getElementById('risultati').innerHTML = '<div class="loader">⏳ Ricerca in corso...</div>';
   document.getElementById('risultati-header').textContent = '';
@@ -1253,7 +1263,7 @@ async def cerca(
     request: Request,
     keyword: str = Query(""), stato: str = Query("aperto"),
     livello: str = Query(""), regione: str = Query(""),
-    provincia: str = Query(""),
+    provincia: str = Query(""), solo_titolo: str = Query("no"),
     session_id: str = Cookie(default=None)
 ):
     if not get_session(session_id):
@@ -1261,7 +1271,8 @@ async def cerca(
     try:
         hits, totale = be.cerca_bandi_web(
             keyword=keyword, stato=stato, livello=livello,
-            regione=regione, provincia=provincia, max_hits=50)
+            regione=regione, provincia=provincia, max_hits=50,
+            solo_titolo=(solo_titolo == "si"))
         bandi = [be.hit_to_card(h) for h in hits]
         return JSONResponse({"bandi": bandi, "totale": totale})
     except Exception as e:
