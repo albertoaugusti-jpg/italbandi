@@ -405,6 +405,7 @@ NAVBAR_LOGGED = lambda user: f"""
     <span style="color:#6A8AA8;font-size:0.82rem">Ciao, {user['nome']}</span>
     <a href="/privacy">Privacy</a>
     <a href="/cookie">Cookie Policy</a>
+    {'<a href="/area-riservata" style="color:#C9A84C;font-weight:700;border:1px solid rgba(201,168,76,0.4);padding:5px 12px;border-radius:4px">&#9881; Area Riservata</a>' if user.get('is_admin') else ''}
     <form method="POST" action="/logout" style="margin:0">
       <button class="btn-logout" type="submit">Esci</button>
     </form>
@@ -1539,6 +1540,142 @@ def _aggiorna_cache():
         CACHE_STATUS["messaggio"] = f"❌ Errore: {e}"
     finally:
         CACHE_STATUS["running"] = False
+
+
+@app.get("/area-riservata", response_class=HTMLResponse)
+async def area_riservata(session_id: str = Cookie(default=None)):
+    user = get_session(session_id)
+    if not user or not user.get("is_admin"):
+        return RedirectResponse("/login")
+
+    con = sqlite3.connect(DB_PATH)
+    utenti = con.execute("""
+        SELECT id, nome, cognome, email, impresa, ruolo, telefono, verificato, created_at
+        FROM utenti ORDER BY created_at DESC
+    """).fetchall()
+    n_verificati = sum(1 for u in utenti if u[7])
+    n_non_verif  = len(utenti) - n_verificati
+    con.close()
+
+    righe_html = ""
+    for u in utenti:
+        id_, nome, cognome, email, impresa, ruolo, tel, verif, created = u
+        stato = '<span style="color:#15803D;font-weight:700">&#10003;</span>' if verif else '<span style="color:#DC2626">&#10007;</span>'
+        righe_html += f"""<tr>
+          <td>{nome} {cognome}</td>
+          <td style="color:#1A3A6A">{email}</td>
+          <td>{impresa or '—'}</td>
+          <td>{tel or '—'}</td>
+          <td style="text-align:center">{stato}</td>
+          <td style="color:#8899AA;font-size:0.75rem">{(created or '')[:10]}</td>
+          <td><button onclick="eliminaUtente({id_}, '{email}')"
+            style="background:#FEF2F2;color:#DC2626;border:1px solid #FECACA;border-radius:4px;padding:3px 10px;font-size:0.73rem;cursor:pointer">
+            Elimina</button></td>
+        </tr>"""
+
+    return HTMLResponse(f"""<!DOCTYPE html><html lang="it"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Area Riservata — ItalBandi</title>{CSS_BASE}
+<style>
+.ar-wrap {{ max-width:1100px;margin:32px auto;padding:0 24px 60px }}
+.ar-grid {{ display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:32px }}
+.ar-card {{ background:#fff;border:1px solid #D0DCF0;border-radius:10px;padding:20px 24px;box-shadow:0 2px 8px rgba(26,42,74,0.06) }}
+.ar-card h3 {{ font-size:0.72rem;text-transform:uppercase;letter-spacing:0.1em;color:#8899AA;margin-bottom:6px }}
+.ar-card .val {{ font-size:2rem;font-weight:800;color:#1A2A4A }}
+.ar-card .sub {{ font-size:0.75rem;color:#8899AA;margin-top:4px }}
+.ar-section {{ background:#fff;border:1px solid #D0DCF0;border-radius:10px;padding:24px;box-shadow:0 2px 8px rgba(26,42,74,0.06);margin-bottom:24px }}
+.ar-section h2 {{ font-size:1rem;font-weight:700;color:#1A2A4A;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between }}
+table {{ width:100%;border-collapse:collapse }}
+th {{ font-size:0.7rem;text-transform:uppercase;letter-spacing:0.06em;color:#8899AA;padding:8px 12px;text-align:left;border-bottom:2px solid #EEF2F8 }}
+td {{ padding:10px 12px;font-size:0.82rem;border-bottom:1px solid #EEF2F8;color:#1A2A3A }}
+tr:last-child td {{ border-bottom:none }}
+tr:hover td {{ background:#F8FAFF }}
+.btn-ar {{ padding:7px 16px;border-radius:5px;font-size:0.8rem;font-weight:700;cursor:pointer;font-family:inherit;border:none }}
+.btn-ar-primary {{ background:#1A2A4A;color:#fff }}
+.btn-ar-primary:hover {{ background:#C9A84C }}
+.btn-ar-gold {{ background:#C9A84C;color:#1A2A4A }}
+.btn-ar-gold:hover {{ background:#E0BF6A }}
+</style>
+</head><body>
+{NAVBAR_LOGGED(user)}
+<div class="ar-wrap">
+  <h1 style="font-size:1.4rem;font-weight:800;color:#1A2A4A;margin-bottom:24px">&#9881; Area Riservata</h1>
+
+  <!-- Statistiche -->
+  <div class="ar-grid">
+    <div class="ar-card">
+      <h3>Utenti totali</h3>
+      <div class="val">{len(utenti)}</div>
+      <div class="sub">{n_verificati} verificati · {n_non_verif} in attesa</div>
+    </div>
+    <div class="ar-card">
+      <h3>Cache bandi</h3>
+      <div class="val" id="n-cache">...</div>
+      <div class="sub">bandi in cache</div>
+    </div>
+    <div class="ar-card">
+      <h3>Azioni rapide</h3>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+        <button class="btn-ar btn-ar-primary" onclick="window.location='/area-riservata/cache'">Aggiorna cache bandi</button>
+        <button class="btn-ar btn-ar-gold" onclick="window.location='/area-riservata/utenti/export'">Scarica CSV utenti</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lista utenti -->
+  <div class="ar-section">
+    <h2>
+      Utenti registrati ({len(utenti)})
+      <a href="/area-riservata/utenti/export" style="font-size:0.8rem;font-weight:600;color:#1A3A6A;text-decoration:none;border:1px solid #C8D4E4;padding:5px 12px;border-radius:5px">
+        Scarica CSV
+      </a>
+    </h2>
+    <div style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:6px;padding:10px 14px;font-size:0.78rem;color:#92400E;margin-bottom:16px">
+      &#9888; Il database si svuota ad ogni deploy Render. Scarica il CSV regolarmente per non perdere i dati.
+    </div>
+    <table>
+      <thead><tr>
+        <th>Nome</th><th>Email</th><th>Azienda</th><th>Telefono</th>
+        <th style="text-align:center">Verif.</th><th>Registrato</th><th></th>
+      </tr></thead>
+      <tbody>{righe_html}</tbody>
+    </table>
+  </div>
+
+  <!-- Sezione cache -->
+  <div class="ar-section">
+    <h2>Cache bandi</h2>
+    <p style="font-size:0.85rem;color:#6A8AA8;margin-bottom:16px">
+      La cache contiene il testo delle pagine ContributiEuropa pre-scaricato. Aggiornala periodicamente per avere i bandi aggiornati.
+    </p>
+    <button class="btn-ar btn-ar-primary" onclick="window.location='/area-riservata/cache'">Vai alla gestione cache</button>
+  </div>
+</div>
+
+<script>
+async function eliminaUtente(id, email) {{
+  if (!confirm('Eliminare ' + email + '?')) return;
+  const r = await fetch('/admin/utenti/' + id, {{method:'DELETE'}});
+  const d = await r.json();
+  if (d.ok) location.reload();
+  else alert('Errore: ' + d.error);
+}}
+// Carica conteggio cache
+fetch('/admin/cache/status').then(r=>r.json()).then(d=>{{
+  document.getElementById('n-cache').textContent = d.totale || 0;
+}}).catch(()=>{{document.getElementById('n-cache').textContent='—'}});
+</script>
+</body></html>""")
+
+
+@app.get("/area-riservata/utenti/export")
+async def area_riservata_export(session_id: str = Cookie(default=None)):
+    return await admin_utenti_export(session_id=session_id)
+
+
+@app.get("/area-riservata/cache", response_class=HTMLResponse)
+async def area_riservata_cache(session_id: str = Cookie(default=None)):
+    return await admin_cache(session_id=session_id)
 
 
 @app.get("/admin/utenti", response_class=HTMLResponse)
