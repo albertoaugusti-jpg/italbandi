@@ -661,15 +661,15 @@ def index_page(user):
   <p style="font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:#5A7A9A;font-weight:600;margin:0 0 12px">Dove vuoi cercare?</p>
   <div style="display:flex;gap:14px;justify-content:center;margin-bottom:20px;flex-wrap:wrap">
     <div class="geo-card" id="geo-eu" onclick="selGeo('eu',this)">
-      <img src="/ico_eu.png" style="width:60px;height:60px;object-fit:contain;display:block;margin:0 auto 6px">
+      <div style="font-size:3rem;line-height:1;margin-bottom:6px">🇪🇺</div>
       <div class="geo-lbl">Europeo</div><div class="geo-sub">Fondi UE</div>
     </div>
     <div class="geo-card" id="geo-nazionale" onclick="selGeo('nazionale',this)">
-      <img src="/ico_italia.png" style="width:42px;height:60px;object-fit:contain;display:block;margin:0 auto 6px">
+      <div style="font-size:3rem;line-height:1;margin-bottom:6px">🇮🇹</div>
       <div class="geo-lbl">Nazionale</div><div class="geo-sub">Tutta Italia</div>
     </div>
     <div class="geo-card" id="geo-regionale" onclick="selGeo('regionale',this)">
-      <img src="/ico_regioni.png" style="width:42px;height:60px;object-fit:contain;display:block;margin:0 auto 6px">
+      <div style="font-size:3rem;line-height:1;margin-bottom:6px">🏛️</div>
       <div class="geo-lbl">Regionale</div><div class="geo-sub">La tua regione</div>
     </div>
   </div>
