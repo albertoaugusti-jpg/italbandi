@@ -769,59 +769,12 @@ function selSettore(el, settore) {{
 </script>
 <script>
 let _soloTitolo = 'no';
-function setRicerca(val) {{
-  _soloTitolo = val;
-}}
 function aggiornaFiltri() {{
   const v = document.getElementById('livello').value;
   document.getElementById('regione-wrap').style.display = v === 'regionale' ? 'inline' : 'none';
   if (v !== 'regionale') document.getElementById('regione').value = '';
 }}
-  "Lazio":      ["Provincia di Frosinone","Provincia di Latina","Provincia di Rieti","Provincia di Roma","Provincia di Viterbo"],
-  "Campania":   ["Provincia di Avellino","Provincia di Benevento","Provincia di Caserta","Provincia di Napoli","Provincia di Salerno"],
-  "Emilia-Romagna": ["Provincia di Bologna","Provincia di Ferrara","Provincia di Forli-Cesena","Provincia di Modena","Provincia di Parma","Provincia di Piacenza","Provincia di Ravenna","Provincia di Reggio-Emilia","Provincia di Rimini"],
-  "Puglia":     ["Provincia di Bari","Provincia di Barletta-Andria-Trani","Provincia di Brindisi","Provincia di Foggia","Provincia di Lecce","Provincia di Taranto"],
-  "Sicilia":    ["Provincia di Agrigento","Provincia di Caltanissetta","Provincia di Catania","Provincia di Enna","Provincia di Messina","Provincia di Palermo","Provincia di Ragusa","Provincia di Siracusa","Provincia di Trapani"],
-  "Sardegna":   ["Provincia di Cagliari","Provincia di Nuoro","Provincia di Oristano","Provincia di Sassari"],
-  "Abruzzo":    ["Provincia di Chieti","Provincia di L'Aquila","Provincia di Pescara","Provincia di Teramo"],
-  "Marche":     ["Provincia di Ancona","Provincia di Ascoli Piceno","Provincia di Fermo","Provincia di Macerata","Provincia di Pesaro Urbino"],
-  "Friuli-Venezia-Giulia": ["Provincia di Gorizia","Provincia di Pordenone","Provincia di Trieste","Provincia di Udine"],
-  "Calabria":   ["Provincia di Catanzaro","Provincia di Cosenza","Provincia di Crotone","Provincia di Reggio-Calabria","Provincia di Vibo-Valentia"],
-  "Umbria":     ["Provincia di Perugia","Provincia di Terni"],
-  "Basilicata": ["Provincia di Matera","Provincia di Potenza"],
-  "Molise":     ["Provincia di Campobasso","Provincia di Isernia"],
-  "Trentino-Alto-Adige": ["Provincia di Bolzano","Provincia di Trento"],
-  "Valle d'Aosta": ["Provincia di Aosta"],
-}};
-let _soloTitolo = 'no';
-function setRicerca(val) {{
-  _soloTitolo = val;
-  const btnA = document.getElementById('btn-ampia');
-  const btnP = document.getElementById('btn-precisa');
-  if (val === 'no') {{
-    btnA.style.background = '#1A2A4A'; btnA.style.color = '#fff'; btnA.style.borderColor = '#1A2A4A';
-    btnP.style.background = '#fff'; btnP.style.color = '#1A2A4A'; btnP.style.borderColor = '#C8D4E4';
-  }} else {{
-    btnP.style.background = '#C9A84C'; btnP.style.color = '#1A2A4A'; btnP.style.borderColor = '#C9A84C';
-    btnA.style.background = '#fff'; btnA.style.color = '#1A2A4A'; btnA.style.borderColor = '#C8D4E4';
-  }}
-}}
-function aggiornaFiltri() {{
-  const livello = document.getElementById('livello').value;
-  document.getElementById('regione-wrap').style.display   = livello === 'regionale' ? 'inline' : 'none';
-  document.getElementById('provincia-wrap').style.display = 'none';
-  if (livello !== 'regionale') {{ document.getElementById('regione').value = ''; }}
-}}
-function aggiornaProvince() {{
-  const regione = document.getElementById('regione').value;
-  const wrap = document.getElementById('provincia-wrap');
-  const sel  = document.getElementById('provincia');
-  if (regione && PROVINCE[regione]) {{
-    sel.innerHTML = '<option value="">(tutte le province)</option>' +
-      PROVINCE[regione].map(p => `<option value="${{p}}">${{p}}</option>`).join('');
-    wrap.style.display = 'inline';
-  }} else {{ wrap.style.display = 'none'; }}
-}}
+function aggiornaProvince() {{}}
 async function cerca() {{
   const params = new URLSearchParams({{
     keyword:  document.getElementById('keyword').value,
