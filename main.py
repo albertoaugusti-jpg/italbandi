@@ -639,37 +639,68 @@ def index_page(user):
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ItalBandi — Bandi e Incentivi per le Imprese</title>{CSS_BASE}</head><body>
 {NAVBAR_LOGGED(user)}
-<div class="hero">
-  <h2>Ricerca Bandi</h2>
-  <p>Trova le opportunità di finanziamento per la tua impresa. Filtra per livello geografico e scarica la scheda PDF professionale.</p>
-</div>
-<div class="search-bar">
-  <div style="display:flex;flex:1;min-width:200px;flex-direction:column;gap:4px">
-    <input id="keyword" type="text" placeholder="Parola chiave (es. formazione, energia, PMI...)" style="width:100%">
-    <div style="display:flex;gap:6px">
-      <button id="btn-ampia" onclick="setRicerca('no')"
-        style="flex:1;padding:5px 10px;background:#1A2A4A;color:#fff;border:1px solid #1A2A4A;border-radius:4px;font-size:0.72rem;font-weight:700;cursor:pointer">
-        Nel testo
-      </button>
-      <button id="btn-precisa" onclick="setRicerca('si')"
-        style="flex:1;padding:5px 10px;background:#fff;color:#1A2A4A;border:1px solid #C8D4E4;border-radius:4px;font-size:0.72rem;font-weight:700;cursor:pointer">
-        Nel titolo
-      </button>
+<!-- HERO SECTION -->
+<div style="background:linear-gradient(160deg,#0D1E35 0%,#1A2A4A 60%,#0D1E35 100%);padding:48px 40px 32px;text-align:center">
+  <h1 style="font-size:2.6rem;font-weight:900;color:#FFFFFF;margin:0 0 10px;line-height:1.1">Trova il bando<br><span style="color:#C9A84C">giusto per te.</span></h1>
+  <p style="font-size:0.95rem;color:#6A8AA8;margin:0 0 36px">Il portale italiano dei bandi e delle opportunità per imprese, professionisti ed enti.</p>
+
+  <!-- Icone settore -->
+  <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:8px">
+    <div class="s-icon" onclick="selSettore(this,'macchinari')" title="Macchinari">
+      <div style="font-size:2rem">⚙️</div>
+      <div class="s-icon-lbl">Macchinari</div>
+    </div>
+    <div class="s-icon" onclick="selSettore(this,'digitale')" title="Digitale">
+      <div style="font-size:2rem">💻</div>
+      <div class="s-icon-lbl">Digitale</div>
+    </div>
+    <div class="s-icon" onclick="selSettore(this,'energia')" title="Energia">
+      <div style="font-size:2rem">⚡</div>
+      <div class="s-icon-lbl">Energia</div>
+    </div>
+    <div class="s-icon" onclick="selSettore(this,'personale')" title="Personale">
+      <div style="font-size:2rem">👥</div>
+      <div class="s-icon-lbl">Personale</div>
+    </div>
+    <div class="s-icon" onclick="selSettore(this,'export')" title="Export">
+      <div style="font-size:2rem">🌍</div>
+      <div class="s-icon-lbl">Export</div>
+    </div>
+    <div class="s-icon" onclick="selSettore(this,'agricoltura')" title="Agricoltura">
+      <div style="font-size:2rem">🌿</div>
+      <div class="s-icon-lbl">Agricoltura</div>
+    </div>
+    <div class="s-icon" onclick="selSettore(this,'edilizia')" title="Edilizia">
+      <div style="font-size:2rem">🏗️</div>
+      <div class="s-icon-lbl">Edilizia</div>
+    </div>
+    <div class="s-icon" onclick="selSettore(this,'cultura')" title="Cultura">
+      <div style="font-size:2rem">🎨</div>
+      <div class="s-icon-lbl">Cultura</div>
     </div>
   </div>
-  <select id="stato">
-    <option value="aperto">Bandi aperti</option>
-    <option value="prossimo">Prossima apertura</option>
-    <option value="tutti">Tutti</option>
+</div>
+
+<!-- BARRA RICERCA -->
+<div style="background:#FFFFFF;border-bottom:1px solid #D8E2EE;padding:16px 40px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;box-shadow:0 2px 12px rgba(26,42,74,0.1)">
+  <div style="flex:1;min-width:200px;position:relative">
+    <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#8899AA;font-size:14px">🔍</span>
+    <input id="keyword" type="text" placeholder="Aggiungi una parola chiave..."
+      style="width:100%;padding:10px 14px 10px 34px;background:#F4F6FA;border:1px solid #C8D4E4;border-radius:6px;font-size:0.88rem;color:#1A2A3A;font-family:inherit;outline:none;box-sizing:border-box">
+  </div>
+  <select id="stato" style="padding:10px 14px;background:#F4F6FA;border:1px solid #C8D4E4;border-radius:6px;font-size:0.88rem;color:#1A2A3A;font-family:inherit;min-width:150px">
+    <option value="aperto">📋 Bandi aperti</option>
+    <option value="prossimo">🔜 Prossima apertura</option>
+    <option value="tutti">📁 Tutti</option>
   </select>
-  <select id="livello" onchange="aggiornaFiltri()">
-    <option value="">Tutti i bandi</option>
-    <option value="europeo">Europeo</option>
-    <option value="nazionale">Nazionale</option>
-    <option value="regionale">Regionale</option>
+  <select id="livello" onchange="aggiornaFiltri()" style="padding:10px 14px;background:#F4F6FA;border:1px solid #C8D4E4;border-radius:6px;font-size:0.88rem;color:#1A2A3A;font-family:inherit;min-width:150px">
+    <option value="">📍 Tutte le regioni</option>
+    <option value="europeo">🌍 Europeo</option>
+    <option value="nazionale">🇮🇹 Nazionale</option>
+    <option value="regionale">📌 Regionale</option>
   </select>
   <span id="regione-wrap" style="display:none">
-    <select id="regione">
+    <select id="regione" style="padding:10px 14px;background:#F4F6FA;border:1px solid #C8D4E4;border-radius:6px;font-size:0.88rem;color:#1A2A3A;font-family:inherit">
       <option value="">-- Scegli regione --</option>
       <option>Abruzzo</option><option>Basilicata</option><option>Calabria</option>
       <option>Campania</option><option>Emilia-Romagna</option><option>Friuli-Venezia-Giulia</option>
@@ -680,21 +711,72 @@ def index_page(user):
       <option>Valle d'Aosta</option><option>Veneto</option>
     </select>
   </span>
-  <input type="hidden" id="dove-tutto" value="no">
-  <button class="btn-cerca" onclick="cerca()">Cerca</button>
+  <button onclick="cerca()" style="padding:10px 32px;background:#C9A84C;color:#1A2A4A;border:none;border-radius:6px;font-size:0.95rem;font-weight:800;cursor:pointer;white-space:nowrap">Cerca →</button>
 </div>
+
 <div class="container">
   <div id="risultati-header" class="risultati-header"></div>
   <div id="risultati"></div>
 </div>
 {FOOTER_HTML}
+<style>
+.s-icon {{
+  background:rgba(255,255,255,0.06);
+  border:1.5px solid rgba(255,255,255,0.12);
+  border-radius:14px;
+  padding:16px 20px 12px;
+  cursor:pointer;
+  text-align:center;
+  transition:all 0.18s;
+  min-width:90px;
+}}
+.s-icon:hover {{ border-color:#C9A84C; background:rgba(201,168,76,0.1); }}
+.s-icon.on {{ border-color:#C9A84C; background:rgba(201,168,76,0.18); }}
+.s-icon-lbl {{
+  font-size:11px;font-weight:700;color:#A8C8E8;
+  margin-top:6px;letter-spacing:0.03em;
+}}
+.s-icon.on .s-icon-lbl {{ color:#C9A84C; }}
+@media(max-width:600px){{
+  .s-icon{{ min-width:70px;padding:12px 14px 10px; }}
+  .s-icon-lbl{{ font-size:10px; }}
+}}
+</style>
 <script>
-const PROVINCE = {{
-  "Liguria":    ["Provincia di Genova","Provincia di Imperia","Provincia di La-Spezia","Provincia di Savona"],
-  "Lombardia":  ["Provincia di Bergamo","Provincia di Brescia","Provincia di Como","Provincia di Cremona","Provincia di Lecco","Provincia di Lodi","Provincia di Mantova","Provincia di Milano","Provincia di Monza-Brianza","Provincia di Pavia","Provincia di Sondrio","Provincia di Varese"],
-  "Piemonte":   ["Provincia di Alessandria","Provincia di Asti","Provincia di Biella","Provincia di Cuneo","Provincia di Novara","Provincia di Torino","Provincia di Verbano-Cusio-Ossola","Provincia di Vercelli"],
-  "Veneto":     ["Provincia di Belluno","Provincia di Padova","Provincia di Rovigo","Provincia di Treviso","Provincia di Venezia","Provincia di Verona","Provincia di Vicenza"],
-  "Toscana":    ["Provincia di Arezzo","Provincia di Firenze","Provincia di Grosseto","Provincia di Livorno","Provincia di Lucca","Provincia di Massa-Carrara","Provincia di Pisa","Provincia di Pistoia","Provincia di Prato","Provincia di Siena"],
+const _settoriKeyword = {{
+  macchinari:'macchinari impianti',
+  digitale:'digitale software innovazione',
+  energia:'energia rinnovabile efficienza',
+  personale:'formazione lavoro occupazione',
+  export:'internazionalizzazione export estero',
+  agricoltura:'agricoltura rurale biologico',
+  edilizia:'edilizia riqualificazione ristrutturazione',
+  cultura:'cultura arte musei spettacolo',
+}};
+let _settoreAttivo = null;
+function selSettore(el, settore) {{
+  document.querySelectorAll('.s-icon').forEach(c=>c.classList.remove('on'));
+  if (_settoreAttivo === settore) {{
+    _settoreAttivo = null;
+    document.getElementById('keyword').value = '';
+  }} else {{
+    el.classList.add('on');
+    _settoreAttivo = settore;
+    document.getElementById('keyword').value = _settoriKeyword[settore] || settore;
+    cerca();
+  }}
+}}
+</script>
+<script>
+let _soloTitolo = 'no';
+function setRicerca(val) {{
+  _soloTitolo = val;
+}}
+function aggiornaFiltri() {{
+  const v = document.getElementById('livello').value;
+  document.getElementById('regione-wrap').style.display = v === 'regionale' ? 'inline' : 'none';
+  if (v !== 'regionale') document.getElementById('regione').value = '';
+}}
   "Lazio":      ["Provincia di Frosinone","Provincia di Latina","Provincia di Rieti","Provincia di Roma","Provincia di Viterbo"],
   "Campania":   ["Provincia di Avellino","Provincia di Benevento","Provincia di Caserta","Provincia di Napoli","Provincia di Salerno"],
   "Emilia-Romagna": ["Provincia di Bologna","Provincia di Ferrara","Provincia di Forli-Cesena","Provincia di Modena","Provincia di Parma","Provincia di Piacenza","Provincia di Ravenna","Provincia di Reggio-Emilia","Provincia di Rimini"],
