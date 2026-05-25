@@ -61,43 +61,6 @@ def conta_cache():
         return n
     except: return 0
 
-@app.post("/api/messaggio")
-async def api_messaggio(body: dict, session_id: str = Cookie(default=None)):
-    user = get_session(session_id)
-    if not user:
-        return JSONResponse({"error": "Non autenticato"}, status_code=401)
-    nome  = body.get("nome", "").strip()
-    testo = body.get("testo", "").strip()
-    if not nome or not testo:
-        return JSONResponse({"error": "Campi mancanti"})
-    try:
-        import requests as req
-        resp = req.post("https://api.postmarkapp.com/email",
-            headers={"X-Postmark-Server-Token": POSTMARK_KEY,
-                     "Content-Type": "application/json"},
-            json={
-                "From": "bandieincentivi@energelia.it",
-                "To": "a.castagnaro@energelia.it",
-                "Subject": f"ItalBandi - Richiesta da {nome}",
-                "TextBody": f"Nuovo messaggio da ItalBandi:\n\nUtente: {user.get('nome','')} {user.get('cognome','')} ({user.get('email','')})\nNome/Azienda: {nome}\n\nMessaggio:\n{testo}",
-            }, timeout=10)
-        result = resp.json()
-        if resp.status_code == 200 and result.get("ErrorCode", 0) == 0:
-            print(f"[MESSAGGIO] inviato da {user.get('email')} — {nome}", flush=True)
-            return JSONResponse({"ok": True})
-        else:
-            print(f"[MESSAGGIO] ERRORE: {result}", flush=True)
-            return JSONResponse({"error": "Errore Postmark"})
-    except Exception as e:
-        print(f"[MESSAGGIO] eccezione: {e}", flush=True)
-        return JSONResponse({"error": str(e)})
-
-
-@app.api_route("/health", methods=["GET", "HEAD"])
-def health():
-    return {"status": "ok"}
-
-
 @app.get("/logo")
 async def serve_logo():
     for nome in ["Logo Bellissimo ItalBandi.png", "logo_italbandi.png", "logo.png"]:
@@ -109,174 +72,88 @@ async def serve_logo():
 DB_PATH  = "/tmp/italbandi.db"
 SESSIONS = {}  # session_id → {user_id, username, is_admin}
 
-# ── Database — Neon PostgreSQL con fallback SQLite ─────────────────────────────
-POSTMARK_KEY = "a874721e-db42-4173-af5e-5f77a74bdfbc"
+# ── Database ───────────────────────────────────────────────────────────────────
+POSTMARK_KEY = "531003f7-031d-4a46-9866-331f7e74dfc4"
 BASE_URL     = "https://italbandi.onrender.com"
-DATABASE_URL = os.environ.get("DATABASE_URL", "")
-
-# Prova a connettersi a Neon
-_USE_PG = False
-_pg_params = {}
-if DATABASE_URL:
-    try:
-        import urllib.parse as _urlparse
-        _u = _urlparse.urlparse(DATABASE_URL)
-        _pg_params = dict(
-            user=_u.username, password=_u.password,
-            host=_u.hostname, port=_u.port or 5432,
-            database=_u.path.lstrip('/'),
-            ssl_context=True
-        )
-        import pg8000.native as _pg8000
-        _conn_test = _pg8000.Connection(**_pg_params)
-        _conn_test.run("SELECT 1")
-        _conn_test.close()
-        _USE_PG = True
-        print("[DB] Neon PostgreSQL connesso OK", flush=True)
-    except Exception as _e:
-        print(f"[DB] Neon fallback SQLite: {_e}", flush=True)
-
-def _db_conn():
-    """Restituisce una connessione DB — Neon o SQLite."""
-    if _USE_PG:
-        import pg8000.native as pg
-        return pg.Connection(**_pg_params)
-    return sqlite3.connect(DB_PATH)
 
 def init_db():
-    if _USE_PG:
-        import pg8000.native as pg
-        con = pg.Connection(**_pg_params)
-        con.run("""CREATE TABLE IF NOT EXISTS utenti (
-            id SERIAL PRIMARY KEY,
-            nome TEXT NOT NULL, cognome TEXT NOT NULL,
-            email TEXT UNIQUE NOT NULL, telefono TEXT,
-            ruolo TEXT, impresa TEXT,
-            password_hash TEXT NOT NULL,
-            is_admin INTEGER DEFAULT 0,
-            verificato INTEGER DEFAULT 0,
-            token_verifica TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )""")
-        pw_hash = hashlib.sha256("Samp1946,".encode()).hexdigest()
-        con.run("""INSERT INTO utenti (nome,cognome,email,password_hash,is_admin,verificato)
-                   VALUES (:nome,:cognome,:email,:pw,:admin,:verif)
-                   ON CONFLICT (email) DO NOTHING""",
-                nome="Admin", cognome="ItalBandi",
-                email="admin@italbandi.it", pw=pw_hash, admin=1, verif=1)
-        con.close()
-    else:
-        con = sqlite3.connect(DB_PATH)
-        con.execute("""CREATE TABLE IF NOT EXISTS utenti (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome TEXT NOT NULL, cognome TEXT NOT NULL,
-            email TEXT UNIQUE NOT NULL, telefono TEXT,
-            ruolo TEXT, impresa TEXT,
-            password_hash TEXT NOT NULL,
-            is_admin INTEGER DEFAULT 0,
-            verificato INTEGER DEFAULT 0,
-            token_verifica TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )""")
-        try: con.execute("ALTER TABLE utenti ADD COLUMN verificato INTEGER DEFAULT 0")
-        except: pass
-        try: con.execute("ALTER TABLE utenti ADD COLUMN token_verifica TEXT")
-        except: pass
-        pw_hash = hashlib.sha256("Samp1946,".encode()).hexdigest()
-        con.execute("INSERT OR IGNORE INTO utenti (nome,cognome,email,password_hash,is_admin,verificato) VALUES (?,?,?,?,?,?)",
-                    ("Admin","ItalBandi","admin@italbandi.it", pw_hash, 1, 1))
-        con.commit(); con.close()
+    con = sqlite3.connect(DB_PATH)
+    con.execute("""CREATE TABLE IF NOT EXISTS utenti (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT NOT NULL, cognome TEXT NOT NULL,
+        email TEXT UNIQUE NOT NULL, telefono TEXT,
+        ruolo TEXT, impresa TEXT,
+        password_hash TEXT NOT NULL,
+        is_admin INTEGER DEFAULT 0,
+        verificato INTEGER DEFAULT 0,
+        token_verifica TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )""")
+    # Migrazione: aggiungi colonne se non esistono
+    try:
+        con.execute("ALTER TABLE utenti ADD COLUMN verificato INTEGER DEFAULT 0")
+    except: pass
+    try:
+        con.execute("ALTER TABLE utenti ADD COLUMN token_verifica TEXT")
+    except: pass
+    # Admin fisso — già verificato
+    pw_hash = hashlib.sha256("Samp1946,".encode()).hexdigest()
+    con.execute("INSERT OR IGNORE INTO utenti (nome,cognome,email,password_hash,is_admin,verificato) VALUES (?,?,?,?,?,?)",
+                ("Admin","ItalBandi","admin@italbandi.it", pw_hash, 1, 1))
+    con.commit(); con.close()
 
 init_db()
-
-# ── Keepalive — evita sleeping Render free tier ──────────────────────────────
-def _keepalive():
-    import time, requests as req
-    time.sleep(60)
-    while True:
-        try:
-            req.get(f"{BASE_URL}/health", timeout=10)
-            print("[KEEPALIVE] ping OK", flush=True)
-        except Exception as e:
-            print(f"[KEEPALIVE] errore: {e}", flush=True)
-        time.sleep(600)
-
-threading.Thread(target=_keepalive, daemon=True).start()
-
 
 def invia_email_verifica(email, nome, token):
     """Manda email di verifica via Postmark."""
     try:
         import requests as req
         link = f"{BASE_URL}/verifica?token={token}"
-        resp = req.post("https://api.postmarkapp.com/email",
+        req.post("https://api.postmarkapp.com/email",
             headers={"X-Postmark-Server-Token": POSTMARK_KEY,
                      "Content-Type": "application/json"},
             json={
-                "From": "bandieincentivi@energelia.it",
-                "ReplyTo": "a.castagnaro@energelia.it",
+                "From": "noreply@energelia.it",
                 "To": email,
-                "Subject": "Conferma la tua email - ItalBandi",
+                "Subject": "Conferma la tua email — ItalBandi",
                 "HtmlBody": f"""
-<div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;padding:20px">
-  <h2 style="color:#1A2A4A">Benvenuto su ItalBandi, {nome}!</h2>
-  <p style="color:#444">Clicca il pulsante qui sotto per confermare la tua email e attivare il tuo account.</p>
-  <a href="{link}" style="display:inline-block;background:#C9A84C;color:#1A2A4A;padding:14px 32px;border-radius:6px;font-weight:700;text-decoration:none;margin:20px 0">
-    Conferma Email
+<div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto">
+  <h2 style="color:#0A1628">Benvenuto su ItalBandi, {nome}!</h2>
+  <p>Clicca il pulsante qui sotto per confermare la tua email e attivare il tuo account.</p>
+  <a href="{link}" style="display:inline-block;background:#C9A84C;color:#0A1628;padding:14px 32px;border-radius:6px;font-weight:700;text-decoration:none;margin:20px 0">
+    ✓ Conferma Email
   </a>
-  <p style="color:#888;font-size:0.85rem">Il link e valido per 24 ore.<br>Se non ti sei registrato su ItalBandi, ignora questa email.</p>
+  <p style="color:#888;font-size:0.85rem">Il link è valido per 24 ore.<br>Se non ti sei registrato su ItalBandi, ignora questa email.</p>
   <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
-  <p style="color:#888;font-size:0.8rem">ItalBandi - un servizio di Energelia S.r.l. - Genova</p>
+  <p style="color:#888;font-size:0.8rem">ItalBandi — un servizio di Energelia S.r.l. · Genova</p>
 </div>""",
-                "TextBody": f"Benvenuto su ItalBandi, {nome}!\n\nConferma la tua email:\n{link}\n\nIl link e valido per 24 ore.",
+                "TextBody": f"Benvenuto su ItalBandi, {nome}!\n\nConferma la tua email cliccando questo link:\n{link}\n\nIl link è valido per 24 ore.",
             }, timeout=10)
-        result = resp.json()
-        if resp.status_code == 200 and result.get("ErrorCode", 0) == 0:
-            print(f"[EMAIL] verifica inviata a {email} — MessageID: {result.get('MessageID')}", flush=True)
-        else:
-            print(f"[EMAIL] ERRORE Postmark: {result}", flush=True)
+        print(f"[EMAIL] verifica inviata a {email}", flush=True)
     except Exception as e:
-        print(f"[EMAIL] eccezione: {e}", flush=True)
+        print(f"[EMAIL] errore: {e}", flush=True)
 
 def get_user(email, password):
     pw_hash = hashlib.sha256(password.encode()).hexdigest()
-    if _USE_PG:
-        import pg8000.native as pg
-        con = pg.Connection(**_pg_params)
-        rows = con.run("SELECT id,nome,cognome,email,is_admin,verificato FROM utenti WHERE email=:e AND password_hash=:p",
-                       e=email, p=pw_hash)
-        con.close()
-        return rows[0] if rows else None
-    else:
-        con = sqlite3.connect(DB_PATH)
-        row = con.execute("SELECT id,nome,cognome,email,is_admin,verificato FROM utenti WHERE email=? AND password_hash=?",
-                          (email, pw_hash)).fetchone()
-        con.close()
-        return row
+    con = sqlite3.connect(DB_PATH)
+    row = con.execute("SELECT id,nome,cognome,email,is_admin,verificato FROM utenti WHERE email=? AND password_hash=?",
+                      (email, pw_hash)).fetchone()
+    con.close()
+    return row
 
 def register_user(nome, cognome, email, password, telefono="", ruolo="", impresa=""):
     pw_hash = hashlib.sha256(password.encode()).hexdigest()
     token   = secrets.token_urlsafe(32)
     try:
-        if _USE_PG:
-            import pg8000.native as pg
-            con = pg.Connection(**_pg_params)
-            con.run("""INSERT INTO utenti (nome,cognome,email,password_hash,telefono,ruolo,impresa,verificato,token_verifica)
-                       VALUES (:nome,:cognome,:email,:pw,:tel,:ruolo,:impresa,0,:token)""",
-                    nome=nome, cognome=cognome, email=email, pw=pw_hash,
-                    tel=telefono, ruolo=ruolo, impresa=impresa, token=token)
-            con.close()
-        else:
-            con = sqlite3.connect(DB_PATH)
-            con.execute("INSERT INTO utenti (nome,cognome,email,password_hash,telefono,ruolo,impresa,verificato,token_verifica) VALUES (?,?,?,?,?,?,?,0,?)",
-                        (nome, cognome, email, pw_hash, telefono, ruolo, impresa, token))
-            con.commit(); con.close()
+        con = sqlite3.connect(DB_PATH)
+        con.execute("INSERT INTO utenti (nome,cognome,email,password_hash,telefono,ruolo,impresa,verificato,token_verifica) VALUES (?,?,?,?,?,?,?,0,?)",
+                    (nome, cognome, email, pw_hash, telefono, ruolo, impresa, token))
+        con.commit(); con.close()
+        # Manda email di verifica in background
         threading.Thread(target=invia_email_verifica, args=(email, nome, token), daemon=True).start()
         return True, ""
-    except Exception as ex:
-        if "unique" in str(ex).lower() or "UNIQUE" in str(ex):
-            return False, "Email già registrata."
-        return False, str(ex)
+    except sqlite3.IntegrityError:
+        return False, "Email già registrata."
 
 def create_session(user_row):
     sid = secrets.token_hex(32)
@@ -293,162 +170,204 @@ def get_session(session_id: str = None):
 CSS_BASE = """
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'Segoe UI', Arial, sans-serif; background: #E8EEF7; color: #1A2A3A; min-height: 100vh;
-  background-image: radial-gradient(circle at 20% 50%, rgba(201,168,76,0.06) 0%, transparent 50%),
-                    radial-gradient(circle at 80% 20%, rgba(26,42,74,0.08) 0%, transparent 50%);
-}
-a { color: #1A3A6A; text-decoration: none; }
+body { font-family: 'Segoe UI', Arial, sans-serif; background: #0D1B2A; color: #E8E8E8; min-height: 100vh; }
+a { color: #C9A84C; text-decoration: none; }
 a:hover { text-decoration: underline; }
 
 .navbar {
-  background: #1A2A4A;
-  border-bottom: 3px solid #C9A84C;
+  background: #0A1628;
+  border-bottom: 2px solid #C9A84C;
   padding: 0 40px;
   display: flex; align-items: center; justify-content: space-between;
-  height: 72px;
+  height: 64px;
 }
-.navbar-brand { font-size: 1.5rem; font-weight: 800; color: #C9A84C; letter-spacing: 2px; text-transform: uppercase; }
+.navbar-brand {
+  font-size: 1.5rem; font-weight: 800; color: #C9A84C;
+  letter-spacing: 2px; text-transform: uppercase;
+}
 .navbar-brand span { color: #FFFFFF; }
 .navbar-links { display: flex; gap: 24px; align-items: center; font-size: 0.88rem; }
-.navbar-links a { color: #A8BEDD; font-weight: 500; }
+.navbar-links a { color: #B0B8C8; font-weight: 500; }
 .navbar-links a:hover { color: #C9A84C; text-decoration: none; }
 .btn-logout {
   background: transparent; border: 1px solid #C9A84C;
   color: #C9A84C; padding: 6px 16px; border-radius: 4px;
   font-size: 0.82rem; cursor: pointer; font-family: inherit;
 }
-.btn-logout:hover { background: #C9A84C; color: #1A2A4A; }
+.btn-logout:hover { background: #C9A84C; color: #0A1628; }
 
 .hero {
-  background: linear-gradient(135deg, #1A2A4A 0%, #243555 100%);
-  border-bottom: 1px solid #C9A84C;
-  padding: 24px 40px;
+  background: linear-gradient(135deg, #0A1628 0%, #1A2F4E 100%);
+  border-bottom: 1px solid #1E3A5F;
+  padding: 28px 40px;
 }
-.hero h2 { font-size: 1rem; color: #C9A84C; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
-.hero p  { font-size: 0.85rem; color: #A8BEDD; }
+.hero h2 { font-size: 1.05rem; color: #C9A84C; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
+.hero p  { font-size: 0.88rem; color: #8899AA; }
 
 .search-bar {
-  background: #FFFFFF;
-  border-bottom: 1px solid #D8E2EE;
-  padding: 16px 40px;
-  display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;
-  box-shadow: 0 2px 8px rgba(26,42,74,0.08);
+  background: #0F2035;
+  border-bottom: 1px solid #1E3A5F;
+  padding: 18px 40px;
+  display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end;
 }
 .search-bar input, .search-bar select {
   padding: 9px 14px;
-  background: #F4F6FA; border: 1px solid #C8D4E4; border-radius: 5px;
-  font-size: 0.88rem; color: #1A2A3A; font-family: inherit;
+  background: #162840; border: 1px solid #2A4A6B; border-radius: 5px;
+  font-size: 0.9rem; color: #E8E8E8;
 }
 .search-bar input { flex: 1; min-width: 200px; }
 .search-bar select { min-width: 150px; }
-.search-bar input::placeholder { color: #8899AA; }
-.search-bar input:focus, .search-bar select:focus { outline: none; border-color: #1A3A6A; }
+.search-bar input::placeholder { color: #5A7A9A; }
 .btn-cerca {
   padding: 9px 28px;
-  background: #1A2A4A; color: #FFFFFF;
+  background: #C9A84C; color: #0A1628;
   border: none; border-radius: 5px;
-  font-weight: 700; font-size: 0.9rem; cursor: pointer;
+  font-weight: 700; font-size: 0.92rem; cursor: pointer;
+  white-space: nowrap;
 }
-.btn-cerca:hover { background: #C9A84C; }
+.btn-cerca:hover { background: #E0BF6A; }
 
-.container { max-width: 1000px; margin: 28px auto; padding: 0 20px 60px; }
-.risultati-header { font-size: 0.8rem; color: #6A8AA8; margin-bottom: 14px; font-weight: 600; letter-spacing: 0.5px; }
+.container { max-width: 1000px; margin: 32px auto; padding: 0 20px 60px; }
 
-/* Card stile D — minimal, alta densità */
+.risultati-header { font-size: 0.82rem; color: #6A8AA8; margin-bottom: 16px; font-weight: 600; letter-spacing: 0.5px; }
+
 .bando-card {
-  background: #FFFFFF;
-  border: 1px solid #D0DCF0;
-  border-left: 4px solid #D0DCF0;
-  border-radius: 8px;
-  padding: 16px 20px 14px;
-  margin-bottom: 10px;
-  transition: border-left-color 0.2s, box-shadow 0.2s;
-  box-shadow: 0 1px 4px rgba(26,42,74,0.06);
+  border-radius: var(--border-radius-lg, 12px);
+  overflow: hidden;
+  margin-bottom: 16px;
+  background: #0F2035;
+  border: 1px solid #1E3A5F;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+  transition: transform 0.2s, box-shadow 0.2s;
 }
-.bando-card:hover { border-left-color: #C9A84C; box-shadow: 0 3px 12px rgba(26,42,74,0.12); }
-.card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-.card-cat-tag { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
-.card-titolo { font-size: 0.88rem; font-weight: 700; color: #1A2A3A; line-height: 1.45; margin-bottom: 8px; }
-.card-info { display: flex; gap: 18px; margin-bottom: 10px; flex-wrap: wrap; }
-.card-info-item { font-size: 0.78rem; color: #6A8AA8; display: flex; align-items: center; gap: 4px; }
-.card-info-item strong { color: #2A4A6A; font-weight: 600; }
-.card-divider { border: none; border-top: 1px solid #EEF2F8; margin: 10px 0; }
+.bando-card:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(0,0,0,0.5); }
+.card-img {
+  height: 110px;
+  background-size: cover;
+  background-position: center;
+  position: relative;
+}
+.card-img-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(10,22,40,0.15) 0%, rgba(10,22,40,0.82) 100%);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 10px 14px;
+}
+.card-cat-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.card-badges { display: flex; gap: 6px; }
+.card-body { padding: 14px 16px 16px; }
+.card-titolo { font-size: 0.88rem; font-weight: 700; color: #D4E8FF; line-height: 1.4; margin-bottom: 12px; }
+.card-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.card-metric {
+  background: rgba(10,22,40,0.6);
+  border: 1px solid #1E3A5F;
+  border-radius: 6px;
+  padding: 7px 10px;
+}
+.card-metric-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: #5A7A9A; margin-bottom: 2px; }
+.card-metric-val { font-size: 11px; font-weight: 600; color: #A8C8E8; }
 .card-actions { display: flex; gap: 8px; align-items: center; }
 .btn-scheda {
-  padding: 7px 18px;
-  background: #1A2A4A; color: #FFFFFF;
+  flex: 1; padding: 8px 14px;
+  background: #C9A84C; color: #0A1628;
   border: none; border-radius: 5px;
   font-size: 0.8rem; font-weight: 700; cursor: pointer;
 }
-.btn-scheda:hover { background: #C9A84C; }
-.btn-scheda:disabled { background: #C8D4E4; color: #8899AA; cursor: not-allowed; }
+.btn-scheda:hover { background: #E0BF6A; }
+.btn-scheda:disabled { background: #3A4A5A; color: #6A8AA8; cursor: not-allowed; }
 .btn-preview {
-  padding: 7px 12px; background: none; color: #5A7A9A;
-  border: 1px solid #D0DCF0; border-radius: 5px;
-  font-size: 0.73rem; font-weight: 700; cursor: pointer;
+  padding: 8px 12px;
+  background: none; color: #C9A84C;
+  border: 1px solid #2A4A6A; border-radius: 5px;
+  font-size: 0.75rem; font-weight: 700; cursor: pointer;
+  white-space: nowrap;
 }
-.btn-preview:hover { border-color: #C9A84C; color: #C9A84C; }
+.btn-preview:hover { border-color: #C9A84C; background: rgba(201,168,76,0.08); }
 .badge { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 20px; white-space: nowrap; }
-.badge-aperto   { background: rgba(22,163,74,0.08); color: #15803D; border: 1px solid rgba(22,163,74,0.25); }
-.badge-prossimo { background: rgba(37,99,235,0.08); color: #1D4ED8; border: 1px solid rgba(37,99,235,0.25); }
-.spinner { display: none; font-size: 0.75rem; color: #8899AA; white-space: nowrap; }
-.loader  { text-align: center; padding: 40px; color: #8899AA; }
+.badge-aperto   { background: rgba(74,222,128,0.15); color: #4ADE80; border: 1px solid rgba(74,222,128,0.4); }
+.badge-prossimo { background: rgba(96,165,250,0.15); color: #60A5FA; border: 1px solid rgba(96,165,250,0.4); }
+.spinner { display: none; font-size: 0.75rem; color: #6A8AA8; white-space: nowrap; }
+.loader  { text-align: center; padding: 40px; color: #5A7A9A; }
 .preview-panel {
-  display: none; margin-bottom: 10px;
-  padding: 12px 14px; background: #F4F7FC;
-  border: 1px solid #D0DCF0; border-radius: 6px;
-  font-size: 0.8rem; color: #3A5A7A; line-height: 1.6;
+  display: none;
+  margin: 0 16px 14px;
+  padding: 12px 14px;
+  background: rgba(10,22,40,0.7);
+  border: 1px solid #1E3A5F;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  color: #A8C8E8;
+  line-height: 1.6;
 }
-.preview-loading { color: #8899AA; font-style: italic; }
+.preview-loading { color: #5A7A9A; font-style: italic; }
 
 /* Auth forms */
 .auth-wrap {
-  min-height: calc(100vh - 72px);
-  display: flex; align-items: center; justify-content: center; padding: 40px 20px;
+  min-height: calc(100vh - 64px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 40px 20px;
 }
 .auth-card {
-  background: #FFFFFF; border: 1px solid #D8E2EE; border-radius: 12px;
+  background: #0F2035; border: 1px solid #1E3A5F; border-radius: 12px;
   padding: 40px; width: 100%; max-width: 460px;
-  box-shadow: 0 4px 20px rgba(26,42,74,0.1);
 }
-.auth-card h2 { font-size: 1.3rem; color: #1A2A4A; margin-bottom: 6px; font-weight: 700; }
+.auth-card h2 { font-size: 1.3rem; color: #C9A84C; margin-bottom: 6px; font-weight: 700; }
 .auth-card p.sub { font-size: 0.85rem; color: #6A8AA8; margin-bottom: 28px; }
 .form-group { margin-bottom: 18px; }
-.form-group label { display: block; font-size: 0.78rem; font-weight: 600; color: #5A7A9A; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+.form-group label { display: block; font-size: 0.78rem; font-weight: 600; color: #7A9ABB; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
 .form-group input, .form-group select {
   width: 100%; padding: 10px 14px;
-  background: #F4F6FA; border: 1px solid #C8D4E4; border-radius: 6px;
-  font-size: 0.92rem; color: #1A2A3A; font-family: inherit;
+  background: #162840; border: 1px solid #2A4A6B; border-radius: 6px;
+  font-size: 0.92rem; color: #E8E8E8; font-family: inherit;
 }
-.form-group input:focus { outline: none; border-color: #1A2A4A; }
+.form-group input:focus { outline: none; border-color: #C9A84C; }
 .btn-primary {
-  width: 100%; padding: 12px; background: #1A2A4A; color: #FFFFFF;
-  border: none; border-radius: 6px; font-size: 1rem; font-weight: 700;
-  cursor: pointer; margin-top: 8px; font-family: inherit;
+  width: 100%; padding: 12px;
+  background: #C9A84C; color: #0A1628;
+  border: none; border-radius: 6px;
+  font-size: 1rem; font-weight: 700; cursor: pointer;
+  margin-top: 8px; font-family: inherit;
 }
-.btn-primary:hover { background: #C9A84C; }
-.err-msg { color: #DC2626; font-size: 0.84rem; margin-bottom: 16px; padding: 10px; background: #FEF2F2; border-radius: 6px; border: 1px solid #FECACA; }
-.ok-msg  { color: #15803D; font-size: 0.84rem; margin-bottom: 16px; padding: 10px; background: #F0FDF4; border-radius: 6px; border: 1px solid #BBF7D0; }
-.auth-footer { text-align: center; margin-top: 20px; font-size: 0.84rem; color: #6A8AA8; }
-.privacy-note { font-size: 0.75rem; color: #8899AA; margin-top: 14px; text-align: center; line-height: 1.5; }
+.btn-primary:hover { background: #E0BF6A; }
+.err-msg { color: #F87171; font-size: 0.84rem; margin-bottom: 16px; padding: 10px; background: #2D1515; border-radius: 6px; }
+.ok-msg  { color: #4ADE80; font-size: 0.84rem; margin-bottom: 16px; padding: 10px; background: #0D3321; border-radius: 6px; }
+.auth-footer { text-align: center; margin-top: 20px; font-size: 0.84rem; color: #5A7A9A; }
+.privacy-note { font-size: 0.75rem; color: #4A6A8A; margin-top: 14px; text-align: center; line-height: 1.5; }
 
 /* Cookie banner */
 #cookie-banner {
   position: fixed; bottom: 0; left: 0; right: 0;
-  background: #1A2A4A; border-top: 2px solid #C9A84C;
+  background: #0A1628; border-top: 1px solid #C9A84C;
   padding: 16px 40px; display: flex; align-items: center;
-  justify-content: space-between; gap: 20px; z-index: 9999; flex-wrap: wrap;
+  justify-content: space-between; gap: 20px; z-index: 9999;
+  flex-wrap: wrap;
 }
-#cookie-banner p { font-size: 0.82rem; color: #A8BEDD; flex: 1; }
+#cookie-banner p { font-size: 0.82rem; color: #8899AA; flex: 1; }
 .btn-cookie { padding: 7px 18px; border-radius: 4px; border: none; font-weight: 600; font-size: 0.82rem; cursor: pointer; font-family: inherit; }
-.btn-cookie-ok  { background: #C9A84C; color: #1A2A4A; }
-.btn-cookie-no  { background: transparent; border: 1px solid #5A7A9A; color: #A8BEDD; }
+.btn-cookie-ok  { background: #C9A84C; color: #0A1628; }
+.btn-cookie-no  { background: transparent; border: 1px solid #4A6A8A; color: #8899AA; }
 
 footer.site-footer {
-  background: #1A2A4A; border-top: 1px solid #2A3A5A;
+  background: #0A1628; border-top: 1px solid #1E3A5F;
   padding: 24px 40px; margin-top: 40px;
-  text-align: center; font-size: 0.75rem; color: #7A9ABB; line-height: 1.8;
-}
+  text-align: center; font-size: 0.75rem; color: #4A6A8A; line-height: 1.8;
 }
 footer.site-footer a { color: #6A8AA8; }
 
@@ -471,7 +390,6 @@ NAVBAR_LOGGED = lambda user: f"""
     <span style="color:#6A8AA8;font-size:0.82rem">Ciao, {user['nome']}</span>
     <a href="/privacy">Privacy</a>
     <a href="/cookie">Cookie Policy</a>
-    {'<a href="/area-riservata" style="color:#C9A84C;font-weight:700;border:1px solid rgba(201,168,76,0.4);padding:5px 12px;border-radius:4px">&#9881; Area Riservata</a>' if user.get('is_admin') else ''}
     <form method="POST" action="/logout" style="margin:0">
       <button class="btn-logout" type="submit">Esci</button>
     </form>
@@ -535,7 +453,7 @@ def login_page(error=""):
       <div class="form-group"><label>Password *</label><input type="password" name="password" required placeholder="••••••••"></div>
       <button class="btn-primary" type="submit">Accedi</button>
     </form>
-    <div class="auth-footer">Non hai un account? <a href="/registrati">Registrati gratis</a> &nbsp;·&nbsp; <a href="/reset-password">Password dimenticata?</a></div>
+    <div class="auth-footer">Non hai un account? <a href="/registrati">Registrati gratis</a></div>
     <p class="privacy-note">Accedendo accetti la nostra <a href="/privacy">Privacy Policy</a>
     e la <a href="/cookie">Cookie Policy</a>.</p>
   </div>
@@ -568,21 +486,7 @@ def registrati_page(error="", ok=""):
         <div class="form-group"><label>Cognome *</label><input type="text" name="cognome" required placeholder="Rossi"></div>
       </div>
       <div class="form-group"><label>Email *</label><input type="email" name="email" required placeholder="mario.rossi@azienda.it"></div>
-      <div class="form-group">
-        <label>Password *</label>
-        <div style="position:relative">
-          <input type="password" name="password" id="pwd1" required placeholder="Min. 8 caratteri" style="width:100%;padding-right:40px">
-          <button type="button" onclick="togglePwd('pwd1','eye1')" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#8899AA;font-size:1rem" id="eye1">&#128065;</button>
-        </div>
-      </div>
-      <div class="form-group">
-        <label>Ripeti password *</label>
-        <div style="position:relative">
-          <input type="password" name="password2" id="pwd2" required placeholder="Ripeti la password" style="width:100%;padding-right:40px">
-          <button type="button" onclick="togglePwd('pwd2','eye2')" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#8899AA;font-size:1rem" id="eye2">&#128065;</button>
-        </div>
-        <div id="pwd-err" style="display:none;color:#DC2626;font-size:0.78rem;margin-top:4px">Le password non coincidono.</div>
-      </div>
+      <div class="form-group"><label>Password *</label><input type="password" name="password" required placeholder="Min. 8 caratteri"></div>
       <div class="form-group"><label>Telefono</label><input type="tel" name="telefono" placeholder="+39 010 000000"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
         <div class="form-group">
@@ -608,25 +512,8 @@ def registrati_page(error="", ok=""):
           </span>
         </label>
       </div>
-      <button class="btn-primary" type="submit" onclick="return validaForm()">Crea account</button>
+      <button class="btn-primary" type="submit">Crea account</button>
     </form>
-    <script>
-    function togglePwd(inputId, btnId) {{
-      const input = document.getElementById(inputId);
-      input.type = input.type === 'password' ? 'text' : 'password';
-    }}
-    function validaForm() {{
-      const p1 = document.getElementById('pwd1').value;
-      const p2 = document.getElementById('pwd2').value;
-      if (p1 !== p2) {{
-        document.getElementById('pwd-err').style.display = 'block';
-        document.getElementById('pwd2').focus();
-        return false;
-      }}
-      document.getElementById('pwd-err').style.display = 'none';
-      return true;
-    }}
-    </script>
     <div class="auth-footer">Hai già un account? <a href="/login">Accedi</a></div>
   </div>
 </div>
@@ -644,19 +531,7 @@ def index_page(user):
   <p>Trova le opportunità di finanziamento per la tua impresa. Filtra per livello geografico e scarica la scheda PDF professionale.</p>
 </div>
 <div class="search-bar">
-  <div style="display:flex;flex:1;min-width:200px;flex-direction:column;gap:4px">
-    <input id="keyword" type="text" placeholder="Parola chiave (es. formazione, energia, PMI...)" style="width:100%">
-    <div style="display:flex;gap:6px">
-      <button id="btn-ampia" onclick="setRicerca('no')"
-        style="flex:1;padding:5px 10px;background:#1A2A4A;color:#fff;border:1px solid #1A2A4A;border-radius:4px;font-size:0.72rem;font-weight:700;cursor:pointer">
-        Nel testo
-      </button>
-      <button id="btn-precisa" onclick="setRicerca('si')"
-        style="flex:1;padding:5px 10px;background:#fff;color:#1A2A4A;border:1px solid #C8D4E4;border-radius:4px;font-size:0.72rem;font-weight:700;cursor:pointer">
-        Nel titolo
-      </button>
-    </div>
-  </div>
+  <input id="keyword" type="text" placeholder="Parola chiave (es. formazione, energia, PMI...)">
   <select id="stato">
     <option value="aperto">Bandi aperti</option>
     <option value="prossimo">Prossima apertura</option>
@@ -683,8 +558,7 @@ def index_page(user):
   <span id="provincia-wrap" style="display:none">
     <select id="provincia"><option value="">(tutte le province)</option></select>
   </span>
-  <input type="hidden" id="dove-tutto" value="no">
-  <button class="btn-cerca" onclick="cerca()">Cerca</button>
+  <button class="btn-cerca" onclick="cerca()">🔍 Cerca</button>
 </div>
 <div class="container">
   <div id="risultati-header" class="risultati-header"></div>
@@ -714,19 +588,7 @@ const PROVINCE = {{
   "Trentino-Alto-Adige": ["Provincia di Bolzano","Provincia di Trento"],
   "Valle d'Aosta": ["Provincia di Aosta"],
 }};
-let _soloTitolo = 'no';
-function setRicerca(val) {{
-  _soloTitolo = val;
-  const btnA = document.getElementById('btn-ampia');
-  const btnP = document.getElementById('btn-precisa');
-  if (val === 'no') {{
-    btnA.style.background = '#1A2A4A'; btnA.style.color = '#fff'; btnA.style.borderColor = '#1A2A4A';
-    btnP.style.background = '#fff'; btnP.style.color = '#1A2A4A'; btnP.style.borderColor = '#C8D4E4';
-  }} else {{
-    btnP.style.background = '#C9A84C'; btnP.style.color = '#1A2A4A'; btnP.style.borderColor = '#C9A84C';
-    btnA.style.background = '#fff'; btnA.style.color = '#1A2A4A'; btnA.style.borderColor = '#C8D4E4';
-  }}
-}}
+let _hits = {{}};
 function aggiornaFiltri() {{
   const livello = document.getElementById('livello').value;
   document.getElementById('regione-wrap').style.display   = livello === 'regionale' ? 'inline' : 'none';
@@ -750,7 +612,6 @@ async function cerca() {{
     livello:  document.getElementById('livello').value,
     regione:  document.getElementById('regione').value,
     provincia:document.getElementById('provincia').value,
-    solo_titolo: _soloTitolo,
   }});
   document.getElementById('risultati').innerHTML = '<div class="loader">⏳ Ricerca in corso...</div>';
   document.getElementById('risultati-header').textContent = '';
@@ -762,21 +623,21 @@ async function cerca() {{
   data.bandi.forEach(b => {{ _hits[b.id] = b._hit; }});
 
   const CATS = {{
-    agric:    {{ r:/agric|rurale|biolog|animale|zootec|bovino|suino|ovino|avicol|vitivin|vino|olio|ortofrut|pac |csr |sra|forest/, t2:'#166534', i:'&#127807;', l:'Agricoltura' }},
-    energy:   {{ r:/energia|rinnovab|fotovolt|efficienza energet|solare|eolico|idrogeno|green|feeri/, t2:'#1D4ED8', i:'&#9889;', l:'Energia' }},
-    turismo:  {{ r:/turismo|albergo|hotel|agriturismo|ristorant|hospitality|ricettiv|ospital/, t2:'#9D174D', i:'&#127976;', l:'Turismo' }},
-    digital:  {{ r:/digital|tecnolog|software|innovaz|startup|ricerca|sviluppo|intelligen|cloud|cyber|ict/, t2:'#5B21B6', i:'&#128187;', l:'Digitale' }},
-    industria:{{ r:/macchin|impianti|manifattur|industria|produzion|artigian|metalmecc|tessile|moda|terz/, t2:'#92400E', i:'&#127981;', l:'Industria' }},
-    commercio:{{ r:/commercio|negozio|bottega|retail|distribuz|mercato|fiera|duc|centro urban/, t2:'#065F46', i:'&#127978;', l:'Commercio' }},
-    lavoro:   {{ r:/formazion|lavoro|occupaz|welfare|dipendenti|risorse umane|personal|stage|gol|par /, t2:'#1E40AF', i:'&#128101;', l:'Formazione' }},
-    intl:     {{ r:/internazion|export|estero|mercati intern|paesi terzi|simest/, t2:'#4C1D95', i:'&#127757;', l:'Export' }},
-    sociale:  {{ r:/sociale|terzo settore|onlus|cooperat|comunit|inclusione|disabil|volont/, t2:'#064E3B', i:'&#129309;', l:'Sociale' }},
-    edilizia: {{ r:/edilizia|riqualif|ristruttur|immobil|edifici|patrimonio|sismica|cappotto/, t2:'#7C2D12', i:'&#127959;', l:'Edilizia' }},
-    cultura:  {{ r:/cultura|arte|musei|spettacolo|cinema|musica|patrimonio cultur|editoria/, t2:'#831843', i:'&#127912;', l:'Cultura' }},
-    pesca:    {{ r:/pesca|mare|acquacolt|marina|portuale|ittico/, t2:'#0C4A6E', i:'&#128031;', l:'Pesca' }},
-    export:   {{ r:/voucher|certificaz|competenz|digitale|under 35|giovani|disoccupat/, t2:'#3730A3', i:'&#127891;', l:'Formazione' }},
+    agric:    {{ r:/agric|rurale|biolog|animale|zootec|bovino|suino|ovino|avicol|vitivin|vino|olio|ortofrut|pac |csr |sra|forest/, foto:'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=700&q=80', c:'#1E3A1A', t:'#6FCF5A', i:'🌿', l:'Agricoltura' }},
+    energy:   {{ r:/energia|rinnovab|fotovolt|efficienza energet|solare|eolico|idrogeno|green|feeri/, foto:'https://images.unsplash.com/photo-1548337138-e87d889cc369?w=700&q=80', c:'#0D2240', t:'#60A5FA', i:'⚡', l:'Energia' }},
+    turismo:  {{ r:/turismo|albergo|hotel|agriturismo|ristorant|hospitality|ricettiv|ospital/, foto:'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?w=700&q=80', c:'#2A1520', t:'#F9A8D4', i:'🏨', l:'Turismo' }},
+    digital:  {{ r:/digital|tecnolog|software|innovaz|startup|ricerca|sviluppo|intelligen|cloud|cyber|ict/, foto:'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=700&q=80', c:'#0D0D30', t:'#C4B5FD', i:'💻', l:'Digitale' }},
+    industria:{{ r:/macchin|impianti|manifattur|industria|produzion|artigian|metalmecc|tessile|moda|terz/, foto:'https://images.unsplash.com/photo-1581091226033-d5c48150dbaa?w=700&q=80', c:'#2A1A00', t:'#FCD34D', i:'🏭', l:'Industria' }},
+    commercio:{{ r:/commercio|negozio|bottega|retail|distribuz|mercato|fiera|duc|centro urban/, foto:'https://images.unsplash.com/photo-1555529669-e69e7aa0ba9a?w=700&q=80', c:'#0A2A0A', t:'#4ADE80', i:'🏪', l:'Commercio' }},
+    lavoro:   {{ r:/formazion|lavoro|occupaz|welfare|dipendenti|risorse umane|personal|stage|gol|par /, foto:'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=700&q=80', c:'#0A1A30', t:'#93C5FD', i:'👥', l:'Formazione' }},
+    intl:     {{ r:/internazion|export|estero|mercati intern|paesi terzi|simest/, foto:'https://images.unsplash.com/photo-1578575437130-527eed3abbec?w=700&q=80', c:'#0A0A2A', t:'#C4B5FD', i:'🌍', l:'Export' }},
+    sociale:  {{ r:/sociale|terzo settore|onlus|cooperat|comunit|inclusione|disabil|volont/, foto:'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=700&q=80', c:'#0A2A15', t:'#4ADE80', i:'🤝', l:'Sociale' }},
+    edilizia: {{ r:/edilizia|riqualif|ristruttur|immobil|edifici|patrimonio|sismica|cappotto/, foto:'https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=700&q=80', c:'#2A1500', t:'#FCD34D', i:'🏗️', l:'Edilizia' }},
+    cultura:  {{ r:/cultura|arte|musei|spettacolo|cinema|musica|patrimonio cultur|editoria/, foto:'https://images.unsplash.com/photo-1544967082-d9d25d867d66?w=700&q=80', c:'#2A001A', t:'#F9A8D4', i:'🎨', l:'Cultura' }},
+    pesca:    {{ r:/pesca|mare|acquacolt|marina|portuale|ittico/, foto:'https://images.unsplash.com/photo-1519614483-c6d3001943d8?w=700&q=80', c:'#001A30', t:'#93C5FD', i:'🐟', l:'Pesca' }},
+    export:   {{ r:/voucher|certificaz|competenz|digitale|under 35|giovani|disoccupat/, foto:'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=700&q=80', c:'#1A0A2A', t:'#C4B5FD', i:'🎓', l:'Formazione' }},
   }};
-  const DEFCAT = {{ t2:'#1A2A4A', i:'&#128203;', l:'Finanza Agevolata' }};
+  const DEFCAT = {{ foto:'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=700&q=80', c:'#0A1628', t:'#A8C8E8', i:'📋', l:'Finanza Agevolata' }};
   function getCat(titolo) {{
     const t = (titolo||'').toLowerCase();
     for (const v of Object.values(CATS)) {{ if (v.r.test(t)) return v; }}
@@ -785,28 +646,31 @@ async function cerca() {{
 
   document.getElementById('risultati').innerHTML = data.bandi.map(b => {{
     const cat = getCat(b.titolo);
-    const aperto = !b.stato.includes('prossima');
     return `<div class="bando-card">
-      <div class="card-top">
-        <span class="card-cat-tag" style="color:${{cat.t2}}">${{cat.i}} ${{cat.l}}</span>
-        <div style="display:flex;gap:6px;align-items:center">
-          <span class="badge ${{aperto ? 'badge-aperto' : 'badge-prossimo'}}">${{b.stato}}</span>
-          <span style="font-size:10px;color:#8899AA">${{b.livello}}</span>
+      <div class="card-img" style="background-image:url('${{cat.foto}}')">
+        <div class="card-cat-header">
+          <div class="card-cat-label" style="color:${{cat.t}};background:${{cat.c}};display:inline-flex;padding:4px 8px;border-radius:20px;backdrop-filter:blur(4px)">${{cat.i}} ${{cat.l}}</div>
+          <div class="card-badges">
+            <span class="badge ${{b.stato.includes('prossima') ? 'badge-prossimo' : 'badge-aperto'}}">${{b.stato}}</span>
+            <span class="badge" style="background:rgba(201,168,76,0.2);color:#C9A84C;border:1px solid rgba(201,168,76,0.4)">${{b.livello}}</span>
+          </div>
         </div>
       </div>
-      <div class="card-titolo">${{b.titolo}}</div>
-      <div class="card-info">
-        <div class="card-info-item">&#128197; <strong>${{b.scadenza}}</strong></div>
-        <div class="card-info-item">&#128100; <strong>${{(b.beneficiari||'—').substring(0,50)}}</strong></div>
+      <div class="card-body">
+        <div class="card-titolo">${{b.titolo}}</div>
+        <div class="card-metrics">
+          <div class="card-metric"><div class="card-metric-label">Scadenza</div><div class="card-metric-val">${{b.scadenza}}</div></div>
+          <div class="card-metric"><div class="card-metric-label">Livello</div><div class="card-metric-val">${{b.livello}}</div></div>
+          <div class="card-metric" style="grid-column:1/-1"><div class="card-metric-label">Destinatari</div><div class="card-metric-val">${{(b.beneficiari||'—').substring(0,55)}}</div></div>
+        </div>
       </div>
-      <hr class="card-divider">
       <div class="preview-panel" id="preview-${{b.id}}">
         <span class="preview-loading" id="prev-msg-${{b.id}}">Clicca Preview per scoprire se questo bando fa per te...</span>
       </div>
-      <div class="card-actions">
-        <button class="btn-scheda" id="btn-${{b.id}}" onclick="generaScheda('${{b.id}}')">Genera Scheda PDF</button>
+      <div class="card-actions" style="padding:0 16px 16px">
+        <button class="btn-scheda" id="btn-${{b.id}}" onclick="generaScheda('${{b.id}}')">📄 Genera Scheda</button>
         <button class="btn-preview" id="arrow-${{b.id}}" onclick="togglePreview('${{b.id}}')">PREVIEW</button>
-        <span class="spinner" id="sp-${{b.id}}">elaborazione...</span>
+        <span class="spinner" id="sp-${{b.id}}">⏳ Elaborazione...</span>
       </div>
     </div>`;
   }}).join('');
@@ -927,89 +791,27 @@ async function generaScheda(id) {{
 }}
 function mostraCtaDownload() {{
   document.getElementById('cta-modal').style.display = 'flex';
-  document.getElementById('cta-main').style.display = 'block';
-  document.getElementById('cta-form').style.display = 'none';
 }}
 function chiudiCta() {{
   document.getElementById('cta-modal').style.display = 'none';
-}}
-function mostraFormMsg() {{
-  document.getElementById('cta-main').style.display = 'none';
-  document.getElementById('cta-form').style.display = 'block';
-}}
-async function inviaMessaggio() {{
-  const nome  = document.getElementById('msg-nome').value.trim();
-  const testo = document.getElementById('msg-testo').value.trim();
-  const esito = document.getElementById('msg-esito');
-  if (!nome || !testo) {{
-    esito.style.display = 'block';
-    esito.style.background = '#2D1515';
-    esito.style.color = '#F87171';
-    esito.textContent = 'Compila tutti i campi.';
-    return;
-  }}
-  try {{
-    const r = await fetch('/api/messaggio', {{
-      method: 'POST', headers: {{'Content-Type':'application/json'}},
-      body: JSON.stringify({{nome, testo}})
-    }});
-    const d = await r.json();
-    if (d.ok) {{
-      esito.style.display = 'block';
-      esito.style.background = '#0D3321';
-      esito.style.color = '#4ADE80';
-      esito.textContent = 'Messaggio inviato! Ti contatteremo presto.';
-      document.getElementById('msg-nome').value = '';
-      document.getElementById('msg-testo').value = '';
-    }} else {{
-      throw new Error(d.error || 'Errore');
-    }}
-  }} catch(e) {{
-    esito.style.display = 'block';
-    esito.style.background = '#2D1515';
-    esito.style.color = '#F87171';
-    esito.textContent = 'Errore invio. Riprova o chiama il 010 8078800.';
-  }}
 }}
 window.onload = cerca;
 </script>
 
 <div id="cta-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;align-items:center;justify-content:center">
   <div style="background:#0F2035;border:1px solid #C9A84C;border-radius:12px;padding:36px 40px;max-width:480px;width:90%;text-align:center;position:relative">
-    <button onclick="chiudiCta()" style="position:absolute;top:12px;right:16px;background:none;border:none;color:#6A8AA8;font-size:1.2rem;cursor:pointer">X</button>
-
-    <!-- Vista principale -->
-    <div id="cta-main">
-      <div style="font-size:2rem;margin-bottom:12px">&#128203;</div>
-      <h3 style="color:#C9A84C;font-size:1.2rem;margin-bottom:12px">Hai trovato un bando interessante?</h3>
-      <p style="color:#A8C8E8;font-size:0.92rem;line-height:1.6;margin-bottom:24px">
-        I nostri consulenti valuteranno <strong>gratuitamente</strong> la candidatura della tua azienda.<br>
-        Contatta Antonio Castagnaro per una pre-istruttoria senza impegno.
-      </p>
-      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
-        <span style="background:#C9A84C;color:#0A1628;padding:12px 24px;border-radius:6px;font-weight:700;font-size:0.92rem;cursor:default">&#128222; 010 8078800</span>
-        <button onclick="mostraFormMsg()" style="background:transparent;color:#C9A84C;border:1px solid #C9A84C;padding:12px 24px;border-radius:6px;font-weight:700;font-size:0.92rem;cursor:pointer">&#9993; Scrivici</button>
-      </div>
-      <p style="color:#3A5A7A;font-size:0.75rem;margin-top:16px">a.castagnaro@energelia.it</p>
+    <button onclick="chiudiCta()" style="position:absolute;top:12px;right:16px;background:none;border:none;color:#6A8AA8;font-size:1.2rem;cursor:pointer">✕</button>
+    <div style="font-size:2rem;margin-bottom:12px">📋</div>
+    <h3 style="color:#C9A84C;font-size:1.2rem;margin-bottom:12px">Hai trovato un bando interessante?</h3>
+    <p style="color:#A8C8E8;font-size:0.92rem;line-height:1.6;margin-bottom:24px">
+      I nostri consulenti valuteranno <strong>gratuitamente</strong> la candidatura della tua azienda.<br>
+      Contatta Antonio Castagnaro per una pre-istruttoria senza impegno.
+    </p>
+    <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+      <a href="tel:+390108078800" style="background:#C9A84C;color:#0A1628;padding:12px 24px;border-radius:6px;font-weight:700;text-decoration:none;font-size:0.92rem">📞 010 8078800</a>
+      <a href="mailto:a.castagnaro@energelia.it" style="background:transparent;color:#C9A84C;border:1px solid #C9A84C;padding:12px 24px;border-radius:6px;font-weight:700;text-decoration:none;font-size:0.92rem">✉️ Scrivici</a>
     </div>
-
-    <!-- Form messaggio -->
-    <div id="cta-form" style="display:none;text-align:left">
-      <h3 style="color:#C9A84C;font-size:1.1rem;margin-bottom:16px;text-align:center">Invia un messaggio</h3>
-      <div style="margin-bottom:12px">
-        <label style="display:block;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#6A8AA8;margin-bottom:4px">Nome e Azienda</label>
-        <input id="msg-nome" type="text" placeholder="Mario Rossi - Rossi S.r.l." style="width:100%;padding:9px 12px;background:#162840;border:1px solid #2A4A6B;border-radius:5px;color:#E8E8E8;font-size:0.88rem;font-family:inherit;outline:none">
-      </div>
-      <div style="margin-bottom:12px">
-        <label style="display:block;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#6A8AA8;margin-bottom:4px">Messaggio</label>
-        <textarea id="msg-testo" rows="4" placeholder="Descrivici la tua azienda e cosa ti interessa..." style="width:100%;padding:9px 12px;background:#162840;border:1px solid #2A4A6B;border-radius:5px;color:#E8E8E8;font-size:0.88rem;font-family:inherit;outline:none;resize:vertical"></textarea>
-      </div>
-      <div id="msg-esito" style="display:none;font-size:0.82rem;margin-bottom:10px;padding:8px 12px;border-radius:5px"></div>
-      <div style="display:flex;gap:10px">
-        <button onclick="inviaMessaggio()" style="flex:1;padding:10px;background:#C9A84C;color:#0A1628;border:none;border-radius:5px;font-weight:700;cursor:pointer;font-family:inherit">Invia</button>
-        <button onclick="document.getElementById('cta-form').style.display='none';document.getElementById('cta-main').style.display='block'" style="padding:10px 16px;background:none;color:#6A8AA8;border:1px solid #2A4A6B;border-radius:5px;cursor:pointer;font-family:inherit">Indietro</button>
-      </div>
-    </div>
+    <p style="color:#3A5A7A;font-size:0.75rem;margin-top:16px">a.castagnaro@energelia.it</p>
   </div>
 </div>
 
@@ -1102,192 +904,21 @@ async def login_post(email: str = Form(""), password: str = Form("")):
     return resp
 
 
-@app.get("/reset-password", response_class=HTMLResponse)
-async def reset_password_get(request: Request):
-    return HTMLResponse(f"""<!DOCTYPE html><html lang="it"><head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ItalBandi — Password dimenticata</title>{CSS_BASE}</head><body>
-<nav class="navbar">
-  <a href="/" style="display:flex;align-items:center;gap:12px;text-decoration:none">
-    <img src="/logo" alt="ItalBandi" style="height:60px;width:60px;object-fit:cover;border-radius:6px">
-    <span class="navbar-brand">ITAL<span>BANDI</span></span>
-  </a>
-  <div class="navbar-links"><a href="/login">Accedi</a></div>
-</nav>
-<div class="auth-wrap">
-  <div class="auth-card">
-    <h2>Password dimenticata</h2>
-    <p class="sub">Inserisci la tua email e ti mandiamo un link per reimpostare la password.</p>
-    <form method="POST" action="/reset-password">
-      <div class="form-group">
-        <label>Email *</label>
-        <input type="email" name="email" required placeholder="tuaemail@esempio.it">
-      </div>
-      <button class="btn-primary" type="submit">Invia link di reset</button>
-    </form>
-    <div class="auth-footer"><a href="/login">Torna al login</a></div>
-  </div>
-</div>
-{FOOTER_HTML}</body></html>""")
-
-
-@app.post("/reset-password", response_class=HTMLResponse)
-async def reset_password_post(email: str = Form("")):
-    msg_ok = f"""<!DOCTYPE html><html lang="it"><head>
-<meta charset="UTF-8"><title>ItalBandi — Reset inviato</title>{CSS_BASE}</head><body>
-<nav class="navbar">
-  <a href="/" style="display:flex;align-items:center;gap:12px;text-decoration:none">
-    <img src="/logo" style="height:60px;width:60px;object-fit:cover;border-radius:6px">
-    <span class="navbar-brand">ITAL<span>BANDI</span></span>
-  </a>
-</nav>
-<div class="auth-wrap"><div class="auth-card">
-  <div class="ok-msg">Se questa email e registrata, riceverai a breve il link per reimpostare la password. Controlla anche lo spam.</div>
-  <div class="auth-footer"><a href="/login">Torna al login</a></div>
-</div></div>
-{FOOTER_HTML}</body></html>"""
-
-    # Cerca utente (rispondiamo sempre OK per sicurezza)
-    try:
-        if _USE_PG:
-            import pg8000.native as pg
-            con = pg.Connection(**_pg_params)
-            rows = con.run("SELECT id, nome FROM utenti WHERE email=:e", e=email)
-            if rows:
-                token = secrets.token_urlsafe(32)
-                con.run("UPDATE utenti SET token_verifica=:t WHERE email=:e", t=token, e=email)
-            con.close()
-            row = rows[0] if rows else None
-        else:
-            con = sqlite3.connect(DB_PATH)
-            row = con.execute("SELECT id, nome FROM utenti WHERE email=?", (email,)).fetchone()
-            if row:
-                token = secrets.token_urlsafe(32)
-                con.execute("UPDATE utenti SET token_verifica=? WHERE email=?", (token, email))
-                con.commit()
-            con.close()
-
-        if row:
-            link = f"{BASE_URL}/nuova-password?token={token}"
-            import requests as req
-            req.post("https://api.postmarkapp.com/email",
-                headers={"X-Postmark-Server-Token": POSTMARK_KEY, "Content-Type": "application/json"},
-                json={
-                    "From": "bandieincentivi@energelia.it",
-                    "To": email,
-                    "Subject": "Reset password — ItalBandi",
-                    "HtmlBody": f"""<div style="font-family:Arial;max-width:500px;margin:0 auto;padding:20px">
-  <h2 style="color:#1A2A4A">Reset della tua password</h2>
-  <p>Clicca il pulsante qui sotto per scegliere una nuova password.</p>
-  <a href="{link}" style="display:inline-block;background:#C9A84C;color:#1A2A4A;padding:14px 32px;border-radius:6px;font-weight:700;text-decoration:none;margin:20px 0">
-    Reimposta password
-  </a>
-  <p style="color:#888;font-size:0.85rem">Il link e valido per 24 ore. Se non hai richiesto il reset, ignora questa email.</p>
-  <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
-  <p style="color:#888;font-size:0.8rem">ItalBandi - Energelia S.r.l. - Genova</p>
-</div>""",
-                    "TextBody": f"Reimposta la tua password:\n{link}\n\nIl link e valido per 24 ore.",
-                }, timeout=10)
-            print(f"[RESET] link inviato a {email}", flush=True)
-    except Exception as e:
-        print(f"[RESET] errore: {e}", flush=True)
-
-    return HTMLResponse(msg_ok)
-
-
-@app.get("/nuova-password", response_class=HTMLResponse)
-async def nuova_password_get(token: str = ""):
-    if not token:
-        return RedirectResponse("/login")
-    return HTMLResponse(f"""<!DOCTYPE html><html lang="it"><head>
-<meta charset="UTF-8"><title>ItalBandi — Nuova password</title>{CSS_BASE}</head><body>
-<nav class="navbar">
-  <a href="/" style="display:flex;align-items:center;gap:12px;text-decoration:none">
-    <img src="/logo" style="height:60px;width:60px;object-fit:cover;border-radius:6px">
-    <span class="navbar-brand">ITAL<span>BANDI</span></span>
-  </a>
-</nav>
-<div class="auth-wrap"><div class="auth-card">
-  <h2>Scegli la nuova password</h2>
-  <p class="sub">Inserisci la tua nuova password.</p>
-  <form method="POST" action="/nuova-password">
-    <input type="hidden" name="token" value="{token}">
-    <div class="form-group">
-      <label>Nuova password *</label>
-      <div style="position:relative">
-        <input type="password" name="password" id="npwd1" required placeholder="Min. 8 caratteri" style="width:100%;padding-right:40px">
-        <button type="button" onclick="document.getElementById('npwd1').type=document.getElementById('npwd1').type==='password'?'text':'password'"
-          style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#8899AA">&#128065;</button>
-      </div>
-    </div>
-    <div class="form-group">
-      <label>Ripeti password *</label>
-      <input type="password" name="password2" id="npwd2" required placeholder="Ripeti la password">
-      <div id="npwd-err" style="display:none;color:#DC2626;font-size:0.78rem;margin-top:4px">Le password non coincidono.</div>
-    </div>
-    <button class="btn-primary" type="submit" onclick="if(document.getElementById('npwd1').value!==document.getElementById('npwd2').value){{document.getElementById('npwd-err').style.display='block';return false;}}">Salva nuova password</button>
-  </form>
-</div></div>
-{FOOTER_HTML}</body></html>""")
-
-
-@app.post("/nuova-password", response_class=HTMLResponse)
-async def nuova_password_post(token: str = Form(""), password: str = Form(""), password2: str = Form("")):
-    if not token or not password or password != password2 or len(password) < 8:
-        return HTMLResponse("<p>Dati non validi. <a href='/login'>Torna al login</a></p>")
-    pw_hash = hashlib.sha256(password.encode()).hexdigest()
-    try:
-        if _USE_PG:
-            import pg8000.native as pg
-            con = pg.Connection(**_pg_params)
-            con.run("UPDATE utenti SET password_hash=:pw, token_verifica=NULL WHERE token_verifica=:t",
-                    pw=pw_hash, t=token)
-            con.close()
-        else:
-            con = sqlite3.connect(DB_PATH)
-            con.execute("UPDATE utenti SET password_hash=?, token_verifica=NULL WHERE token_verifica=?",
-                        (pw_hash, token))
-            con.commit(); con.close()
-        return HTMLResponse(f"""<!DOCTYPE html><html lang="it"><head>
-<meta charset="UTF-8"><title>ItalBandi</title>{CSS_BASE}</head><body>
-<div class="auth-wrap"><div class="auth-card">
-  <div class="ok-msg">Password aggiornata con successo!</div>
-  <div class="auth-footer"><a href="/login" class="btn-primary" style="display:block;text-align:center;text-decoration:none;margin-top:12px">Accedi ora</a></div>
-</div></div></body></html>""")
-    except Exception as e:
-        return HTMLResponse(f"<p>Errore: {e}. <a href='/login'>Torna al login</a></p>")
-
-
 @app.get("/verifica", response_class=HTMLResponse)
 async def verifica_email(token: str = ""):
     if not token:
         return HTMLResponse("<h2>Link non valido.</h2>")
-    if _USE_PG:
-        import pg8000.native as pg
-        con = pg.Connection(**_pg_params)
-        rows = con.run("SELECT id, nome FROM utenti WHERE token_verifica=:t", t=token)
-        if not rows:
-            con.close()
-            return HTMLResponse(f"""<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
-<body style="font-family:Arial;text-align:center;padding:60px;background:#E8EEF7;color:#1A2A3A">
-<h2 style="color:#DC2626">Link non valido o già utilizzato.</h2>
-<a href="/login" style="color:#1A2A4A">Vai al login</a>
-</body></html>""")
-        row = rows[0]
-        con.run("UPDATE utenti SET verificato=1, token_verifica=NULL WHERE id=:id", id=row[0])
+    con = sqlite3.connect(DB_PATH)
+    row = con.execute("SELECT id, nome FROM utenti WHERE token_verifica=?", (token,)).fetchone()
+    if not row:
         con.close()
-    else:
-        con = sqlite3.connect(DB_PATH)
-        row = con.execute("SELECT id, nome FROM utenti WHERE token_verifica=?", (token,)).fetchone()
-        if not row:
-            con.close()
-            return HTMLResponse(f"""<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
-<body style="font-family:Arial;text-align:center;padding:60px;background:#E8EEF7;color:#1A2A3A">
-<h2 style="color:#DC2626">Link non valido o già utilizzato.</h2>
-<a href="/login" style="color:#1A2A4A">Vai al login</a>
+        return HTMLResponse(f"""<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Link non valido</title></head>
+<body style="font-family:Arial;text-align:center;padding:60px;background:#0A1628;color:#E8E8E8">
+<h2 style="color:#F87171">Link non valido o già utilizzato.</h2>
+<a href="/login" style="color:#C9A84C">Vai al login</a>
 </body></html>""")
-        con.execute("UPDATE utenti SET verificato=1, token_verifica=NULL WHERE id=?", (row[0],))
-        con.commit(); con.close()
+    con.execute("UPDATE utenti SET verificato=1, token_verifica=NULL WHERE id=?", (row[0],))
+    con.commit(); con.close()
     return HTMLResponse(f"""<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Email confermata</title></head>
 <body style="font-family:Arial;text-align:center;padding:60px;background:#0A1628;color:#E8E8E8">
 <div style="max-width:480px;margin:0 auto;background:#0F2035;border:1px solid #C9A84C;border-radius:12px;padding:40px">
@@ -1667,7 +1298,7 @@ async def cerca(
     request: Request,
     keyword: str = Query(""), stato: str = Query("aperto"),
     livello: str = Query(""), regione: str = Query(""),
-    provincia: str = Query(""), solo_titolo: str = Query("no"),
+    provincia: str = Query(""),
     session_id: str = Cookie(default=None)
 ):
     if not get_session(session_id):
@@ -1675,8 +1306,7 @@ async def cerca(
     try:
         hits, totale = be.cerca_bandi_web(
             keyword=keyword, stato=stato, livello=livello,
-            regione=regione, provincia=provincia, max_hits=50,
-            solo_titolo=(solo_titolo == "si"))
+            regione=regione, provincia=provincia, max_hits=50)
         bandi = [be.hit_to_card(h) for h in hits]
         return JSONResponse({"bandi": bandi, "totale": totale})
     except Exception as e:
@@ -1793,272 +1423,6 @@ def _aggiorna_cache():
         CACHE_STATUS["messaggio"] = f"❌ Errore: {e}"
     finally:
         CACHE_STATUS["running"] = False
-
-
-@app.get("/area-riservata", response_class=HTMLResponse)
-async def area_riservata(session_id: str = Cookie(default=None)):
-    user = get_session(session_id)
-    if not user or not user.get("is_admin"):
-        return RedirectResponse("/login")
-
-    if _USE_PG:
-        import pg8000.native as pg
-        con = pg.Connection(**_pg_params)
-        utenti = con.run("""SELECT id, nome, cognome, email, impresa, ruolo, telefono,
-                verificato, created_at FROM utenti ORDER BY created_at DESC""")
-        con.close()
-    else:
-        con = sqlite3.connect(DB_PATH)
-        utenti = con.execute("""SELECT id, nome, cognome, email, impresa, ruolo, telefono,
-                verificato, created_at FROM utenti ORDER BY created_at DESC""").fetchall()
-        con.close()
-
-    n_verificati = sum(1 for u in utenti if u[7])
-    n_non_verif  = len(utenti) - n_verificati
-    righe_html = ""
-    for u in utenti:
-        id_, nome, cognome, email, impresa, ruolo, tel, verif, created = u
-        stato = '<span style="color:#15803D;font-weight:700">&#10003;</span>' if verif else '<span style="color:#DC2626">&#10007;</span>'
-        righe_html += f"""<tr>
-          <td>{nome} {cognome}</td>
-          <td style="color:#1A3A6A">{email}</td>
-          <td>{impresa or '—'}</td>
-          <td>{tel or '—'}</td>
-          <td style="text-align:center">{stato}</td>
-          <td style="color:#8899AA;font-size:0.75rem">{(created or '')[:10]}</td>
-          <td><button onclick="eliminaUtente({id_}, '{email}')"
-            style="background:#FEF2F2;color:#DC2626;border:1px solid #FECACA;border-radius:4px;padding:3px 10px;font-size:0.73rem;cursor:pointer">
-            Elimina</button></td>
-        </tr>"""
-
-    return HTMLResponse(f"""<!DOCTYPE html><html lang="it"><head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Area Riservata — ItalBandi</title>{CSS_BASE}
-<style>
-.ar-wrap {{ max-width:1100px;margin:32px auto;padding:0 24px 60px }}
-.ar-grid {{ display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:32px }}
-.ar-card {{ background:#fff;border:1px solid #D0DCF0;border-radius:10px;padding:20px 24px;box-shadow:0 2px 8px rgba(26,42,74,0.06) }}
-.ar-card h3 {{ font-size:0.72rem;text-transform:uppercase;letter-spacing:0.1em;color:#8899AA;margin-bottom:6px }}
-.ar-card .val {{ font-size:2rem;font-weight:800;color:#1A2A4A }}
-.ar-card .sub {{ font-size:0.75rem;color:#8899AA;margin-top:4px }}
-.ar-section {{ background:#fff;border:1px solid #D0DCF0;border-radius:10px;padding:24px;box-shadow:0 2px 8px rgba(26,42,74,0.06);margin-bottom:24px }}
-.ar-section h2 {{ font-size:1rem;font-weight:700;color:#1A2A4A;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between }}
-table {{ width:100%;border-collapse:collapse }}
-th {{ font-size:0.7rem;text-transform:uppercase;letter-spacing:0.06em;color:#8899AA;padding:8px 12px;text-align:left;border-bottom:2px solid #EEF2F8 }}
-td {{ padding:10px 12px;font-size:0.82rem;border-bottom:1px solid #EEF2F8;color:#1A2A3A }}
-tr:last-child td {{ border-bottom:none }}
-tr:hover td {{ background:#F8FAFF }}
-.btn-ar {{ padding:7px 16px;border-radius:5px;font-size:0.8rem;font-weight:700;cursor:pointer;font-family:inherit;border:none }}
-.btn-ar-primary {{ background:#1A2A4A;color:#fff }}
-.btn-ar-primary:hover {{ background:#C9A84C }}
-.btn-ar-gold {{ background:#C9A84C;color:#1A2A4A }}
-.btn-ar-gold:hover {{ background:#E0BF6A }}
-</style>
-</head><body>
-{NAVBAR_LOGGED(user)}
-<div class="ar-wrap">
-  <h1 style="font-size:1.4rem;font-weight:800;color:#1A2A4A;margin-bottom:24px">&#9881; Area Riservata</h1>
-
-  <!-- Statistiche -->
-  <div class="ar-grid">
-    <div class="ar-card">
-      <h3>Utenti totali</h3>
-      <div class="val">{len(utenti)}</div>
-      <div class="sub">{n_verificati} verificati · {n_non_verif} in attesa</div>
-    </div>
-    <div class="ar-card">
-      <h3>Cache bandi</h3>
-      <div class="val" id="n-cache">...</div>
-      <div class="sub">bandi in cache</div>
-    </div>
-    <div class="ar-card">
-      <h3>Azioni rapide</h3>
-      <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
-        <button class="btn-ar btn-ar-primary" onclick="window.location='/area-riservata/cache'">Aggiorna cache bandi</button>
-        <button class="btn-ar btn-ar-gold" onclick="window.location='/area-riservata/utenti/export'">Scarica CSV utenti</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Lista utenti -->
-  <div class="ar-section">
-    <h2>
-      Utenti registrati ({len(utenti)})
-      <a href="/area-riservata/utenti/export" style="font-size:0.8rem;font-weight:600;color:#1A3A6A;text-decoration:none;border:1px solid #C8D4E4;padding:5px 12px;border-radius:5px">
-        Scarica CSV
-      </a>
-    </h2>
-    <div style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:6px;padding:10px 14px;font-size:0.78rem;color:#92400E;margin-bottom:16px">
-      &#9888; Il database si svuota ad ogni deploy Render. Scarica il CSV regolarmente per non perdere i dati.
-    </div>
-    <table>
-      <thead><tr>
-        <th>Nome</th><th>Email</th><th>Azienda</th><th>Telefono</th>
-        <th style="text-align:center">Verif.</th><th>Registrato</th><th></th>
-      </tr></thead>
-      <tbody>{righe_html}</tbody>
-    </table>
-  </div>
-
-  <!-- Sezione cache -->
-  <div class="ar-section">
-    <h2>Cache bandi</h2>
-    <p style="font-size:0.85rem;color:#6A8AA8;margin-bottom:16px">
-      La cache contiene il testo delle pagine ContributiEuropa pre-scaricato. Aggiornala periodicamente per avere i bandi aggiornati.
-    </p>
-    <button class="btn-ar btn-ar-primary" onclick="window.location='/area-riservata/cache'">Vai alla gestione cache</button>
-  </div>
-</div>
-
-<script>
-async function eliminaUtente(id, email) {{
-  if (!confirm('Eliminare ' + email + '?')) return;
-  const r = await fetch('/admin/utenti/' + id, {{method:'DELETE'}});
-  const d = await r.json();
-  if (d.ok) location.reload();
-  else alert('Errore: ' + d.error);
-}}
-// Carica conteggio cache
-fetch('/admin/cache/status').then(r=>r.json()).then(d=>{{
-  document.getElementById('n-cache').textContent = d.totale || 0;
-}}).catch(()=>{{document.getElementById('n-cache').textContent='—'}});
-</script>
-</body></html>""")
-
-
-@app.get("/area-riservata/utenti/export")
-async def area_riservata_export(session_id: str = Cookie(default=None)):
-    return await admin_utenti_export(session_id=session_id)
-
-
-@app.get("/area-riservata/cache", response_class=HTMLResponse)
-async def area_riservata_cache(session_id: str = Cookie(default=None)):
-    return await admin_cache(session_id=session_id)
-
-
-@app.get("/admin/utenti", response_class=HTMLResponse)
-async def admin_utenti(session_id: str = Cookie(default=None)):
-    user = get_session(session_id)
-    if not user or not user.get("is_admin"):
-        return RedirectResponse("/login")
-    con = sqlite3.connect(DB_PATH)
-    rows = con.execute("""
-        SELECT id, nome, cognome, email, impresa, ruolo, telefono,
-               verificato, created_at
-        FROM utenti ORDER BY created_at DESC
-    """).fetchall()
-    con.close()
-
-    righe_html = ""
-    for r in rows:
-        id_, nome, cognome, email, impresa, ruolo, tel, verificato, created = r
-        stato = '<span style="color:#15803D;font-weight:700">&#10003; Verificato</span>' if verificato else '<span style="color:#DC2626">&#10007; Non verificato</span>'
-        righe_html += f"""
-        <tr>
-          <td>{id_}</td>
-          <td>{nome} {cognome}</td>
-          <td>{email}</td>
-          <td>{impresa or '—'}</td>
-          <td>{ruolo or '—'}</td>
-          <td>{tel or '—'}</td>
-          <td>{stato}</td>
-          <td style="font-size:0.75rem;color:#6A8AA8">{(created or '')[:10]}</td>
-          <td>
-            <button onclick="eliminaUtente({id_}, '{email}')"
-              style="background:#DC2626;color:#fff;border:none;border-radius:4px;padding:4px 10px;font-size:0.75rem;cursor:pointer">
-              Elimina
-            </button>
-          </td>
-        </tr>"""
-
-    return HTMLResponse(f"""<!DOCTYPE html><html lang="it"><head>
-<meta charset="UTF-8"><title>Admin Utenti — ItalBandi</title>{CSS_BASE}
-<style>
-.admin-wrap {{ max-width:1100px;margin:32px auto;padding:0 20px }}
-table {{ width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(26,42,74,0.08); }}
-th {{ background:#1A2A4A;color:#C9A84C;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;padding:10px 12px;text-align:left; }}
-td {{ padding:10px 12px;font-size:0.82rem;border-bottom:1px solid #EEF2F8;color:#1A2A3A; }}
-tr:hover td {{ background:#F4F7FC; }}
-.admin-toolbar {{ display:flex;gap:12px;align-items:center;margin-bottom:20px;flex-wrap:wrap; }}
-</style>
-</head><body>
-<nav class="navbar">
-  <a href="/" style="display:flex;align-items:center;gap:12px;text-decoration:none">
-    <img src="/logo" alt="ItalBandi" style="height:60px;width:60px;object-fit:cover;border-radius:6px">
-    <span class="navbar-brand">ITAL<span>BANDI</span></span>
-  </a>
-  <div class="navbar-links">
-    <a href="/admin/cache">Cache</a>
-    <a href="/admin/utenti" style="color:#C9A84C">Utenti</a>
-    <form method="POST" action="/logout" style="margin:0">
-      <button class="btn-logout" type="submit">Esci</button>
-    </form>
-  </div>
-</nav>
-<div class="admin-wrap">
-  <div class="admin-toolbar">
-    <h2 style="color:#1A2A4A;font-size:1.2rem;font-weight:700">Utenti registrati ({len(rows)})</h2>
-    <a href="/admin/utenti/export" style="background:#1A2A4A;color:#fff;padding:8px 18px;border-radius:5px;font-size:0.82rem;font-weight:700;text-decoration:none">
-      Scarica CSV
-    </a>
-    <span style="font-size:0.78rem;color:#DC2626;font-weight:600">
-      Attenzione: il DB si svuota ad ogni deploy Render. Scarica il CSV regolarmente.
-    </span>
-  </div>
-  <table>
-    <thead>
-      <tr>
-        <th>ID</th><th>Nome</th><th>Email</th><th>Azienda</th>
-        <th>Ruolo</th><th>Telefono</th><th>Stato</th><th>Registrato</th><th></th>
-      </tr>
-    </thead>
-    <tbody>{righe_html}</tbody>
-  </table>
-</div>
-<script>
-async function eliminaUtente(id, email) {{
-  if (!confirm('Eliminare ' + email + '?')) return;
-  const r = await fetch('/admin/utenti/' + id, {{method:'DELETE'}});
-  const d = await r.json();
-  if (d.ok) location.reload();
-  else alert('Errore: ' + d.error);
-}}
-</script>
-</body></html>""")
-
-
-@app.get("/admin/utenti/export")
-async def admin_utenti_export(session_id: str = Cookie(default=None)):
-    user = get_session(session_id)
-    if not user or not user.get("is_admin"):
-        return RedirectResponse("/login")
-    con = sqlite3.connect(DB_PATH)
-    rows = con.execute("""
-        SELECT id, nome, cognome, email, impresa, ruolo, telefono,
-               verificato, created_at
-        FROM utenti ORDER BY created_at DESC
-    """).fetchall()
-    con.close()
-    lines = ["ID,Nome,Cognome,Email,Azienda,Ruolo,Telefono,Verificato,Registrato"]
-    for r in rows:
-        lines.append(",".join(f'"{str(v or "")}"' for v in r))
-    csv_content = "\n".join(lines)
-    return Response(
-        content=csv_content,
-        media_type="text/csv",
-        headers={"Content-Disposition": f"attachment; filename=italbandi_utenti_{datetime.now().strftime('%Y%m%d')}.csv"}
-    )
-
-
-@app.delete("/admin/utenti/{user_id}")
-async def admin_elimina_utente(user_id: int, session_id: str = Cookie(default=None)):
-    user = get_session(session_id)
-    if not user or not user.get("is_admin"):
-        return JSONResponse({"error": "Non autorizzato"}, status_code=403)
-    con = sqlite3.connect(DB_PATH)
-    con.execute("DELETE FROM utenti WHERE id=? AND is_admin=0", (user_id,))
-    con.commit(); con.close()
-    return JSONResponse({"ok": True})
 
 
 @app.get("/admin/cache", response_class=HTMLResponse)
