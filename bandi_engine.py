@@ -36,13 +36,15 @@ def build_filters(scadenza_vals, livello, regione, provincia):
     return " AND ".join(parts)
 
 
-def cerca_bandi_web(keyword="", stato="aperto", livello="", regione="", provincia="", max_hits=50):
+def cerca_bandi_web(keyword="", stato="aperto", livello="", regione="", provincia="", max_hits=50, solo_titolo=False):
     stato_map   = {"aperto": ["Bandi aperti"], "prossimo": ["Bandi prossima apertura"], "tutti": ["Bandi aperti","Bandi prossima apertura"]}
     livello_map = {"europeo": "Bandi europei", "nazionale": "Bandi nazionali", "regionale": "Bandi regionali"}
     filters = build_filters(stato_map.get(stato, ["Bandi aperti"]), livello_map.get(livello, livello), regione, provincia)
-    r = requests.post(ALGOLIA_URL, headers=ALGOLIA_HEADERS,
-                      json={"query": keyword, "hitsPerPage": max_hits, "page": 0,
-                            "filters": filters, "attributesToRetrieve": ["*"]}, timeout=15)
+    payload = {"query": keyword, "hitsPerPage": max_hits, "page": 0,
+               "filters": filters, "attributesToRetrieve": ["*"]}
+    if solo_titolo and keyword:
+        payload["restrictSearchableAttributes"] = ["post_title"]
+    r = requests.post(ALGOLIA_URL, headers=ALGOLIA_HEADERS, json=payload, timeout=15)
     r.raise_for_status()
     data = r.json()
     return data.get("hits", []), data.get("nbHits", 0)
@@ -281,7 +283,7 @@ def genera_scheda_web(hit):
             {"titolo":"COSA E' FINANZIABILE", "voci":_pulisci(cv("cosa_finanziabile",[]))},
             {"titolo":"SPESE NON AMMISSIBILI","voci":_pulisci(cv("spese_non_ammissibili",[]))},
         ],
-        "tabella_contributi": None,
+        "tabella_contributi": cl.get("tabella_contributi") if isinstance(cl.get("tabella_contributi"), dict) else None,
         "destra": [
             {"titolo":"CONTRIBUTO / INTENSITA'","voci":_pulisci(cv("contributo_voci",[]))},
             {"titolo":"CRITERI / VALUTAZIONE",  "voci":_pulisci(cv("criteri_valutazione",[]))},
@@ -310,38 +312,102 @@ def _chiedi_a_claude_da_testo(titolo, testo, stato_bando):
     if not ANTHROPIC_API_KEY:
         return {}
 
-    prompt = f"""Sei un esperto di finanza agevolata italiana di Energelia S.r.l.
+    # CTA adattata allo stato
+    if "prossima" in stato_bando.lower():
+        cta_default = "Preparati ora: il bando apre presto. Contattaci per la pre-istruttoria!"
+    else:
+        cta_default = "Vuoi capire se la tua azienda può accedere a questo bando?"
+
+    prompt = f"""Sei un esperto senior di finanza agevolata italiana che lavora per Energelia S.r.l.
 
 BANDO DA ANALIZZARE:
 Titolo: {titolo}
 Stato: {stato_bando}
 
 TESTO DEL BANDO:
-{testo[:6000]}
+{testo[:8000]}
 
-Genera la scheda in JSON con questa struttura ESATTA (usa solo dati presenti nel testo):
+REGOLE OBBLIGATORIE:
+- Ogni bullet deve essere una frase COMPLETA e SPECIFICA (80-160 caratteri) con dati reali
+- MAI scrivere "verificare sul bando", "non specificato", "vedi bando"
+- Usa <b>etichetta:</b> per evidenziare etichette dentro i bullet (non per l'intero bullet)
+- Minimo 3 bullet per sezione, ideale 4
+- Le metriche devono essere sintetiche (max 20 caratteri per riga), usa \\n per multiriga
+- tabella_contributi: usa null se non ci sono tipologie/scaglioni distinti
+
+Genera la scheda in JSON con questa struttura ESATTA:
 {{
   "sottotitolo": "Ente erogatore · riferimento normativo · tipo agevolazione · {stato_bando}",
-  "dotazione": "importo totale fondo (null se non presente)",
-  "intensita": "percentuale contributo (null se non presente)",
-  "contributo_max": "importo massimo per beneficiario (null se non presente)",
+  "dotazione": "es. EUR 45 MLN (null se non presente nel testo)",
+  "intensita": "es. 35%\\nfondo perduto (null se non presente)",
+  "contributo_max": "es. EUR 250.000 (null se non presente)",
   "data_scadenza": "DD/MM/YYYY (null se non presente)",
-  "ente_finalita": ["Ente erogatore", "Obiettivo", "Riferimento normativo"],
-  "chi_partecipa": ["Beneficiari", "Requisiti", "Esclusioni"],
-  "cosa_finanziabile": ["Tipologia 1", "Tipologia 2", "Tipologia 3"],
-  "spese_ammissibili": ["Voce 1", "Voce 2", "Voce 3"],
-  "spese_non_ammissibili": ["Voce 1", "IVA", "Spese ante-ammissione"],
-  "contributo_voci": ["Intensita: X%", "Max: EUR X", "Min investimento: EUR X"],
-  "criteri_valutazione": ["Procedura", "Criterio 1", "Documentazione"],
-  "fasi_tempi": ["Apertura: data", "Scadenza: data", "Rendicontazione"],
-  "come_presentare": ["Portale", "Credenziali", "Allegati"],
-  "perche_interessante": ["Punto 1", "Punto 2", "Punto 3"],
-  "criticita": ["Vincolo 1", "Vincolo 2", "Attenzione"],
-  "cta_testo": "Frase CTA specifica",
-  "fonte_ufficiale": "Fonte dal testo"
+  "ente_finalita": [
+    "Nome ente erogatore con riferimento normativo preciso",
+    "Obiettivo specifico del bando con dati concreti",
+    "Programma di riferimento e contesto (es. PR FESR 2021-27, PNRR M1C2)",
+    "Eventuale info su lotti, sportelli o dotazione per area geografica"
+  ],
+  "chi_partecipa": [
+    "Forma giuridica e dimensione con settori specifici se indicati",
+    "Requisiti territoriali e registrazione (es. sede operativa, iscrizione CCIAA)",
+    "<b>Escluse:</b> categorie escluse esplicitamente dal bando",
+    "Requisiti settoriali o codici ATECO rilevanti se specificati"
+  ],
+  "cosa_finanziabile": [
+    "<b>Linea A:</b> descrizione concreta con esempi e % max se previsti",
+    "<b>Linea B:</b> altra categoria di spesa con dettagli",
+    "Investimento minimo/massimo ammissibile in EUR se indicato",
+    "Eventuale quarta tipologia o vincolo sulle spese"
+  ],
+  "spese_non_ammissibili": [
+    "IVA e oneri fiscali recuperabili dal beneficiario",
+    "Spese sostenute prima della data di ammissibilità (ante-domanda)",
+    "Eventuali categorie specifiche escluse citate nel testo",
+    "Ulteriore esclusione specifica del bando se presente"
+  ],
+  "tabella_contributi": null,
+  "contributo_voci": [
+    "Intensità: XX% delle spese ammissibili (IVA esclusa)",
+    "<b>Contributo massimo:</b> EUR X.XXX per beneficiario",
+    "Regime di aiuto: De minimis o esenzione con riferimento regolamento",
+    "Eventuale maggiorazione per categorie prioritarie (+X%)"
+  ],
+  "criteri_valutazione": [
+    "Procedura: valutativa con graduatoria / sportello / automatica",
+    "Criteri principali di selezione con punteggi se indicati",
+    "Soglia minima di accesso se prevista",
+    "Premialità per categorie specifiche se previste"
+  ],
+  "fasi_tempi": [
+    "<b>Apertura:</b> data effettiva o stato attuale",
+    "<b>Scadenza domande:</b> data e ora esatte",
+    "<b>Istruttoria:</b> tempistica prevista",
+    "<b>Rendicontazione:</b> scadenza finale per spese"
+  ],
+  "come_presentare": [
+    "Piattaforma specifica con nome portale",
+    "Credenziali richieste: SPID/CNS/CIE e firma digitale",
+    "Allegati principali obbligatori",
+    "Eventuale supporto CAA o sportello dedicato"
+  ],
+  "perche_interessante": [
+    "Vantaggio concreto 1 con dati numerici (es. fondo perduto fino al X%)",
+    "Vantaggio concreto 2 (target, semplicità, dotazione, deadline comoda)",
+    "Vantaggio concreto 3 (cumulabilità, anticipo erogazione, ecc.)",
+    "Eventuale quarto punto di forza specifico"
+  ],
+  "criticita": [
+    "Prima criticità reale con dettaglio operativo",
+    "Seconda criticità: requisito stringente o esclusione importante",
+    "Terza criticità: tempi, complessità istruttoria, spese ante-domanda",
+    "Eventuale quarta attenzione specifica del bando"
+  ],
+  "cta_testo": "{cta_default}",
+  "fonte_ufficiale": "Riferimento normativo o ente trovato nel testo"
 }}
 
-Rispondi SOLO con JSON valido."""
+Rispondi SOLO con JSON valido. Nessun testo prima o dopo."""
 
     try:
         resp = requests.post(
@@ -417,7 +483,7 @@ def genera_scheda_da_testo(hit, testo_cache):
             {"titolo":"COSA E' FINANZIABILE", "voci":_pulisci(cv("cosa_finanziabile",[]))},
             {"titolo":"SPESE NON AMMISSIBILI","voci":_pulisci(cv("spese_non_ammissibili",[]))},
         ],
-        "tabella_contributi": None,
+        "tabella_contributi": cl.get("tabella_contributi") if isinstance(cl.get("tabella_contributi"), dict) else None,
         "destra": [
             {"titolo":"CONTRIBUTO / INTENSITA'","voci":_pulisci(cv("contributo_voci",[]))},
             {"titolo":"CRITERI / VALUTAZIONE",  "voci":_pulisci(cv("criteri_valutazione",[]))},
