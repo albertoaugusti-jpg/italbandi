@@ -578,7 +578,19 @@ def index_page(user):
   <p>Trova le opportunità di finanziamento per la tua impresa. Filtra per livello geografico e scarica la scheda PDF professionale.</p>
 </div>
 <div class="search-bar">
-  <input id="keyword" type="text" placeholder="Parola chiave (es. formazione, energia, PMI...)">
+  <div style="display:flex;flex:1;min-width:200px;flex-direction:column;gap:4px">
+    <input id="keyword" type="text" placeholder="Parola chiave (es. formazione, energia, PMI...)" style="width:100%">
+    <div style="display:flex;gap:6px">
+      <button id="btn-ampia" onclick="setRicerca('no')"
+        style="flex:1;padding:5px 10px;background:#1A2A4A;color:#fff;border:1px solid #1A2A4A;border-radius:4px;font-size:0.72rem;font-weight:700;cursor:pointer">
+        Nel testo
+      </button>
+      <button id="btn-precisa" onclick="setRicerca('si')"
+        style="flex:1;padding:5px 10px;background:#fff;color:#1A2A4A;border:1px solid #C8D4E4;border-radius:4px;font-size:0.72rem;font-weight:700;cursor:pointer">
+        Nel titolo
+      </button>
+    </div>
+  </div>
   <select id="stato">
     <option value="aperto">Bandi aperti</option>
     <option value="prossimo">Prossima apertura</option>
@@ -605,16 +617,6 @@ def index_page(user):
   <span id="provincia-wrap" style="display:none">
     <select id="provincia"><option value="">(tutte le province)</option></select>
   </span>
-  <div style="display:flex;gap:6px">
-    <button id="btn-ampia" onclick="setRicerca('no')"
-      style="padding:8px 16px;background:#1A2A4A;color:#fff;border:1px solid #1A2A4A;border-radius:5px;font-size:0.8rem;font-weight:700;cursor:pointer">
-      Ampia
-    </button>
-    <button id="btn-precisa" onclick="setRicerca('si')"
-      style="padding:8px 16px;background:#fff;color:#1A2A4A;border:1px solid #C8D4E4;border-radius:5px;font-size:0.8rem;font-weight:700;cursor:pointer">
-      Precisa
-    </button>
-  </div>
   <input type="hidden" id="dove-tutto" value="no">
   <button class="btn-cerca" onclick="cerca()">Cerca</button>
 </div>
