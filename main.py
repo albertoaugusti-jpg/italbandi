@@ -1,4 +1,4 @@
-a"""
+"""
 ItalBandi — main.py
 Portale web con autenticazione, registrazione, privacy, cookie policy
 Proprietà: Energelia S.r.l. — Responsabile privacy: Bruno Massimo Legger
