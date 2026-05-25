@@ -109,29 +109,34 @@ def invia_email_verifica(email, nome, token):
     try:
         import requests as req
         link = f"{BASE_URL}/verifica?token={token}"
-        req.post("https://api.postmarkapp.com/email",
+        resp = req.post("https://api.postmarkapp.com/email",
             headers={"X-Postmark-Server-Token": POSTMARK_KEY,
                      "Content-Type": "application/json"},
             json={
-                "From": "noreply@energelia.it",
+                "From": "bandieincentivi@energelia.it",
+                "ReplyTo": "a.castagnaro@energelia.it",
                 "To": email,
-                "Subject": "Conferma la tua email — ItalBandi",
+                "Subject": "Conferma la tua email - ItalBandi",
                 "HtmlBody": f"""
-<div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto">
-  <h2 style="color:#0A1628">Benvenuto su ItalBandi, {nome}!</h2>
-  <p>Clicca il pulsante qui sotto per confermare la tua email e attivare il tuo account.</p>
-  <a href="{link}" style="display:inline-block;background:#C9A84C;color:#0A1628;padding:14px 32px;border-radius:6px;font-weight:700;text-decoration:none;margin:20px 0">
-    ✓ Conferma Email
+<div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;padding:20px">
+  <h2 style="color:#1A2A4A">Benvenuto su ItalBandi, {nome}!</h2>
+  <p style="color:#444">Clicca il pulsante qui sotto per confermare la tua email e attivare il tuo account.</p>
+  <a href="{link}" style="display:inline-block;background:#C9A84C;color:#1A2A4A;padding:14px 32px;border-radius:6px;font-weight:700;text-decoration:none;margin:20px 0">
+    Conferma Email
   </a>
-  <p style="color:#888;font-size:0.85rem">Il link è valido per 24 ore.<br>Se non ti sei registrato su ItalBandi, ignora questa email.</p>
+  <p style="color:#888;font-size:0.85rem">Il link e valido per 24 ore.<br>Se non ti sei registrato su ItalBandi, ignora questa email.</p>
   <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
-  <p style="color:#888;font-size:0.8rem">ItalBandi — un servizio di Energelia S.r.l. · Genova</p>
+  <p style="color:#888;font-size:0.8rem">ItalBandi - un servizio di Energelia S.r.l. - Genova</p>
 </div>""",
-                "TextBody": f"Benvenuto su ItalBandi, {nome}!\n\nConferma la tua email cliccando questo link:\n{link}\n\nIl link è valido per 24 ore.",
+                "TextBody": f"Benvenuto su ItalBandi, {nome}!\n\nConferma la tua email:\n{link}\n\nIl link e valido per 24 ore.",
             }, timeout=10)
-        print(f"[EMAIL] verifica inviata a {email}", flush=True)
+        result = resp.json()
+        if resp.status_code == 200 and result.get("ErrorCode", 0) == 0:
+            print(f"[EMAIL] verifica inviata a {email} — MessageID: {result.get('MessageID')}", flush=True)
+        else:
+            print(f"[EMAIL] ERRORE Postmark: {result}", flush=True)
     except Exception as e:
-        print(f"[EMAIL] errore: {e}", flush=True)
+        print(f"[EMAIL] eccezione: {e}", flush=True)
 
 def get_user(email, password):
     pw_hash = hashlib.sha256(password.encode()).hexdigest()
