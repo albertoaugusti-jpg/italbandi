@@ -680,23 +680,29 @@ def index_page(user):
       <option>Valle d'Aosta</option><option>Veneto</option>
     </select>
   </span>
-  <span id="provincia-wrap" style="display:none">
-    <select id="provincia"><option value="">(tutte le province)</option></select>
-  </span>
+  <span id="provincia-wrap" style="display:none"></span>
   <input type="hidden" id="dove-tutto" value="no">
   <button class="btn-cerca" onclick="cerca()">Cerca</button>
 </div>
 
 <!-- Card suggerimenti ricerca -->
 <div style="background:#F0F4FB;border-bottom:1px solid #D8E2EE;padding:10px 40px">
-  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-    <span style="font-size:0.72rem;color:#8899AA;font-weight:600;white-space:nowrap">💡 Prova:</span>
-    <button onclick="suggerisci('energia rinnovabile')" class="chip-sug">⚡ energia rinnovabile</button>
-    <button onclick="suggerisci('formazione dipendenti')" class="chip-sug">👥 formazione dipendenti</button>
-    <button onclick="suggerisci('macchinari 4.0')" class="chip-sug">⚙️ macchinari 4.0</button>
-    <button onclick="suggerisci('internazionalizzazione')" class="chip-sug">🌍 internazionalizzazione</button>
-    <button onclick="suggerisci('agricoltura biologica')" class="chip-sug">🌿 agricoltura biologica</button>
-    <button onclick="suggerisci('startup innovativa')" class="chip-sug">🚀 startup innovativa</button>
+  <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">
+    <span style="font-size:0.72rem;color:#8899AA;font-weight:700;white-space:nowrap;padding-top:2px">💡 Come cercare:</span>
+    <span style="font-size:0.75rem;color:#5A7A9A;line-height:1.6">
+      Scrivi una o due parole chiave (es. <em>energia</em>, <em>macchinari 4.0</em>, <em>formazione</em>) · 
+      Usa <strong>Nel testo</strong> per una ricerca ampia su tutto il bando, 
+      <strong>Nel titolo</strong> per risultati più precisi · 
+      Filtra per stato e livello geografico per restringere i risultati.
+    </span>
+    <span style="font-size:0.72rem;color:#8899AA;font-weight:600;white-space:nowrap;padding-top:2px">Prova:</span>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button onclick="suggerisci('energia rinnovabile')" class="chip-sug">⚡ energia</button>
+      <button onclick="suggerisci('formazione dipendenti')" class="chip-sug">👥 formazione</button>
+      <button onclick="suggerisci('macchinari 4.0')" class="chip-sug">⚙️ macchinari</button>
+      <button onclick="suggerisci('internazionalizzazione')" class="chip-sug">🌍 export</button>
+      <button onclick="suggerisci('startup innovativa')" class="chip-sug">🚀 startup</button>
+    </div>
   </div>
 </div>
 
@@ -776,7 +782,7 @@ async function cerca() {{
     stato:    document.getElementById('stato').value,
     livello:  document.getElementById('livello').value,
     regione:  document.getElementById('regione').value,
-    provincia:document.getElementById('provincia').value,
+    provincia: '',
     solo_titolo: _soloTitolo,
   }});
   document.getElementById('risultati').innerHTML = '<div class="loader">⏳ Ricerca in corso...</div>';
