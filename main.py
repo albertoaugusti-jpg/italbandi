@@ -607,10 +607,10 @@ def index_page(user):
   </span>
   <span style="display:flex;align-items:center;gap:10px;font-size:0.78rem;color:#5A7A9A;border-left:1px solid #D0DCF0;padding-left:12px;white-space:nowrap">
     <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
-      <input type="radio" name="dove" id="dove-tutto" value="no" checked style="accent-color:#1A2A4A"> Tutto
+      <input type="radio" name="dove" id="dove-tutto" value="no" checked style="accent-color:#1A2A4A"> Ampia
     </label>
     <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
-      <input type="radio" name="dove" id="dove-titolo" value="si" style="accent-color:#1A2A4A"> Solo titolo
+      <input type="radio" name="dove" id="dove-titolo" value="si" style="accent-color:#1A2A4A"> Precisa
     </label>
   </span>
   <button class="btn-cerca" onclick="cerca()">Cerca</button>
