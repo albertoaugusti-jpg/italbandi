@@ -98,6 +98,21 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/ico_eu.png")
+async def serve_ico_eu():
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ico_eu.png")
+    return FileResponse(path, media_type="image/png") if os.path.exists(path) else Response(status_code=404)
+
+@app.get("/ico_italia.png")
+async def serve_ico_italia():
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ico_italia.png")
+    return FileResponse(path, media_type="image/png") if os.path.exists(path) else Response(status_code=404)
+
+@app.get("/ico_regioni.png")
+async def serve_ico_regioni():
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ico_regioni.png")
+    return FileResponse(path, media_type="image/png") if os.path.exists(path) else Response(status_code=404)
+
 @app.get("/logo")
 async def serve_logo():
     for nome in ["Logo Bellissimo ItalBandi.png", "logo_italbandi.png", "logo.png"]:
@@ -646,36 +661,15 @@ def index_page(user):
   <p style="font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:#5A7A9A;font-weight:600;margin:0 0 12px">Dove vuoi cercare?</p>
   <div style="display:flex;gap:14px;justify-content:center;margin-bottom:20px;flex-wrap:wrap">
     <div class="geo-card" id="geo-eu" onclick="selGeo('eu',this)">
-      <svg viewBox="0 0 64 44" style="width:56px;height:38px;display:block;margin:0 auto 6px">
-        <ellipse cx="32" cy="22" rx="24" ry="17" fill="#1D4ED8" opacity="0.85"/>
-        <ellipse cx="32" cy="22" rx="24" ry="9" fill="none" stroke="#60A5FA" stroke-width="0.7" opacity="0.5"/>
-        <line x1="8" y1="22" x2="56" y2="22" stroke="#60A5FA" stroke-width="0.7" opacity="0.4"/>
-        <ellipse cx="32" cy="22" rx="24" ry="17" fill="none" stroke="#3B82F6" stroke-width="0.9"/>
-        <circle cx="25" cy="15" r="1.4" fill="#FCD34D"/>
-        <circle cx="32" cy="11" r="1.4" fill="#FCD34D"/>
-        <circle cx="39" cy="15" r="1.4" fill="#FCD34D"/>
-        <circle cx="42" cy="22" r="1.4" fill="#FCD34D"/>
-        <circle cx="39" cy="29" r="1.4" fill="#FCD34D"/>
-        <circle cx="32" cy="33" r="1.4" fill="#FCD34D"/>
-        <circle cx="25" cy="29" r="1.4" fill="#FCD34D"/>
-        <circle cx="22" cy="22" r="1.4" fill="#FCD34D"/>
-      </svg>
+      <img src="/ico_eu.png" style="width:60px;height:60px;object-fit:contain;display:block;margin:0 auto 6px">
       <div class="geo-lbl">Europeo</div><div class="geo-sub">Fondi UE</div>
     </div>
     <div class="geo-card" id="geo-nazionale" onclick="selGeo('nazionale',this)">
-      <svg viewBox="0 0 40 56" style="width:32px;height:44px;display:block;margin:0 auto 6px">
-        <path d="M20 3C15 4 11 9 9 15C7 20 9 23 8 28C6 33 4 35 6 40C8 45 11 47 13 52C15 57 13 61 16 63C18 65 20 64 23 61C26 58 26 54 28 50C31 46 33 46 34 42C36 37 33 32 33 27C33 22 35 19 34 14C32 9 28 5 24 3Z" fill="#2563EB" opacity="0.85"/>
-      </svg>
+      <img src="/ico_italia.png" style="width:42px;height:60px;object-fit:contain;display:block;margin:0 auto 6px">
       <div class="geo-lbl">Nazionale</div><div class="geo-sub">Tutta Italia</div>
     </div>
     <div class="geo-card" id="geo-regionale" onclick="selGeo('regionale',this)">
-      <svg viewBox="0 0 40 56" style="width:32px;height:44px;display:block;margin:0 auto 6px">
-        <path d="M20 3C15 4 11 9 9 15C7 20 9 23 8 28C6 33 4 35 6 40C8 45 11 47 13 52C15 57 13 61 16 63C18 65 20 64 23 61C26 58 26 54 28 50C31 46 33 46 34 42C36 37 33 32 33 27C33 22 35 19 34 14C32 9 28 5 24 3Z" fill="#374151" opacity="0.4"/>
-        <line x1="8" y1="25" x2="34" y2="25" stroke="#6B7280" stroke-width="0.8"/>
-        <line x1="7" y1="36" x2="34" y2="36" stroke="#6B7280" stroke-width="0.8"/>
-        <line x1="20" y1="3" x2="20" y2="64" stroke="#6B7280" stroke-width="0.8"/>
-        <path d="M20 3C15 4 11 9 9 15C7 20 9 23 8 28C6 33 4 35 6 40C8 45 11 47 13 52C15 57 13 61 16 63C18 65 20 64 23 61C26 58 26 54 28 50C31 46 33 46 34 42C36 37 33 32 33 27C33 22 35 19 34 14C32 9 28 5 24 3Z" fill="none" stroke="#9CA3AF" stroke-width="1.2"/>
-      </svg>
+      <img src="/ico_regioni.png" style="width:42px;height:60px;object-fit:contain;display:block;margin:0 auto 6px">
       <div class="geo-lbl">Regionale</div><div class="geo-sub">La tua regione</div>
     </div>
   </div>
