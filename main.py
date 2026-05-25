@@ -661,15 +661,15 @@ def index_page(user):
   <p style="font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:#5A7A9A;font-weight:600;margin:0 0 12px">Dove vuoi cercare?</p>
   <div style="display:flex;gap:14px;justify-content:center;margin-bottom:20px;flex-wrap:wrap">
     <div class="geo-card" id="geo-eu" onclick="selGeo('eu',this)">
-      <div style="font-size:3rem;line-height:1;margin-bottom:6px">🇪🇺</div>
+      <div style="width:64px;height:64px;background:rgba(255,255,255,0.15);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 8px;font-size:2.4rem;line-height:1">🇪🇺</div>
       <div class="geo-lbl">Europeo</div><div class="geo-sub">Fondi UE</div>
     </div>
     <div class="geo-card" id="geo-nazionale" onclick="selGeo('nazionale',this)">
-      <div style="font-size:3rem;line-height:1;margin-bottom:6px">🇮🇹</div>
+      <div style="width:64px;height:64px;background:rgba(255,255,255,0.15);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 8px;font-size:2.4rem;line-height:1">🇮🇹</div>
       <div class="geo-lbl">Nazionale</div><div class="geo-sub">Tutta Italia</div>
     </div>
     <div class="geo-card" id="geo-regionale" onclick="selGeo('regionale',this)">
-      <div style="font-size:3rem;line-height:1;margin-bottom:6px">🏛️</div>
+      <div style="width:64px;height:64px;background:rgba(255,255,255,0.15);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 8px;font-size:2.4rem;line-height:1">🏛️</div>
       <div class="geo-lbl">Regionale</div><div class="geo-sub">La tua regione</div>
     </div>
   </div>
