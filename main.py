@@ -605,14 +605,17 @@ def index_page(user):
   <span id="provincia-wrap" style="display:none">
     <select id="provincia"><option value="">(tutte le province)</option></select>
   </span>
-  <span style="display:flex;align-items:center;gap:10px;font-size:0.78rem;color:#5A7A9A;border-left:1px solid #D0DCF0;padding-left:12px;white-space:nowrap">
-    <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
-      <input type="radio" name="dove" id="dove-tutto" value="no" checked style="accent-color:#1A2A4A"> Ampia
-    </label>
-    <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
-      <input type="radio" name="dove" id="dove-titolo" value="si" style="accent-color:#1A2A4A"> Precisa
-    </label>
-  </span>
+  <div style="display:flex;gap:6px">
+    <button id="btn-ampia" onclick="setRicerca('no')"
+      style="padding:8px 16px;background:#1A2A4A;color:#fff;border:1px solid #1A2A4A;border-radius:5px;font-size:0.8rem;font-weight:700;cursor:pointer">
+      Ampia
+    </button>
+    <button id="btn-precisa" onclick="setRicerca('si')"
+      style="padding:8px 16px;background:#fff;color:#1A2A4A;border:1px solid #C8D4E4;border-radius:5px;font-size:0.8rem;font-weight:700;cursor:pointer">
+      Precisa
+    </button>
+  </div>
+  <input type="hidden" id="dove-tutto" value="no">
   <button class="btn-cerca" onclick="cerca()">Cerca</button>
 </div>
 <div class="container">
@@ -643,7 +646,19 @@ const PROVINCE = {{
   "Trentino-Alto-Adige": ["Provincia di Bolzano","Provincia di Trento"],
   "Valle d'Aosta": ["Provincia di Aosta"],
 }};
-let _hits = {{}};
+let _soloTitolo = 'no';
+function setRicerca(val) {{
+  _soloTitolo = val;
+  const btnA = document.getElementById('btn-ampia');
+  const btnP = document.getElementById('btn-precisa');
+  if (val === 'no') {{
+    btnA.style.background = '#1A2A4A'; btnA.style.color = '#fff'; btnA.style.borderColor = '#1A2A4A';
+    btnP.style.background = '#fff'; btnP.style.color = '#1A2A4A'; btnP.style.borderColor = '#C8D4E4';
+  }} else {{
+    btnP.style.background = '#C9A84C'; btnP.style.color = '#1A2A4A'; btnP.style.borderColor = '#C9A84C';
+    btnA.style.background = '#fff'; btnA.style.color = '#1A2A4A'; btnA.style.borderColor = '#C8D4E4';
+  }}
+}}
 function aggiornaFiltri() {{
   const livello = document.getElementById('livello').value;
   document.getElementById('regione-wrap').style.display   = livello === 'regionale' ? 'inline' : 'none';
@@ -661,14 +676,13 @@ function aggiornaProvince() {{
   }} else {{ wrap.style.display = 'none'; }}
 }}
 async function cerca() {{
-  const soloTitolo = document.querySelector('input[name="dove"]:checked')?.value || 'no';
   const params = new URLSearchParams({{
     keyword:  document.getElementById('keyword').value,
     stato:    document.getElementById('stato').value,
     livello:  document.getElementById('livello').value,
     regione:  document.getElementById('regione').value,
     provincia:document.getElementById('provincia').value,
-    solo_titolo: soloTitolo,
+    solo_titolo: _soloTitolo,
   }});
   document.getElementById('risultati').innerHTML = '<div class="loader">⏳ Ricerca in corso...</div>';
   document.getElementById('risultati-header').textContent = '';
