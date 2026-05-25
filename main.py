@@ -93,7 +93,7 @@ async def api_messaggio(body: dict, session_id: str = Cookie(default=None)):
         return JSONResponse({"error": str(e)})
 
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health():
     return {"status": "ok"}
 
@@ -191,11 +191,11 @@ init_db()
 
 # ── Keepalive — evita sleeping Render free tier ──────────────────────────────
 def _keepalive():
-    import time
+    import time, requests as req
     time.sleep(60)
     while True:
         try:
-            requests.get(f"{BASE_URL}/health", timeout=10)
+            req.get(f"{BASE_URL}/health", timeout=10)
             print("[KEEPALIVE] ping OK", flush=True)
         except Exception as e:
             print(f"[KEEPALIVE] errore: {e}", flush=True)
