@@ -182,6 +182,8 @@ def init_db():
         except: pass
         try: con.execute("ALTER TABLE utenti ADD COLUMN token_verifica TEXT")
         except: pass
+        try: con.execute("ALTER TABLE utenti ADD COLUMN ricerche_count INTEGER DEFAULT 0")
+        except: pass
         pw_hash = hashlib.sha256("Samp1946,".encode()).hexdigest()
         con.execute("INSERT OR IGNORE INTO utenti (nome,cognome,email,password_hash,is_admin,verificato) VALUES (?,?,?,?,?,?)",
                     ("Admin","ItalBandi","admin@italbandi.it", pw_hash, 1, 1))
@@ -789,6 +791,23 @@ async function cerca() {{
   document.getElementById('risultati-header').textContent = '';
   const resp = await fetch('/api/cerca?' + params);
   const data = await resp.json();
+  if (data.error === 'limite') {{
+    document.getElementById('risultati').innerHTML = `
+      <div style="background:#fff;border:1px solid #D0DCF0;border-left:4px solid #C9A84C;border-radius:8px;padding:28px 32px;text-align:center;max-width:560px;margin:40px auto">
+        <div style="font-size:2rem;margin-bottom:12px">🔒</div>
+        <h3 style="color:#1A2A4A;font-size:1.1rem;margin-bottom:8px">Hai esaurito le ricerche gratuite</h3>
+        <p style="color:#6A8AA8;font-size:0.88rem;line-height:1.6;margin-bottom:20px">
+          Hai utilizzato tutte le 10 ricerche incluse nel tuo account gratuito.<br>
+          Contatta Energelia per sbloccare ricerche illimitate e una consulenza gratuita sui tuoi bandi.
+        </p>
+        <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+          <span style="background:#C9A84C;color:#1A2A4A;padding:10px 22px;border-radius:6px;font-weight:700;font-size:0.9rem">📞 010 8078800</span>
+          <button onclick="mostraCtaDownload()" style="background:#1A2A4A;color:#fff;border:none;padding:10px 22px;border-radius:6px;font-weight:700;font-size:0.9rem;cursor:pointer">✉️ Scrivici</button>
+        </div>
+      </div>`;
+    document.getElementById('risultati-header').textContent = '';
+    return;
+  }}
   if (data.error) {{ document.getElementById('risultati').innerHTML = `<p style="color:#F87171">${{data.error}}</p>`; return; }}
   document.getElementById('risultati-header').textContent = `${{data.totale}} bandi trovati`;
   _hits = {{}};
@@ -1703,8 +1722,24 @@ async def cerca(
     provincia: str = Query(""), solo_titolo: str = Query("no"),
     session_id: str = Cookie(default=None)
 ):
-    if not get_session(session_id):
+    user = get_session(session_id)
+    if not user:
         return JSONResponse({"error": "Non autenticato"}, status_code=401)
+
+    # Limite ricerche — non si applica agli admin
+    if not user.get("is_admin"):
+        con = sqlite3.connect(DB_PATH)
+        row = con.execute("SELECT ricerche_count FROM utenti WHERE id=?", (user["id"],)).fetchone()
+        count = row[0] if row else 0
+        if count >= 10:
+            con.close()
+            return JSONResponse({
+                "error": "limite",
+                "messaggio": "Hai esaurito le tue 10 ricerche gratuite. Contatta Energelia per continuare."
+            }, status_code=429)
+        con.execute("UPDATE utenti SET ricerche_count = ricerche_count + 1 WHERE id=?", (user["id"],))
+        con.commit(); con.close()
+
     try:
         hits, totale = be.cerca_bandi_web(
             keyword=keyword, stato=stato, livello=livello,
@@ -1843,21 +1878,27 @@ async def area_riservata(session_id: str = Cookie(default=None)):
     else:
         con = sqlite3.connect(DB_PATH)
         utenti = con.execute("""SELECT id, nome, cognome, email, impresa, ruolo, telefono,
-                verificato, created_at FROM utenti ORDER BY created_at DESC""").fetchall()
+                verificato, created_at, COALESCE(ricerche_count,0)
+                FROM utenti ORDER BY created_at DESC""").fetchall()
         con.close()
 
     n_verificati = sum(1 for u in utenti if u[7])
     n_non_verif  = len(utenti) - n_verificati
     righe_html = ""
     for u in utenti:
-        id_, nome, cognome, email, impresa, ruolo, tel, verif, created = u
+        id_, nome, cognome, email, impresa, ruolo, tel, verif, created, ricerche = u
         stato = '<span style="color:#15803D;font-weight:700">&#10003;</span>' if verif else '<span style="color:#DC2626">&#10007;</span>'
+        colore_r = '#DC2626' if ricerche >= 10 else '#1A2A4A'
         righe_html += f"""<tr>
           <td>{nome} {cognome}</td>
           <td style="color:#1A3A6A">{email}</td>
           <td>{impresa or '—'}</td>
           <td>{tel or '—'}</td>
           <td style="text-align:center">{stato}</td>
+          <td style="text-align:center;font-weight:700;color:{colore_r}">{ricerche}/10
+            <button onclick="resetRicerche({id_},'{email}')"
+              style="margin-left:4px;background:none;border:1px solid #C8D4E4;border-radius:4px;padding:2px 6px;font-size:0.68rem;color:#5A7A9A;cursor:pointer">reset</button>
+          </td>
           <td style="color:#8899AA;font-size:0.75rem">{(created or '')[:10]}</td>
           <td><button onclick="eliminaUtente({id_}, '{email}')"
             style="background:#FEF2F2;color:#DC2626;border:1px solid #FECACA;border-radius:4px;padding:3px 10px;font-size:0.73rem;cursor:pointer">
@@ -1927,7 +1968,7 @@ tr:hover td {{ background:#F8FAFF }}
     <table>
       <thead><tr>
         <th>Nome</th><th>Email</th><th>Azienda</th><th>Telefono</th>
-        <th style="text-align:center">Verif.</th><th>Registrato</th><th></th>
+        <th style="text-align:center">Verif.</th><th style="text-align:center">Ricerche</th><th>Registrato</th><th></th>
       </tr></thead>
       <tbody>{righe_html}</tbody>
     </table>
@@ -1947,6 +1988,13 @@ tr:hover td {{ background:#F8FAFF }}
 async function eliminaUtente(id, email) {{
   if (!confirm('Eliminare ' + email + '?')) return;
   const r = await fetch('/admin/utenti/' + id, {{method:'DELETE'}});
+  const d = await r.json();
+  if (d.ok) location.reload();
+  else alert('Errore: ' + d.error);
+}}
+async function resetRicerche(id, email) {{
+  if (!confirm('Azzerare le ricerche per ' + email + '?')) return;
+  const r = await fetch('/admin/utenti/' + id + '/reset-ricerche', {{method:'POST'}});
   const d = await r.json();
   if (d.ok) location.reload();
   else alert('Errore: ' + d.error);
@@ -2081,6 +2129,17 @@ async def admin_utenti_export(session_id: str = Cookie(default=None)):
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename=italbandi_utenti_{datetime.now().strftime('%Y%m%d')}.csv"}
     )
+
+
+@app.post("/admin/utenti/{user_id}/reset-ricerche")
+async def admin_reset_ricerche(user_id: int, session_id: str = Cookie(default=None)):
+    user = get_session(session_id)
+    if not user or not user.get("is_admin"):
+        return JSONResponse({"error": "Non autorizzato"}, status_code=403)
+    con = sqlite3.connect(DB_PATH)
+    con.execute("UPDATE utenti SET ricerche_count=0 WHERE id=?", (user_id,))
+    con.commit(); con.close()
+    return JSONResponse({"ok": True})
 
 
 @app.delete("/admin/utenti/{user_id}")
