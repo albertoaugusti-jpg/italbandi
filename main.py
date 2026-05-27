@@ -116,6 +116,9 @@ async def serve_logo():
 
 DB_PATH  = "/data/italbandi.db"
 CACHE_DB = "/data/bandi_cache.db"
+SESSIONS = {}
+POSTMARK_KEY = "a874721e-db42-4173-af5e-5f77a74bdfbc"
+BASE_URL     = "https://italbandi.onrender.com"
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 # Prova a connettersi a Neon
