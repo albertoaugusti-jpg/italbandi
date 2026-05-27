@@ -39,6 +39,75 @@ FONTI_SPORT = [
     },
 ]
 
+BANDI_FISSI_SPORT = [
+    {
+        "titolo": "Contribuzione Ordinaria Sport e Salute alle ASD/SSD 2025",
+        "scadenza": "Domanda entro 31/03/2025",
+        "beneficiari": "Associazioni e Società Sportive Dilettantistiche affiliate FSN/DSA/EPS",
+        "descrizione": "Contributi annuali di Sport e Salute S.p.A. per il sostegno all'attività sportiva di base delle ASD e SSD affiliate agli enti riconosciuti.",
+        "dotazione": "Variabile per associazione — budget totale €796.340",
+        "livello": "nazionale",
+        "stato": "aperto",
+        "fonte": "Sport e Salute",
+        "url": "https://www.sportesalute.eu/bandi-e-avvisi.html",
+    },
+    {
+        "titolo": "Sport Illumina — Playground in aree pubbliche",
+        "scadenza": "Domanda aperta — verificare sul portale",
+        "beneficiari": "Comuni, Enti locali, ASD/SSD",
+        "descrizione": "Avviso pubblico per la realizzazione di playground sportivi in aree pubbliche di libero accesso. Progetto promosso da Sport e Salute.",
+        "dotazione": "Non specificato — contributo a fondo perduto",
+        "livello": "nazionale",
+        "stato": "aperto",
+        "fonte": "Sport e Salute",
+        "url": "https://www.sportesalute.eu/bandi-e-avvisi.html",
+    },
+    {
+        "titolo": "Erasmus+ Sport — Partenariati di Cooperazione 2026",
+        "scadenza": "05/03/2026",
+        "beneficiari": "Organizzazioni sportive, enti pubblici, associazioni attive nel settore sportivo UE",
+        "descrizione": "Programma europeo Erasmus+ per progetti transnazionali di cooperazione nel settore sportivo. Azione chiave 2 — Cooperazione tra organizzazioni.",
+        "dotazione": "Budget complessivo €2.000.000",
+        "livello": "europeo",
+        "stato": "aperto",
+        "fonte": "Commissione Europea / Sport e Salute",
+        "url": "https://www.sportesalute.eu/bandi-e-avvisi/bandi-europei.html",
+    },
+    {
+        "titolo": "Voucher per lo Sport — Regione Lazio",
+        "scadenza": "Verificare sul portale regionale",
+        "beneficiari": "ASD, SSD, ETS di ambito sportivo operanti nel Lazio",
+        "descrizione": "Voucher per l'accesso allo sport destinati a cittadini in condizioni di disagio economico. Le associazioni ricevono i voucher dai beneficiari.",
+        "dotazione": "Non specificato",
+        "livello": "regionale",
+        "stato": "aperto",
+        "fonte": "Sport e Salute / Regione Lazio",
+        "url": "https://www.sportesalute.eu/bandi-e-avvisi.html",
+    },
+    {
+        "titolo": "CONI — Contributi per l'impiantistica sportiva",
+        "scadenza": "Verificare sul sito CONI",
+        "beneficiari": "Enti locali, ASD, SSD per costruzione e ristrutturazione impianti",
+        "descrizione": "Il CONI eroga contributi per la realizzazione, ristrutturazione e messa a norma di impianti sportivi su tutto il territorio nazionale.",
+        "dotazione": "Variabile — fino al 50% del costo ammissibile",
+        "livello": "nazionale",
+        "stato": "aperto",
+        "fonte": "CONI",
+        "url": "https://www.coni.it/it/finanziamenti.html",
+    },
+    {
+        "titolo": "Sport di Tutti — Attività sportiva per fasce deboli",
+        "scadenza": "Programma permanente",
+        "beneficiari": "ASD e SSD che promuovono sport per persone in difficoltà economica",
+        "descrizione": "Programma di Sport e Salute per garantire l'accesso allo sport a bambini e ragazzi in condizioni svantaggiate tramite voucher e contributi diretti.",
+        "dotazione": "Voucher da €100 a €300 per beneficiario",
+        "livello": "nazionale",
+        "stato": "aperto",
+        "fonte": "Sport e Salute",
+        "url": "https://www.sportesalute.eu",
+    },
+]
+
 
 def init_db():
     con = sqlite3.connect(DB_SPORT)
@@ -173,6 +242,14 @@ def scrapa_tutto():
     totale_nuovi = 0
     status = []
 
+    # 1. Prima carica i bandi fissi noti
+    print("[SPORT] Caricamento bandi fissi...", flush=True)
+    for b in BANDI_FISSI_SPORT:
+        if salva_bando(b, b.get("fonte", ""), b.get("url", "")):
+            totale_nuovi += 1
+            print(f"  + {b['titolo'][:60]}", flush=True)
+
+    # 2. Poi scrapa le fonti web
     for fonte in FONTI_SPORT:
         print(f"\n[SPORT] Scraping: {fonte['nome']}", flush=True)
         html = _fetch(fonte["url"])
