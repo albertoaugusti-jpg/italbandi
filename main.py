@@ -114,9 +114,9 @@ async def serve_logo():
             return FileResponse(path, media_type="image/png")
     return Response(status_code=404)
 
-DB_PATH  = "/data/italbandi.db"
-CACHE_DB = "/data/bandi_cache.db"
-SESSIONS = {}
+DB_PATH      = "/data/italbandi.db"
+CACHE_DB     = "/data/bandi_cache.db"
+SESSIONS     = {}
 POSTMARK_KEY = "a874721e-db42-4173-af5e-5f77a74bdfbc"
 BASE_URL     = "https://italbandi.onrender.com"
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
@@ -783,7 +783,6 @@ def index_page(user):
   font-size:0.75rem;font-weight:700;color:#C9A84C;
 }}
 </style>
-<div class="container">
   <div id="risultati-header" class="risultati-header"></div>
   <div id="risultati"></div>
 </div>
