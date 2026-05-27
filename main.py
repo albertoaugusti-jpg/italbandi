@@ -17,7 +17,7 @@ LOGO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo_italb
 app = FastAPI(title="ItalBandi")
 
 # ── Cache bandi via SQLite ────────────────────────────────────────────────────
-CACHE_DB = "/tmp/bandi_cache.db"
+CACHE_DB = "/data/bandi_cache.db"
 
 def init_cache_db():
     con = sqlite3.connect(CACHE_DB)
@@ -106,12 +106,8 @@ async def serve_logo():
             return FileResponse(path, media_type="image/png")
     return Response(status_code=404)
 
-DB_PATH  = "/tmp/italbandi.db"
-SESSIONS = {}  # session_id → {user_id, username, is_admin}
-
-# ── Database — Neon PostgreSQL con fallback SQLite ─────────────────────────────
-POSTMARK_KEY = "a874721e-db42-4173-af5e-5f77a74bdfbc"
-BASE_URL     = "https://italbandi.onrender.com"
+DB_PATH  = "/data/italbandi.db"
+CACHE_DB = "/data/bandi_cache.db"
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 # Prova a connettersi a Neon
