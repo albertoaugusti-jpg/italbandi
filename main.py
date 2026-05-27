@@ -24,6 +24,9 @@ app = FastAPI(title="ItalBandi")
 # ── Cache bandi via SQLite ────────────────────────────────────────────────────
 CACHE_DB = "/data/bandi_cache.db"
 
+# Crea /data subito — prima di qualsiasi sqlite3.connect
+os.makedirs("/data", exist_ok=True)
+
 def init_cache_db():
     con = sqlite3.connect(CACHE_DB)
     con.execute("""CREATE TABLE IF NOT EXISTS bandi_cache (
@@ -113,9 +116,6 @@ async def serve_logo():
 
 DB_PATH  = "/data/italbandi.db"
 CACHE_DB = "/data/bandi_cache.db"
-
-# Crea la directory /data se non esiste (primo avvio o disco non montato)
-os.makedirs("/data", exist_ok=True)
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 # Prova a connettersi a Neon
