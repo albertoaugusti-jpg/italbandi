@@ -11,6 +11,11 @@ import uvicorn
 
 import bandi_engine as be
 import schede_engine as ENGINE
+try:
+    import scraper_sport as SS
+except Exception as _e:
+    SS = None
+    print(f"[SCRAPER SPORT] non caricato: {_e}", flush=True)
 
 LOGO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo_italbandi.png")
 
@@ -108,6 +113,9 @@ async def serve_logo():
 
 DB_PATH  = "/data/italbandi.db"
 CACHE_DB = "/data/bandi_cache.db"
+
+# Crea la directory /data se non esiste (primo avvio o disco non montato)
+os.makedirs("/data", exist_ok=True)
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 # Prova a connettersi a Neon
@@ -1768,6 +1776,59 @@ Solo JSON, nient'altro."""
         return JSONResponse({"html": f'<span style="color:#F87171">Errore: {ex}</span>'})
 
 
+@app.get("/api/cerca-sport")
+async def cerca_sport(
+    keyword: str = Query(""), stato: str = Query("aperto"),
+    livello: str = Query(""),
+    session_id: str = Cookie(default=None)
+):
+    user = get_session(session_id)
+    if not user:
+        return JSONResponse({"error": "Non autenticato"}, status_code=401)
+    if not user.get("is_admin"):
+        con = sqlite3.connect(DB_PATH)
+        row = con.execute("SELECT ricerche_count FROM utenti WHERE id=?", (user["id"],)).fetchone()
+        count = row[0] if row else 0
+        if count >= 10:
+            con.close()
+            return JSONResponse({"error": "limite", "messaggio": "Hai esaurito le 10 ricerche gratuite."}, status_code=429)
+        con.execute("UPDATE utenti SET ricerche_count = ricerche_count + 1 WHERE id=?", (user["id"],))
+        con.commit(); con.close()
+    if SS:
+        bandi, totale = SS.cerca_bandi_sport(keyword=keyword, stato=stato, livello=livello)
+        if totale > 0:
+            return JSONResponse({"bandi": bandi, "totale": totale, "fonte": "db_sport"})
+    # Fallback su CE
+    try:
+        hits, totale = be.cerca_bandi_web(keyword=keyword or "sport ASD impianti", stato=stato, livello=livello, max_hits=50)
+        bandi = [be.hit_to_card(h) for h in hits]
+        return JSONResponse({"bandi": bandi, "totale": totale, "fonte": "ce_fallback"})
+    except Exception as e:
+        return JSONResponse({"error": str(e), "bandi": [], "totale": 0})
+
+
+@app.post("/admin/scraper/sport")
+async def avvia_scraper_sport(session_id: str = Cookie(default=None)):
+    user = get_session(session_id)
+    if not user or not user.get("is_admin"):
+        return JSONResponse({"error": "Non autorizzato"}, status_code=403)
+    if not SS:
+        return JSONResponse({"error": "Modulo scraper non disponibile"})
+    def _run():
+        SS.scrapa_tutto()
+    threading.Thread(target=_run, daemon=True).start()
+    return JSONResponse({"ok": True, "messaggio": "Scraper sport avviato in background"})
+
+
+@app.get("/admin/scraper/sport/status")
+async def status_scraper_sport(session_id: str = Cookie(default=None)):
+    user = get_session(session_id)
+    if not user or not user.get("is_admin"):
+        return JSONResponse({"error": "Non autorizzato"}, status_code=403)
+    n = SS.conta_bandi() if SS else 0
+    return JSONResponse({"bandi_in_db": n})
+
+
 @app.get("/api/cerca")
 async def cerca(
     request: Request,
@@ -2004,6 +2065,7 @@ tr:hover td {{ background:#F8FAFF }}
       <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
         <button class="btn-ar btn-ar-primary" onclick="window.location='/area-riservata/cache'">Aggiorna cache bandi</button>
         <button class="btn-ar btn-ar-gold" onclick="window.location='/area-riservata/utenti/export'">Scarica CSV utenti</button>
+        <button class="btn-ar" style="background:#7C3AED;color:#fff" onclick="avviaScraper('sport')">🏋️ Scrapa Sport</button>
       </div>
     </div>
   </div>
@@ -2039,14 +2101,13 @@ tr:hover td {{ background:#F8FAFF }}
 </div>
 
 <script>
-async function eliminaUtente(id, email) {{
-  if (!confirm('Eliminare ' + email + '?')) return;
-  const r = await fetch('/admin/utenti/' + id, {{method:'DELETE'}});
+async function avviaScraper(tipo) {{
+  if (!confirm('Avviare lo scraper ' + tipo + '? Il processo può richiedere 1-2 minuti.')) return;
+  const r = await fetch('/admin/scraper/' + tipo, {{method:'POST'}});
   const d = await r.json();
-  if (d.ok) location.reload();
-  else alert('Errore: ' + d.error);
+  alert(d.messaggio || d.error || 'Avviato');
 }}
-async function resetRicerche(id, email) {{
+async function eliminaUtente(id, email) {{
   if (!confirm('Azzerare le ricerche per ' + email + '?')) return;
   const r = await fetch('/admin/utenti/' + id + '/reset-ricerche', {{method:'POST'}});
   const d = await r.json();
@@ -2377,7 +2438,7 @@ async def download_job(job_id: str, session_id: str = Cookie(default=None)):
     return FileResponse(path=job["path"], media_type="application/pdf", filename=job["nome"])
 
 
-def _sezione_page(user, titolo, icona, descrizione, keyword_default, colore, route):
+def _sezione_page(user, titolo, icona, descrizione, keyword_default, colore, route, api_endpoint="/api/cerca"):
     """Template comune per le pagine sezione."""
     return f"""<!DOCTYPE html><html lang="it"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -2446,7 +2507,7 @@ async function cerca() {{
   }});
   document.getElementById('risultati').innerHTML = '<div class="loader">⏳ Ricerca in corso...</div>';
   document.getElementById('risultati-header').textContent = '';
-  const resp = await fetch('/api/cerca?' + params);
+  const resp = await fetch('{api_endpoint}?' + params);
   const data = await resp.json();
   if (data.error === 'limite') {{
     document.getElementById('risultati').innerHTML = `<div style="background:#fff;border:1px solid #D0DCF0;border-left:4px solid {colore};border-radius:8px;padding:28px 32px;text-align:center;max-width:560px;margin:40px auto"><div style="font-size:2rem;margin-bottom:12px">🔒</div><h3 style="color:#1A2A4A;font-size:1.1rem;margin-bottom:8px">Ricerche esaurite</h3><p style="color:#6A8AA8;font-size:0.88rem;margin-bottom:20px">Hai usato tutte le 10 ricerche gratuite. Contatta Energelia.</p><span style="background:{colore};color:#1A2A4A;padding:10px 22px;border-radius:6px;font-weight:700">📞 010 8078800</span></div>`;
@@ -2593,7 +2654,8 @@ async def sport_page(session_id: str = Cookie(default=None)):
         descrizione="Bandi e finanziamenti per ASD, SSD, impianti sportivi e promozione dello sport",
         keyword_default="sport ASD impianti sportivi",
         colore="#7C3AED",
-        route="/sport"
+        route="/sport",
+        api_endpoint="/api/cerca-sport"
     ))
 
 
