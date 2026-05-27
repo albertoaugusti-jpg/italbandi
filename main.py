@@ -17,6 +17,12 @@ except Exception as _e:
     SS = None
     print(f"[SCRAPER SPORT] non caricato: {_e}", flush=True)
 
+try:
+    import scraper_privati as SP
+except Exception as _e:
+    SP = None
+    print(f"[SCRAPER PRIVATI] non caricato: {_e}", flush=True)
+
 LOGO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo_italbandi.png")
 
 app = FastAPI(title="ItalBandi")
@@ -1832,6 +1838,57 @@ async def status_scraper_sport(session_id: str = Cookie(default=None)):
     return JSONResponse({"bandi_in_db": n})
 
 
+@app.get("/api/cerca-privati")
+async def cerca_privati(
+    keyword: str = Query(""), stato: str = Query("aperto"),
+    livello: str = Query(""),
+    session_id: str = Cookie(default=None)
+):
+    user = get_session(session_id)
+    if not user:
+        return JSONResponse({"error": "Non autenticato"}, status_code=401)
+    if not user.get("is_admin"):
+        con = sqlite3.connect(DB_PATH)
+        row = con.execute("SELECT ricerche_count FROM utenti WHERE id=?", (user["id"],)).fetchone()
+        count = row[0] if row else 0
+        if count >= 10:
+            con.close()
+            return JSONResponse({"error": "limite"}, status_code=429)
+        con.execute("UPDATE utenti SET ricerche_count = ricerche_count + 1 WHERE id=?", (user["id"],))
+        con.commit(); con.close()
+    if SP:
+        bandi, totale = SP.cerca_bandi_privati(keyword=keyword, stato=stato, livello=livello)
+        if totale > 0:
+            return JSONResponse({"bandi": bandi, "totale": totale, "fonte": "db_privati"})
+    # Fallback su CE
+    try:
+        hits, totale = be.cerca_bandi_web(keyword=keyword or "bonus famiglie privati", stato=stato, livello=livello, max_hits=50)
+        bandi = [be.hit_to_card(h) for h in hits]
+        return JSONResponse({"bandi": bandi, "totale": totale, "fonte": "ce_fallback"})
+    except Exception as e:
+        return JSONResponse({"error": str(e), "bandi": [], "totale": 0})
+
+
+@app.post("/admin/scraper/privati")
+async def avvia_scraper_privati(session_id: str = Cookie(default=None)):
+    user = get_session(session_id)
+    if not user or not user.get("is_admin"):
+        return JSONResponse({"error": "Non autorizzato"}, status_code=403)
+    if not SP:
+        return JSONResponse({"error": "Modulo scraper non disponibile"})
+    threading.Thread(target=SP.scrapa_tutto, daemon=True).start()
+    return JSONResponse({"ok": True, "messaggio": "Scraper privati avviato in background"})
+
+
+@app.get("/admin/scraper/privati/status")
+async def status_scraper_privati(session_id: str = Cookie(default=None)):
+    user = get_session(session_id)
+    if not user or not user.get("is_admin"):
+        return JSONResponse({"error": "Non autorizzato"}, status_code=403)
+    n = SP.conta_bandi() if SP else 0
+    return JSONResponse({"bandi_in_db": n})
+
+
 @app.get("/api/cerca")
 async def cerca(
     request: Request,
@@ -2069,6 +2126,7 @@ tr:hover td {{ background:#F8FAFF }}
         <button class="btn-ar btn-ar-primary" onclick="window.location='/area-riservata/cache'">Aggiorna cache bandi</button>
         <button class="btn-ar btn-ar-gold" onclick="window.location='/area-riservata/utenti/export'">Scarica CSV utenti</button>
         <button class="btn-ar" style="background:#7C3AED;color:#fff" onclick="avviaScraper('sport')">🏋️ Scrapa Sport</button>
+        <button class="btn-ar" style="background:#F59E0B;color:#1A2A4A" onclick="avviaScraper('privati')">👨‍👩‍👧‍👦 Scrapa Privati</button>
       </div>
     </div>
   </div>
@@ -2641,7 +2699,8 @@ async def privati_page(session_id: str = Cookie(default=None)):
         descrizione="Bonus, detrazioni e contributi per cittadini, famiglie e persone fisiche",
         keyword_default="bonus famiglie privati",
         colore="#F59E0B",
-        route="/privati"
+        route="/privati",
+        api_endpoint="/api/cerca-privati"
     ))
 
 
