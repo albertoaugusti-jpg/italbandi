@@ -780,6 +780,7 @@ def index_page(user):
   font-size:0.75rem;font-weight:700;color:#C9A84C;
 }}
 </style>
+<div class="container">
   <div id="risultati-header" class="risultati-header"></div>
   <div id="risultati"></div>
 </div>
