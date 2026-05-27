@@ -717,7 +717,65 @@ def index_page(user):
 .chip-sug:hover {{ background:#1A2A4A;color:#fff;border-color:#1A2A4A; }}
 </style>
 
-<div class="container">
+<!-- Tre sezioni dedicate -->
+<div style="background:#1A2A4A;padding:20px 40px;border-bottom:1px solid #243555">
+  <p style="font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:#5A7A9A;font-weight:600;margin:0 0 14px">Sezioni dedicate</p>
+  <div style="display:flex;gap:12px;flex-wrap:wrap">
+
+    <a href="/privati" style="text-decoration:none;flex:1;min-width:160px;max-width:240px">
+      <div class="sez-card">
+        <div style="font-size:2.2rem;margin-bottom:8px">👨‍👩‍👧‍👦</div>
+        <div class="sez-titolo">Privati e Famiglie</div>
+        <div class="sez-sub">Bonus, detrazioni e contributi per cittadini e nuclei familiari</div>
+        <div class="sez-cta">Scopri →</div>
+      </div>
+    </a>
+
+    <a href="/sport" style="text-decoration:none;flex:1;min-width:160px;max-width:240px">
+      <div class="sez-card">
+        <div style="font-size:2.2rem;margin-bottom:8px">🏋️</div>
+        <div class="sez-titolo">Sport</div>
+        <div class="sez-sub">Bandi per ASD, SSD, impianti sportivi e promozione attività fisica</div>
+        <div class="sez-cta">Scopri →</div>
+      </div>
+    </a>
+
+    <a href="/terzo-settore" style="text-decoration:none;flex:1;min-width:160px;max-width:240px">
+      <div class="sez-card">
+        <div style="font-size:2.2rem;margin-bottom:8px">🤝</div>
+        <div class="sez-titolo">Terzo Settore</div>
+        <div class="sez-sub">Finanziamenti per ETS, ODV, APS, cooperative sociali e ONLUS</div>
+        <div class="sez-cta">Scopri →</div>
+      </div>
+    </a>
+
+  </div>
+</div>
+
+<style>
+.sez-card {{
+  background:rgba(255,255,255,0.05);
+  border:1px solid rgba(255,255,255,0.1);
+  border-radius:12px;
+  padding:18px 20px;
+  transition:all 0.2s;
+  height:100%;
+}}
+.sez-card:hover {{
+  background:rgba(201,168,76,0.12);
+  border-color:#C9A84C;
+  transform:translateY(-2px);
+}}
+.sez-titolo {{
+  font-size:0.9rem;font-weight:700;color:#FFFFFF;margin-bottom:6px;
+}}
+.sez-sub {{
+  font-size:0.75rem;color:#6A8AA8;line-height:1.5;margin-bottom:10px;
+}}
+.sez-cta {{
+  font-size:0.75rem;font-weight:700;color:#C9A84C;
+}}
+</style>
   <div id="risultati-header" class="risultati-header"></div>
   <div id="risultati"></div>
 </div>
@@ -2321,6 +2379,242 @@ async def download_job(job_id: str, session_id: str = Cookie(default=None)):
     if not job or job["status"] != "ready":
         return JSONResponse({"error": "File non pronto"}, status_code=404)
     return FileResponse(path=job["path"], media_type="application/pdf", filename=job["nome"])
+
+
+def _sezione_page(user, titolo, icona, descrizione, keyword_default, colore, route):
+    """Template comune per le pagine sezione."""
+    return f"""<!DOCTYPE html><html lang="it"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ItalBandi — {titolo}</title>{CSS_BASE}</head><body>
+{NAVBAR_LOGGED(user)}
+<div style="background:linear-gradient(135deg,#1A2A4A 0%,#243555 100%);padding:36px 40px 28px;border-bottom:3px solid {colore}">
+  <div style="display:flex;align-items:center;gap:16px;margin-bottom:10px">
+    <span style="font-size:3rem">{icona}</span>
+    <div>
+      <h1 style="font-size:1.6rem;font-weight:900;color:#FFFFFF;margin:0 0 4px">{titolo}</h1>
+      <p style="font-size:0.88rem;color:#A8BEDD;margin:0">{descrizione}</p>
+    </div>
+  </div>
+  <a href="/" style="font-size:0.78rem;color:#5A7A9A;text-decoration:none">← Torna alla ricerca principale</a>
+</div>
+<div style="background:#FFFFFF;border-bottom:1px solid #D8E2EE;padding:14px 40px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;box-shadow:0 2px 8px rgba(26,42,74,0.08)">
+  <div style="flex:0 0 280px;position:relative">
+    <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#8899AA;font-size:14px">🔍</span>
+    <input id="keyword" type="text" value="{keyword_default}" placeholder="Parola chiave..."
+      style="width:100%;padding:9px 14px 9px 34px;background:#F4F6FA;border:1px solid {colore};border-radius:6px;font-size:0.88rem;color:#1A2A3A;font-family:inherit;outline:none;box-sizing:border-box">
+  </div>
+  <select id="stato" style="padding:9px 14px;background:#F4F6FA;border:1px solid #C8D4E4;border-radius:6px;font-size:0.88rem;color:#1A2A3A;font-family:inherit">
+    <option value="aperto">✅ Bandi aperti</option>
+    <option value="prossimo">🔜 In apertura</option>
+    <option value="tutti">📋 Tutti</option>
+  </select>
+  <select id="livello" onchange="aggiornaFiltri()" style="padding:9px 14px;background:#F4F6FA;border:1px solid #C8D4E4;border-radius:6px;font-size:0.88rem;color:#1A2A3A;font-family:inherit">
+    <option value="">🌐 Qualsiasi livello</option>
+    <option value="europeo">🇪🇺 Europeo</option>
+    <option value="nazionale">🇮🇹 Nazionale</option>
+    <option value="regionale">📍 Regionale</option>
+  </select>
+  <span id="regione-wrap" style="display:none">
+    <select id="regione" style="padding:9px 14px;background:#F4F6FA;border:1px solid #C8D4E4;border-radius:6px;font-size:0.88rem;color:#1A2A3A;font-family:inherit">
+      <option value="">-- Regione --</option>
+      <option>Abruzzo</option><option>Basilicata</option><option>Calabria</option>
+      <option>Campania</option><option>Emilia-Romagna</option><option>Friuli-Venezia-Giulia</option>
+      <option>Lazio</option><option>Liguria</option><option>Lombardia</option>
+      <option>Marche</option><option>Molise</option><option>Piemonte</option>
+      <option>Puglia</option><option>Sardegna</option><option>Sicilia</option>
+      <option>Toscana</option><option>Trentino-Alto-Adige</option><option>Umbria</option>
+      <option>Valle d'Aosta</option><option>Veneto</option>
+    </select>
+  </span>
+  <button onclick="cerca()" style="padding:9px 28px;background:{colore};color:#1A2A4A;border:none;border-radius:6px;font-size:0.9rem;font-weight:800;cursor:pointer">Cerca</button>
+</div>
+<div class="container">
+  <div id="risultati-header" class="risultati-header"></div>
+  <div id="risultati"><div class="loader">⏳ Caricamento bandi {titolo.lower()}...</div></div>
+</div>
+{FOOTER_HTML}
+<script>
+let _soloTitolo = 'no';
+function aggiornaFiltri() {{
+  const v = document.getElementById('livello').value;
+  document.getElementById('regione-wrap').style.display = v === 'regionale' ? 'inline' : 'none';
+  if (v !== 'regionale') document.getElementById('regione').value = '';
+}}
+async function cerca() {{
+  const params = new URLSearchParams({{
+    keyword: document.getElementById('keyword').value,
+    stato:   document.getElementById('stato').value,
+    livello: document.getElementById('livello').value,
+    regione: document.getElementById('regione').value,
+    provincia: '', solo_titolo: _soloTitolo,
+  }});
+  document.getElementById('risultati').innerHTML = '<div class="loader">⏳ Ricerca in corso...</div>';
+  document.getElementById('risultati-header').textContent = '';
+  const resp = await fetch('/api/cerca?' + params);
+  const data = await resp.json();
+  if (data.error === 'limite') {{
+    document.getElementById('risultati').innerHTML = `<div style="background:#fff;border:1px solid #D0DCF0;border-left:4px solid {colore};border-radius:8px;padding:28px 32px;text-align:center;max-width:560px;margin:40px auto"><div style="font-size:2rem;margin-bottom:12px">🔒</div><h3 style="color:#1A2A4A;font-size:1.1rem;margin-bottom:8px">Ricerche esaurite</h3><p style="color:#6A8AA8;font-size:0.88rem;margin-bottom:20px">Hai usato tutte le 10 ricerche gratuite. Contatta Energelia.</p><span style="background:{colore};color:#1A2A4A;padding:10px 22px;border-radius:6px;font-weight:700">📞 010 8078800</span></div>`;
+    return;
+  }}
+  if (data.error) {{ document.getElementById('risultati').innerHTML = `<p style="color:#DC2626">${{data.error}}</p>`; return; }}
+  document.getElementById('risultati-header').textContent = `${{data.totale}} bandi trovati`;
+  let _hits = {{}};
+  data.bandi.forEach(b => {{ _hits[b.id] = b._hit; }});
+  const CATS = {{
+    agric:{{r:/agric|rurale|biolog|forest/,t2:'#166534',i:'&#127807;',l:'Agricoltura'}},
+    energy:{{r:/energia|rinnovab|fotovolt|solare/,t2:'#1D4ED8',i:'&#9889;',l:'Energia'}},
+    sport:{{r:/sport|agonist|impianto|piscina|palestra|atletica|calcio|basket|asd|ssd/,t2:'#7C3AED',i:'&#127936;',l:'Sport'}},
+    sociale:{{r:/sociale|terzo settore|onlus|cooperat|volont|ets|odv|aps/,t2:'#065F46',i:'&#129309;',l:'Sociale'}},
+    famiglia:{{r:/famig|bonus|detraz|privat|cittadin|isee|nascit|disabil/,t2:'#B45309',i:'&#128106;',l:'Famiglia'}},
+    digital:{{r:/digital|tecnolog|software|innovaz|startup/,t2:'#5B21B6',i:'&#128187;',l:'Digitale'}},
+  }};
+  const DEFCAT = {{t2:'#1A2A4A',i:'&#128203;',l:'Bando'}};
+  function getCat(t) {{ const tl=(t||'').toLowerCase(); for(const v of Object.values(CATS)){{if(v.r.test(tl))return v;}} return DEFCAT; }}
+  document.getElementById('risultati').innerHTML = data.bandi.map(b => {{
+    const cat = getCat(b.titolo);
+    const aperto = !b.stato.includes('prossima');
+    return `<div class="bando-card">
+      <div class="card-top">
+        <span class="card-cat-tag" style="color:${{cat.t2}}">${{cat.i}} ${{cat.l}}</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span class="badge ${{aperto?'badge-aperto':'badge-prossimo'}}">${{b.stato}}</span>
+          <span style="font-size:10px;color:#8899AA">${{b.livello}}</span>
+        </div>
+      </div>
+      <div class="card-titolo">${{b.titolo}}</div>
+      <div class="card-info">
+        <div class="card-info-item">&#128197; <strong>${{b.scadenza}}</strong></div>
+        <div class="card-info-item">&#128100; <strong>${{(b.beneficiari||'—').substring(0,50)}}</strong></div>
+      </div>
+      <hr class="card-divider">
+      <div class="preview-panel" id="preview-${{b.id}}">
+        <span class="preview-loading" id="prev-msg-${{b.id}}">Clicca Preview per l'anteprima AI</span>
+      </div>
+      <div class="card-actions">
+        <button class="btn-scheda" id="btn-${{b.id}}" onclick="generaScheda('${{b.id}}')">Genera Scheda PDF</button>
+        <button class="btn-preview" id="arrow-${{b.id}}" onclick="togglePreview('${{b.id}}')">PREVIEW</button>
+        <span class="spinner" id="sp-${{b.id}}">elaborazione...</span>
+      </div>
+    </div>`;
+  }}).join('');
+  window._hits = _hits;
+}}
+async function togglePreview(id) {{
+  const el=document.getElementById('preview-'+id);
+  const arrow=document.getElementById('arrow-'+id);
+  const msg=document.getElementById('prev-msg-'+id);
+  if(el.style.display==='block'){{el.style.display='none';arrow.textContent='PREVIEW';return;}}
+  el.style.display='block';arrow.textContent='CHIUDI';
+  const hit=window._hits&&window._hits[id];
+  const titolo=hit?(hit.post_title||''):'';
+  const urlCE=hit?(hit.permalink||hit.link||''):'';
+  msg.innerHTML='<span style="color:#5A7A9A;font-style:italic">Analisi in corso...</span>';
+  try{{
+    let testoCE='';
+    if(urlCE){{const rt=await fetch('/api/fetch-testo?url='+encodeURIComponent(urlCE));if(rt.ok){{const dt=await rt.json();testoCE=dt.testo||'';}}}}
+    const r=await fetch('/api/preview',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{titolo,testo_ce:testoCE.substring(0,4000)}})}});
+    const d=await r.json();
+    if(d.html){{msg.innerHTML=d.html;}}else{{msg.innerHTML='<span style="color:#DC2626">Anteprima non disponibile.</span>';}}
+  }}catch(e){{msg.innerHTML='<span style="color:#DC2626">Errore: '+e.message+'</span>';}}
+}}
+async function generaScheda(id) {{
+  const btn=document.getElementById('btn-'+id);const sp=document.getElementById('sp-'+id);
+  btn.disabled=true;sp.style.display='inline';sp.textContent='⏳ Lettura bando...';
+  const hit=window._hits&&window._hits[id];
+  const urlCE=(hit&&(hit.permalink||hit.link||hit.url))||'';
+  let testoCE='';
+  if(urlCE){{try{{const rt=await fetch('/api/fetch-testo?url='+encodeURIComponent(urlCE));if(rt.ok){{const dt=await rt.json();testoCE=dt.testo||'';}}}}catch(e){{}}}}
+  sp.textContent='⏳ Avvio elaborazione...';
+  try{{
+    const r1=await fetch('/api/scheda/'+encodeURIComponent(id),{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{hit:hit,testo_ce:testoCE}})}});
+    const j1=await r1.json();
+    if(!j1.job_id){{alert('Errore avvio');btn.disabled=false;sp.style.display='none';return;}}
+    let secondi=0;
+    const poll=setInterval(async()=>{{
+      secondi+=5;sp.textContent='⏳ '+secondi+'s...';
+      const r2=await fetch('/api/job/'+j1.job_id);const j2=await r2.json();
+      if(j2.status==='ready'){{
+        clearInterval(poll);
+        const r3=await fetch('/api/download/'+j1.job_id);
+        const blob=await r3.blob();const url=URL.createObjectURL(blob);
+        const a=document.createElement('a');a.href=url;a.download=j2.nome||'scheda.pdf';
+        document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+        sp.style.display='none';btn.disabled=false;
+        setTimeout(()=>{{document.getElementById('cta-modal').style.display='flex';}},800);
+      }}else if(j2.status==='error'||secondi>180){{clearInterval(poll);alert('Errore o timeout');btn.disabled=false;sp.style.display='none';}}
+    }},5000);
+  }}catch(e){{alert('Errore: '+e.message);btn.disabled=false;sp.style.display='none';}}
+}}
+window.onload = cerca;
+</script>
+{CTA_MODAL_HTML}
+</body></html>"""
+
+
+# ── CTA modal condiviso ───────────────────────────────────────────────────────
+CTA_MODAL_HTML = """
+<div id="cta-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:#0F2035;border:1px solid #C9A84C;border-radius:12px;padding:36px 40px;max-width:480px;width:90%;text-align:center;position:relative">
+    <button onclick="document.getElementById('cta-modal').style.display='none'" style="position:absolute;top:12px;right:16px;background:none;border:none;color:#6A8AA8;font-size:1.2rem;cursor:pointer">X</button>
+    <div style="font-size:2rem;margin-bottom:12px">&#128203;</div>
+    <h3 style="color:#C9A84C;font-size:1.2rem;margin-bottom:12px">Hai trovato un bando interessante?</h3>
+    <p style="color:#A8C8E8;font-size:0.92rem;line-height:1.6;margin-bottom:24px">
+      I nostri consulenti valuteranno <strong>gratuitamente</strong> la candidatura.<br>
+      Contatta Antonio Castagnaro per una pre-istruttoria senza impegno.
+    </p>
+    <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+      <span style="background:#C9A84C;color:#0A1628;padding:12px 24px;border-radius:6px;font-weight:700;font-size:0.92rem">&#128222; 010 8078800</span>
+    </div>
+  </div>
+</div>"""
+
+
+@app.get("/privati", response_class=HTMLResponse)
+async def privati_page(session_id: str = Cookie(default=None)):
+    user = get_session(session_id)
+    if not user:
+        return RedirectResponse("/login")
+    return HTMLResponse(_sezione_page(
+        user=user,
+        titolo="Privati e Famiglie",
+        icona="👨‍👩‍👧‍👦",
+        descrizione="Bonus, detrazioni e contributi per cittadini, famiglie e persone fisiche",
+        keyword_default="bonus famiglie privati",
+        colore="#F59E0B",
+        route="/privati"
+    ))
+
+
+@app.get("/sport", response_class=HTMLResponse)
+async def sport_page(session_id: str = Cookie(default=None)):
+    user = get_session(session_id)
+    if not user:
+        return RedirectResponse("/login")
+    return HTMLResponse(_sezione_page(
+        user=user,
+        titolo="Sport",
+        icona="🏋️",
+        descrizione="Bandi e finanziamenti per ASD, SSD, impianti sportivi e promozione dello sport",
+        keyword_default="sport ASD impianti sportivi",
+        colore="#7C3AED",
+        route="/sport"
+    ))
+
+
+@app.get("/terzo-settore", response_class=HTMLResponse)
+async def terzo_settore_page(session_id: str = Cookie(default=None)):
+    user = get_session(session_id)
+    if not user:
+        return RedirectResponse("/login")
+    return HTMLResponse(_sezione_page(
+        user=user,
+        titolo="Terzo Settore",
+        icona="🤝",
+        descrizione="Finanziamenti per ETS, ODV, APS, cooperative sociali, fondazioni e ONLUS",
+        keyword_default="terzo settore ETS volontariato",
+        colore="#059669",
+        route="/terzo-settore"
+    ))
 
 
 if __name__ == "__main__":
