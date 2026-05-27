@@ -186,6 +186,8 @@ def init_db():
         except: pass
         try: con.execute("ALTER TABLE utenti ADD COLUMN ricerche_count INTEGER DEFAULT 0")
         except: pass
+        try: con.execute("ALTER TABLE utenti ADD COLUMN account_type TEXT DEFAULT 'normale'")
+        except: pass
         pw_hash = hashlib.sha256("Samp1946,".encode()).hexdigest()
         con.execute("INSERT OR IGNORE INTO utenti (nome,cognome,email,password_hash,is_admin,verificato) VALUES (?,?,?,?,?,?)",
                     ("Admin","ItalBandi","admin@italbandi.it", pw_hash, 1, 1))
@@ -1729,19 +1731,22 @@ async def cerca(
     if not user:
         return JSONResponse({"error": "Non autenticato"}, status_code=401)
 
-    # Limite ricerche — non si applica agli admin
+    # Limite ricerche — non si applica ad admin e account di servizio
     if not user.get("is_admin"):
         con = sqlite3.connect(DB_PATH)
-        row = con.execute("SELECT ricerche_count FROM utenti WHERE id=?", (user["id"],)).fetchone()
+        row = con.execute("SELECT ricerche_count, COALESCE(account_type,'normale') FROM utenti WHERE id=?", (user["id"],)).fetchone()
         count = row[0] if row else 0
-        if count >= 10:
+        atype = row[1] if row else 'normale'
+        if atype == 'normale' and count >= 10:
             con.close()
             return JSONResponse({
                 "error": "limite",
                 "messaggio": "Hai esaurito le tue 10 ricerche gratuite. Contatta Energelia per continuare."
             }, status_code=429)
-        con.execute("UPDATE utenti SET ricerche_count = ricerche_count + 1 WHERE id=?", (user["id"],))
-        con.commit(); con.close()
+        if atype == 'normale':
+            con.execute("UPDATE utenti SET ricerche_count = ricerche_count + 1 WHERE id=?", (user["id"],))
+            con.commit()
+        con.close()
 
     try:
         hits, totale = be.cerca_bandi_web(
@@ -1881,7 +1886,7 @@ async def area_riservata(session_id: str = Cookie(default=None)):
     else:
         con = sqlite3.connect(DB_PATH)
         utenti = con.execute("""SELECT id, nome, cognome, email, impresa, ruolo, telefono,
-                verificato, created_at, COALESCE(ricerche_count,0)
+                verificato, created_at, COALESCE(ricerche_count,0), COALESCE(account_type,'normale')
                 FROM utenti ORDER BY created_at DESC""").fetchall()
         con.close()
 
@@ -1889,18 +1894,20 @@ async def area_riservata(session_id: str = Cookie(default=None)):
     n_non_verif  = len(utenti) - n_verificati
     righe_html = ""
     for u in utenti:
-        id_, nome, cognome, email, impresa, ruolo, tel, verif, created, ricerche = u
+        id_, nome, cognome, email, impresa, ruolo, tel, verif, created, ricerche, atype = u
         stato = '<span style="color:#15803D;font-weight:700">&#10003;</span>' if verif else '<span style="color:#DC2626">&#10007;</span>'
-        colore_r = '#DC2626' if ricerche >= 10 else '#1A2A4A'
+        is_servizio = atype == 'servizio'
+        badge_tipo = '<span style="background:#1A2A4A;color:#C9A84C;font-size:0.65rem;font-weight:700;padding:2px 6px;border-radius:10px;margin-left:4px">SERVIZIO</span>' if is_servizio else ''
+        colore_r = '#059669' if is_servizio else ('#DC2626' if ricerche >= 10 else '#1A2A4A')
+        ricerche_txt = '∞' if is_servizio else f'{ricerche}/10'
         righe_html += f"""<tr>
-          <td>{nome} {cognome}</td>
+          <td>{nome} {cognome}{badge_tipo}</td>
           <td style="color:#1A3A6A">{email}</td>
           <td>{impresa or '—'}</td>
           <td>{tel or '—'}</td>
           <td style="text-align:center">{stato}</td>
-          <td style="text-align:center;font-weight:700;color:{colore_r}">{ricerche}/10
-            <button onclick="resetRicerche({id_},'{email}')"
-              style="margin-left:4px;background:none;border:1px solid #C8D4E4;border-radius:4px;padding:2px 6px;font-size:0.68rem;color:#5A7A9A;cursor:pointer">reset</button>
+          <td style="text-align:center;font-weight:700;color:{colore_r}">{ricerche_txt}
+            {'<button onclick="resetRicerche(' + str(id_) + ','' + email + '')" style="margin-left:4px;background:none;border:1px solid #C8D4E4;border-radius:4px;padding:2px 6px;font-size:0.68rem;color:#5A7A9A;cursor:pointer">reset</button>' if not is_servizio else ''}
           </td>
           <td style="color:#8899AA;font-size:0.75rem">{(created or '')[:10]}</td>
           <td><button onclick="eliminaUtente({id_}, '{email}')"
@@ -1978,6 +1985,36 @@ tr:hover td {{ background:#F8FAFF }}
     </table>
   </div>
 
+  <!-- Crea account di servizio -->
+  <div class="ar-section">
+    <h2>Crea account di servizio</h2>
+    <p style="font-size:0.85rem;color:#6A8AA8;margin-bottom:16px">
+      Gli account di servizio sono attivi subito, senza verifica email e senza limite di ricerche.
+    </p>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;align-items:end">
+      <div>
+        <label style="display:block;font-size:0.72rem;font-weight:600;color:#8899AA;text-transform:uppercase;margin-bottom:4px">Nome e Cognome</label>
+        <input id="sv-nome" type="text" placeholder="Mario Rossi"
+          style="width:100%;padding:8px 12px;border:1px solid #D0DCF0;border-radius:6px;font-size:0.85rem;font-family:inherit;outline:none">
+      </div>
+      <div>
+        <label style="display:block;font-size:0.72rem;font-weight:600;color:#8899AA;text-transform:uppercase;margin-bottom:4px">Email</label>
+        <input id="sv-email" type="email" placeholder="mario@esempio.it"
+          style="width:100%;padding:8px 12px;border:1px solid #D0DCF0;border-radius:6px;font-size:0.85rem;font-family:inherit;outline:none">
+      </div>
+      <div>
+        <label style="display:block;font-size:0.72rem;font-weight:600;color:#8899AA;text-transform:uppercase;margin-bottom:4px">Password</label>
+        <input id="sv-pwd" type="text" placeholder="Scegli una password"
+          style="width:100%;padding:8px 12px;border:1px solid #D0DCF0;border-radius:6px;font-size:0.85rem;font-family:inherit;outline:none">
+      </div>
+      <button onclick="creaAccountServizio()"
+        style="padding:8px 20px;background:#1A2A4A;color:#C9A84C;border:none;border-radius:6px;font-weight:700;font-size:0.85rem;cursor:pointer;white-space:nowrap">
+        Crea account
+      </button>
+    </div>
+    <div id="sv-esito" style="display:none;margin-top:12px;font-size:0.82rem;padding:8px 12px;border-radius:6px"></div>
+  </div>
+
   <!-- Sezione cache -->
   <div class="ar-section">
     <h2>Cache bandi</h2>
@@ -1994,6 +2031,40 @@ async function avviaScraper(tipo) {{
   const r = await fetch('/admin/scraper/' + tipo, {{method:'POST'}});
   const d = await r.json();
   alert(d.messaggio || d.error || 'Avviato');
+}}
+async function creaAccountServizio() {{
+  const nome  = document.getElementById('sv-nome').value.trim();
+  const email = document.getElementById('sv-email').value.trim();
+  const pwd   = document.getElementById('sv-pwd').value.trim();
+  const esito = document.getElementById('sv-esito');
+  if (!nome || !email || !pwd) {{
+    esito.style.display = 'block';
+    esito.style.background = '#FEF2F2';
+    esito.style.color = '#DC2626';
+    esito.textContent = 'Compila tutti i campi.';
+    return;
+  }}
+  const r = await fetch('/admin/utenti/crea-servizio', {{
+    method: 'POST',
+    headers: {{'Content-Type': 'application/json'}},
+    body: JSON.stringify({{nome, email, password: pwd}})
+  }});
+  const d = await r.json();
+  if (d.ok) {{
+    esito.style.display = 'block';
+    esito.style.background = '#F0FDF4';
+    esito.style.color = '#15803D';
+    esito.textContent = '✓ Account creato per ' + email;
+    document.getElementById('sv-nome').value = '';
+    document.getElementById('sv-email').value = '';
+    document.getElementById('sv-pwd').value = '';
+    setTimeout(() => location.reload(), 1500);
+  }} else {{
+    esito.style.display = 'block';
+    esito.style.background = '#FEF2F2';
+    esito.style.color = '#DC2626';
+    esito.textContent = d.error || 'Errore creazione account.';
+  }}
 }}
 async function eliminaUtente(id, email) {{
   if (!confirm('Azzerare le ricerche per ' + email + '?')) return;
@@ -2132,6 +2203,34 @@ async def admin_utenti_export(session_id: str = Cookie(default=None)):
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename=italbandi_utenti_{datetime.now().strftime('%Y%m%d')}.csv"}
     )
+
+
+@app.post("/admin/utenti/crea-servizio")
+async def admin_crea_servizio(body: dict, session_id: str = Cookie(default=None)):
+    user = get_session(session_id)
+    if not user or not user.get("is_admin"):
+        return JSONResponse({"error": "Non autorizzato"}, status_code=403)
+    nome     = body.get("nome", "").strip()
+    email    = body.get("email", "").strip().lower()
+    password = body.get("password", "").strip()
+    if not nome or not email or not password:
+        return JSONResponse({"error": "Campi mancanti"})
+    parti     = nome.split(' ', 1)
+    nome_p    = parti[0]
+    cognome_p = parti[1] if len(parti) > 1 else '—'
+    pw_hash   = hashlib.sha256(password.encode()).hexdigest()
+    try:
+        con = sqlite3.connect(DB_PATH)
+        con.execute(
+            "INSERT INTO utenti (nome,cognome,email,password_hash,is_admin,verificato,account_type,ricerche_count) VALUES (?,?,?,?,0,1,'servizio',0)",
+            (nome_p, cognome_p, email, pw_hash))
+        con.commit(); con.close()
+        print(f"[SERVIZIO] account creato: {email}", flush=True)
+        return JSONResponse({"ok": True})
+    except Exception as ex:
+        if "UNIQUE" in str(ex) or "unique" in str(ex):
+            return JSONResponse({"error": "Email già registrata."})
+        return JSONResponse({"error": str(ex)})
 
 
 @app.post("/admin/utenti/{user_id}/reset-ricerche")
