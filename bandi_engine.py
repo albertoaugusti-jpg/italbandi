@@ -200,64 +200,22 @@ Rispondi SOLO con JSON valido. Nessun testo prima o dopo."""
             if not testo:
                 return {"_api_error": "risposta vuota"}
 
-            result = _parse_json_robusto(testo)
-            if result:
-                return result
-            return {"_api_error": f"no JSON parsabile: {testo[:100]}"}
+            raw   = re.sub(r'```(?:json)?\s*','',testo)
+            raw   = re.sub(r'```','',raw).strip()
+            start = raw.find('{'); end = raw.rfind('}')
+            if start==-1 or end==-1:
+                return {"_api_error": f"no JSON: {testo[:100]}"}
 
+            return json.loads(raw[start:end+1])
+
+        except json.JSONDecodeError as e:
+            return {"_api_error": f"JSON error: {e}"}
         except Exception as e:
             return {"_api_error": str(e)}
     return {}
 
 
 # ── Assembla CONTENT per energelia_scheda_engine ──────────────────────────────
-
-def _parse_json_robusto(raw):
-    """Tenta di parsare JSON anche se malformato — pulisce i casi comuni."""
-    # Pulizia base
-    raw = re.sub(r'```(?:json)?\s*', '', raw)
-    raw = re.sub(r'```', '', raw).strip()
-    start = raw.find('{')
-    end   = raw.rfind('}')
-    if start == -1 or end == -1:
-        return None
-    chunk = raw[start:end+1]
-
-    # Tentativo 1 — diretto
-    try:
-        return json.loads(chunk)
-    except json.JSONDecodeError:
-        pass
-
-    # Tentativo 2 — rimuovi virgole finali prima di } e ]
-    try:
-        cleaned = re.sub(r',\s*([}\]])', r'\1', chunk)
-        return json.loads(cleaned)
-    except json.JSONDecodeError:
-        pass
-
-    # Tentativo 3 — rimuovi righe problematiche con newline non escaped
-    try:
-        cleaned = re.sub(r'(?<!\\)\n', ' ', chunk)
-        cleaned = re.sub(r',\s*([}\]])', r'\1', cleaned)
-        return json.loads(cleaned)
-    except json.JSONDecodeError:
-        pass
-
-    # Tentativo 4 — estrai solo le chiavi che riesco a parsare
-    try:
-        result = {}
-        for m in re.finditer(r'"(\w+)"\s*:\s*("(?:[^"\\]|\\.)*"|\[.*?\]|null|true|false|\d+)', chunk, re.DOTALL):
-            try:
-                result[m.group(1)] = json.loads(m.group(2))
-            except:
-                result[m.group(1)] = m.group(2).strip('"')
-        return result if result else None
-    except:
-        pass
-
-    return None
-
 
 def _pulisci(lst):
     return [str(x).strip() for x in (lst or [])
@@ -374,14 +332,14 @@ REGOLE OBBLIGATORIE:
 - MAI scrivere "verificare sul bando", "non specificato", "vedi bando"
 - Usa <b>etichetta:</b> per evidenziare etichette dentro i bullet (non per l'intero bullet)
 - Minimo 3 bullet per sezione, ideale 4
-- Le metriche devono essere sintetiche (max 20 caratteri per riga), usa \\n per multiriga
+- Le metriche devono essere sintetiche (max 20 caratteri per riga)
 - tabella_contributi: usa null se non ci sono tipologie/scaglioni distinti
 
 Genera la scheda in JSON con questa struttura ESATTA:
 {{
   "sottotitolo": "Ente erogatore · riferimento normativo · tipo agevolazione · {stato_bando}",
   "dotazione": "es. EUR 45 MLN (null se non presente nel testo)",
-  "intensita": "es. 35%\\nfondo perduto (null se non presente)",
+  "intensita": "es. 35% fondo perduto (null se non presente)",
   "contributo_max": "es. EUR 250.000 (null se non presente)",
   "data_scadenza": "DD/MM/YYYY (null se non presente)",
   "ente_finalita": [
@@ -467,10 +425,12 @@ Rispondi SOLO con JSON valido. Nessun testo prima o dopo."""
 
         blocks = resp.json().get("content", [])
         testo_r = "\n".join(b.get("text","") for b in blocks if b.get("type")=="text").strip()
-        result = _parse_json_robusto(testo_r)
-        if result:
-            return result
-        return {"_api_error": f"no JSON parsabile: {testo_r[:100]}"}
+        raw   = re.sub(r'```(?:json)?\s*','',testo_r)
+        raw   = re.sub(r'```','',raw).strip()
+        start = raw.find('{'); end = raw.rfind('}')
+        if start==-1 or end==-1:
+            return {}
+        return json.loads(raw[start:end+1])
     except Exception as e:
         return {"_api_error": str(e)}
 
