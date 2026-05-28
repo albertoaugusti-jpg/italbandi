@@ -1155,7 +1155,7 @@ async def login_post(email: str = Form(""), password: str = Form("")):
         return HTMLResponse(login_page("Email non ancora verificata. Controlla la tua casella di posta e clicca il link di conferma."))
     sid = create_session(user_row)
     resp = RedirectResponse("/", status_code=302)
-    resp.set_cookie("session_id", sid, max_age=86400*7, httponly=True)
+    resp.set_cookie("session_id", sid, max_age=86400*7, httponly=True, secure=True, samesite="lax")
     return resp
 
 
