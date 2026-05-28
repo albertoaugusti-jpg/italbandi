@@ -203,7 +203,7 @@ Rispondi SOLO con JSON valido. Nessun testo prima o dopo."""
             result = _parse_json_robusto(testo)
             if result:
                 return result
-            return {"_api_error": f"JSON non parsabile: {testo[:80]}"}
+            return {"_api_error": f"no JSON parsabile: {testo[:100]}"}
 
         except Exception as e:
             return {"_api_error": str(e)}
@@ -213,44 +213,48 @@ Rispondi SOLO con JSON valido. Nessun testo prima o dopo."""
 # ── Assembla CONTENT per energelia_scheda_engine ──────────────────────────────
 
 def _parse_json_robusto(raw):
-    """Parser JSON robusto — 5 tentativi progressivi."""
+    """Tenta di parsare JSON anche se malformato — pulisce i casi comuni."""
+    # Pulizia base
     raw = re.sub(r'```(?:json)?\s*', '', raw)
     raw = re.sub(r'```', '', raw).strip()
-    s = raw.find('{')
-    e = raw.rfind('}') + 1
-    if s == -1 or e == 0:
+    start = raw.find('{')
+    end   = raw.rfind('}')
+    if start == -1 or end == -1:
         return None
-    chunk = raw[s:e]
+    chunk = raw[start:end+1]
 
-    # T1: diretto
-    try: return json.loads(chunk)
-    except: pass
-
-    # T2: rimuovi newline dentro stringhe + virgole finali
+    # Tentativo 1 — diretto
     try:
-        c = re.sub(r',\s*([}\]])', r'\1', chunk.replace('\n', ' ').replace('\r', ' '))
-        return json.loads(c)
-    except: pass
+        return json.loads(chunk)
+    except json.JSONDecodeError:
+        pass
 
-    # T3: gestisci backslash spuri
+    # Tentativo 2 — rimuovi virgole finali prima di } e ]
     try:
-        c = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', chunk)
-        c = re.sub(r',\s*([}\]])', r'\1', c.replace('\n', ' '))
-        return json.loads(c)
-    except: pass
+        cleaned = re.sub(r',\s*([}\]])', r'\1', chunk)
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
 
-    # T4: estrazione chiave per chiave
+    # Tentativo 3 — rimuovi righe problematiche con newline non escaped
+    try:
+        cleaned = re.sub(r'(?<!\\)\n', ' ', chunk)
+        cleaned = re.sub(r',\s*([}\]])', r'\1', cleaned)
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    # Tentativo 4 — estrai solo le chiavi che riesco a parsare
     try:
         result = {}
-        for m in re.finditer(r'"(\w+)"\s*:\s*"((?:[^"\\]|\\.)*)"', chunk):
-            result[m.group(1)] = m.group(2).replace('\\n', ' ')
-        for m in re.finditer(r'"(\w+)"\s*:\s*(\[[^\[\]]*\])', chunk, re.DOTALL):
-            try: result[m.group(1)] = json.loads(m.group(2).replace('\n', ' '))
-            except: pass
-        for m in re.finditer(r'"(\w+)"\s*:\s*null', chunk):
-            result[m.group(1)] = None
-        return result if len(result) > 3 else None
-    except: pass
+        for m in re.finditer(r'"(\w+)"\s*:\s*("(?:[^"\\]|\\.)*"|\[.*?\]|null|true|false|\d+)', chunk, re.DOTALL):
+            try:
+                result[m.group(1)] = json.loads(m.group(2))
+            except:
+                result[m.group(1)] = m.group(2).strip('"')
+        return result if result else None
+    except:
+        pass
 
     return None
 
@@ -466,7 +470,7 @@ Rispondi SOLO con JSON valido. Nessun testo prima o dopo."""
         result = _parse_json_robusto(testo_r)
         if result:
             return result
-        return {"_api_error": f"JSON non parsabile: {testo_r[:80]}"}
+        return {"_api_error": f"no JSON parsabile: {testo_r[:100]}"}
     except Exception as e:
         return {"_api_error": str(e)}
 
