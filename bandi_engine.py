@@ -259,7 +259,7 @@ def _parse_json_robusto(raw):
     return None
 
 
-
+def _pulisci(lst):
     return [str(x).strip() for x in (lst or [])
             if x and str(x).strip() not in ("","None","null","—","-")]
 
