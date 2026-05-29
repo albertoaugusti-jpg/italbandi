@@ -114,3 +114,6 @@ def conta():
         return n
     except:
         return 0
+
+# Init automatico all'import
+init()
