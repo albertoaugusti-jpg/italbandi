@@ -11,19 +11,10 @@ import uvicorn
 
 import bandi_engine as be
 import schede_engine as ENGINE
-try:
-    import page_sport2, page_ets2
-    _extra_routers = True
-except Exception as _e:
-    _extra_routers = False
-    print(f"[ROUTER] sport2/ets2 non caricati: {_e}", flush=True)
 
 LOGO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo_italbandi.png")
 
 app = FastAPI(title="ItalBandi")
-if _extra_routers:
-    app.include_router(page_sport2.router)
-    app.include_router(page_ets2.router)
 
 # ── Cache bandi via SQLite ────────────────────────────────────────────────────
 CACHE_DB = "/data/bandi_cache.db"
@@ -198,7 +189,7 @@ def init_db():
         try: con.execute("ALTER TABLE utenti ADD COLUMN account_type TEXT DEFAULT 'normale'")
         except: pass
         pw_hash = hashlib.sha256("Samp1946,".encode()).hexdigest()
-        con.execute("INSERT OR REPLACE INTO utenti (nome,cognome,email,password_hash,is_admin,verificato) VALUES (?,?,?,?,?,?)",
+        con.execute("INSERT OR IGNORE INTO utenti (nome,cognome,email,password_hash,is_admin,verificato) VALUES (?,?,?,?,?,?)",
                     ("Admin","ItalBandi","admin@italbandi.it", pw_hash, 1, 1))
         con.commit(); con.close()
 
@@ -547,7 +538,7 @@ def login_page(error=""):
     {err}
     <form method="POST" action="/login">
       <div class="form-group"><label>Email *</label><input type="email" name="email" required placeholder="tuaemail@esempio.it"></div>
-      <div class="form-group"><label>Password *</label><div style="position:relative"><input type="password" name="password" id="lpwd" required placeholder="••••••••" style="width:100%;padding-right:36px"><button type="button" onclick="var x=document.getElementById('lpwd');x.type=x.type==='password'?'text':'password'" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#8899AA">&#128065;</button></div></div>
+      <div class="form-group"><label>Password *</label><input type="password" name="password" required placeholder="••••••••"></div>
       <button class="btn-primary" type="submit">Accedi</button>
     </form>
     <div class="auth-footer">Non hai un account? <a href="/registrati">Registrati gratis</a> &nbsp;·&nbsp; <a href="/reset-password">Password dimenticata?</a></div>
@@ -1164,7 +1155,7 @@ async def login_post(email: str = Form(""), password: str = Form("")):
         return HTMLResponse(login_page("Email non ancora verificata. Controlla la tua casella di posta e clicca il link di conferma."))
     sid = create_session(user_row)
     resp = RedirectResponse("/", status_code=302)
-    resp.set_cookie("session_id", sid, max_age=86400*7, httponly=True, secure=True, samesite="lax")
+    resp.set_cookie("session_id", sid, max_age=86400*7, httponly=True)
     return resp
 
 
@@ -1970,6 +1961,8 @@ tr:hover td {{ background:#F8FAFF }}
         <button class="btn-ar btn-ar-primary" onclick="window.location='/area-riservata/cache'">Aggiorna cache bandi</button>
         <button class="btn-ar btn-ar-gold" onclick="window.location='/area-riservata/utenti/export'">Scarica CSV utenti</button>
         <button class="btn-ar" style="background:#7C3AED;color:#fff" onclick="avviaScraper('sport')">🏋️ Scrapa Sport</button>
+        <button class="btn-ar" style="background:#059669;color:#fff" onclick="avviaScraperNew('sport2')">🏋️ Scrapa Sport2</button>
+        <button class="btn-ar" style="background:#059669;color:#fff" onclick="avviaScraperNew('ets2')">🤝 Scrapa ETS2</button>
       </div>
     </div>
   </div>
@@ -2036,8 +2029,14 @@ tr:hover td {{ background:#F8FAFF }}
 
 <script>
 async function avviaScraper(tipo) {{
-  if (!confirm('Avviare lo scraper ' + tipo + '? Il processo può richiedere 1-2 minuti.')) return;
+  if (!confirm('Avviare lo scraper ' + tipo + '?')) return;
   const r = await fetch('/admin/scraper/' + tipo, {{method:'POST'}});
+  const d = await r.json();
+  alert(d.messaggio || d.error || 'Avviato');
+}}
+async function avviaScraperNew(tipo) {{
+  if (!confirm('Avviare lo scraper ' + tipo + '? Richiede 1-2 minuti.')) return;
+  const r = await fetch('/api/' + tipo + '/scrapa', {{method:'POST'}});
   const d = await r.json();
   alert(d.messaggio || d.error || 'Avviato');
 }}
