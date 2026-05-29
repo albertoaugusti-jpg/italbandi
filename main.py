@@ -11,19 +11,10 @@ import uvicorn
 
 import bandi_engine as be
 import schede_engine as ENGINE
-try:
-    import page_sport2, page_ets2
-    _extra_routers = True
-except Exception as _e:
-    _extra_routers = False
-    print(f"[ROUTER] sport2/ets2 non caricati: {_e}", flush=True)
 
 LOGO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo_italbandi.png")
 
 app = FastAPI(title="ItalBandi")
-if _extra_routers:
-    app.include_router(page_sport2.router)
-    app.include_router(page_ets2.router)
 
 # ── Cache bandi via SQLite ────────────────────────────────────────────────────
 CACHE_DB = "/data/bandi_cache.db"
