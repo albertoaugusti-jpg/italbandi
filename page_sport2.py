@@ -120,8 +120,8 @@ window.onload = cerca;
 
 @router.get("/sport2", response_class=HTMLResponse)
 async def sport2_page(session_id: str = Cookie(default=None)):
-    from main import get_session, login_page
-    if not get_session(session_id):
+    import main
+    if not main.SESSIONS.get(session_id):
         from fastapi.responses import RedirectResponse
         return RedirectResponse("/login")
     return HTMLResponse(HTML)
@@ -134,8 +134,8 @@ async def sport2_api(
     livello: str = Query(""),
     session_id: str = Cookie(default=None),
 ):
-    from main import get_session
-    if not get_session(session_id):
+    import main
+    if not main.SESSIONS.get(session_id):
         return JSONResponse({"error": "Non autenticato"}, status_code=401)
     bandi, totale = DB.cerca(keyword=keyword, stato=stato, livello=livello)
     return JSONResponse({"bandi": bandi, "totale": totale})
@@ -143,8 +143,8 @@ async def sport2_api(
 
 @router.post("/api/sport2/scrapa")
 async def sport2_scrapa(session_id: str = Cookie(default=None)):
-    from main import get_session
-    user = get_session(session_id)
+    import main
+    user = main.SESSIONS.get(session_id)
     if not user or not user.get("is_admin"):
         return JSONResponse({"error": "Non autorizzato"}, status_code=403)
     threading.Thread(target=SC.scrapa, daemon=True).start()
