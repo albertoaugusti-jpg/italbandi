@@ -11,10 +11,19 @@ import uvicorn
 
 import bandi_engine as be
 import schede_engine as ENGINE
+try:
+    import page_sport2, page_ets2
+    _extra_routers = True
+except Exception as _e:
+    _extra_routers = False
+    print(f"[ROUTER] sport2/ets2 non caricati: {_e}", flush=True)
 
 LOGO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo_italbandi.png")
 
 app = FastAPI(title="ItalBandi")
+if _extra_routers:
+    app.include_router(page_sport2.router)
+    app.include_router(page_ets2.router)
 
 # ── Cache bandi via SQLite ────────────────────────────────────────────────────
 CACHE_DB = "/data/bandi_cache.db"
@@ -1961,8 +1970,6 @@ tr:hover td {{ background:#F8FAFF }}
         <button class="btn-ar btn-ar-primary" onclick="window.location='/area-riservata/cache'">Aggiorna cache bandi</button>
         <button class="btn-ar btn-ar-gold" onclick="window.location='/area-riservata/utenti/export'">Scarica CSV utenti</button>
         <button class="btn-ar" style="background:#7C3AED;color:#fff" onclick="avviaScraper('sport')">🏋️ Scrapa Sport</button>
-        <button class="btn-ar" style="background:#059669;color:#fff" onclick="avviaScraperNew('sport2')">🏋️ Scrapa Sport2</button>
-        <button class="btn-ar" style="background:#059669;color:#fff" onclick="avviaScraperNew('ets2')">🤝 Scrapa ETS2</button>
       </div>
     </div>
   </div>
@@ -2029,14 +2036,8 @@ tr:hover td {{ background:#F8FAFF }}
 
 <script>
 async function avviaScraper(tipo) {{
-  if (!confirm('Avviare lo scraper ' + tipo + '?')) return;
+  if (!confirm('Avviare lo scraper ' + tipo + '? Il processo può richiedere 1-2 minuti.')) return;
   const r = await fetch('/admin/scraper/' + tipo, {{method:'POST'}});
-  const d = await r.json();
-  alert(d.messaggio || d.error || 'Avviato');
-}}
-async function avviaScraperNew(tipo) {{
-  if (!confirm('Avviare lo scraper ' + tipo + '? Richiede 1-2 minuti.')) return;
-  const r = await fetch('/api/' + tipo + '/scrapa', {{method:'POST'}});
   const d = await r.json();
   alert(d.messaggio || d.error || 'Avviato');
 }}
