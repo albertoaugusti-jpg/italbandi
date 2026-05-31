@@ -11,10 +11,19 @@ import uvicorn
 
 import bandi_engine as be
 import schede_engine as ENGINE
+try:
+    import page_sport2, page_ets2
+    _extra_routers = True
+except Exception as _e:
+    _extra_routers = False
+    print(f"[ROUTER] sport2/ets2 non caricati: {_e}", flush=True)
 
 LOGO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo_italbandi.png")
 
 app = FastAPI(title="ItalBandi")
+if _extra_routers:
+    app.include_router(page_sport2.router)
+    app.include_router(page_ets2.router)
 
 # ── Cache bandi via SQLite ────────────────────────────────────────────────────
 CACHE_DB = "/data/bandi_cache.db"
@@ -318,6 +327,13 @@ a:hover { text-decoration: underline; }
 .navbar-links { display: flex; gap: 24px; align-items: center; font-size: 0.88rem; }
 .navbar-links a { color: #A8BEDD; font-weight: 500; }
 .navbar-links a:hover { color: #C9A84C; text-decoration: none; }
+@media (max-width: 640px) {
+  .navbar { padding: 0 16px; height: 60px; }
+  .navbar-brand { font-size: 1.1rem; letter-spacing: 1px; }
+  .navbar-links { gap: 10px; font-size: 0.78rem; }
+  .navbar-links a:not(.navbar-keep) { display: none; }
+  .navbar-links .btn-logout { padding: 5px 10px; font-size: 0.75rem; }
+}
 .btn-logout {
   background: transparent; border: 1px solid #C9A84C;
   color: #C9A84C; padding: 6px 16px; border-radius: 4px;
@@ -477,9 +493,9 @@ NAVBAR_LOGGED = lambda user: f"""
     <span style="color:#6A8AA8;font-size:0.82rem">Ciao, {user['nome']}</span>
     <a href="/privacy">Privacy</a>
     <a href="/cookie">Cookie Policy</a>
-    {'<a href="/area-riservata" style="color:#C9A84C;font-weight:700;border:1px solid rgba(201,168,76,0.4);padding:5px 12px;border-radius:4px">&#9881; Area Riservata</a>' if user.get('is_admin') else ''}
+    {'<a href="/area-riservata" class="navbar-keep" style="color:#C9A84C;font-weight:700;border:1px solid rgba(201,168,76,0.4);padding:5px 12px;border-radius:4px">&#9881; Area Riservata</a>' if user.get('is_admin') else ''}
     <form method="POST" action="/logout" style="margin:0">
-      <button class="btn-logout" type="submit">Esci</button>
+      <button class="btn-logout navbar-keep" type="submit">Esci</button>
     </form>
   </div>
 </nav>"""
