@@ -327,13 +327,6 @@ a:hover { text-decoration: underline; }
 .navbar-links { display: flex; gap: 24px; align-items: center; font-size: 0.88rem; }
 .navbar-links a { color: #A8BEDD; font-weight: 500; }
 .navbar-links a:hover { color: #C9A84C; text-decoration: none; }
-@media (max-width: 640px) {
-  .navbar { padding: 0 16px; height: 60px; }
-  .navbar-brand { font-size: 1.1rem; letter-spacing: 1px; }
-  .navbar-links { gap: 10px; font-size: 0.78rem; }
-  .navbar-links a:not(.navbar-keep) { display: none; }
-  .navbar-links .btn-logout { padding: 5px 10px; font-size: 0.75rem; }
-}
 .btn-logout {
   background: transparent; border: 1px solid #C9A84C;
   color: #C9A84C; padding: 6px 16px; border-radius: 4px;
@@ -493,9 +486,9 @@ NAVBAR_LOGGED = lambda user: f"""
     <span style="color:#6A8AA8;font-size:0.82rem">Ciao, {user['nome']}</span>
     <a href="/privacy">Privacy</a>
     <a href="/cookie">Cookie Policy</a>
-    {'<a href="/area-riservata" class="navbar-keep" style="color:#C9A84C;font-weight:700;border:1px solid rgba(201,168,76,0.4);padding:5px 12px;border-radius:4px">&#9881; Area Riservata</a>' if user.get('is_admin') else ''}
+    {'<a href="/area-riservata" style="color:#C9A84C;font-weight:700;border:1px solid rgba(201,168,76,0.4);padding:5px 12px;border-radius:4px">&#9881; Area Riservata</a>' if user.get('is_admin') else ''}
     <form method="POST" action="/logout" style="margin:0">
-      <button class="btn-logout navbar-keep" type="submit">Esci</button>
+      <button class="btn-logout" type="submit">Esci</button>
     </form>
   </div>
 </nav>"""
@@ -1417,7 +1410,6 @@ async def chi_siamo(session_id: str = Cookie(default=None)):
     <span class="navbar-brand">ITAL<span>BANDI</span></span>
   </a>
   <div class="navbar-links">
-    <a href="/chi-siamo">Chi siamo</a>
     <a href="/login">Accedi</a>
     <a href="/registrati" style="background:#C9A84C;color:#0A1628;padding:7px 18px;border-radius:5px;font-weight:700">Registrati gratis</a>
   </div>
@@ -1505,124 +1497,47 @@ async def chi_siamo(session_id: str = Cookie(default=None)):
 
 LANDING_HTML = lambda: f"""<!DOCTYPE html><html lang="it"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ItalBandi — Trova i bandi giusti per la tua impresa</title>{CSS_BASE}
+<title>ItalBandi — Bandi e Incentivi per le Imprese</title>{CSS_BASE}
 <style>
 .hero-landing {{
-  min-height: calc(100vh - 64px);
-  background: linear-gradient(160deg, #0A1628 0%, #0F2035 50%, #0A1628 100%);
+  min-height: 100vh;
+  background: linear-gradient(160deg, #0A1628 0%, #0F2035 60%, #0A1628 100%);
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  text-align: center; padding: 60px 20px;
+  text-align: center; padding: 40px 20px;
   position: relative; overflow: hidden;
 }}
 .hero-landing::before {{
   content: '';
   position: absolute; inset: 0;
-  background: radial-gradient(ellipse at 50% 40%, rgba(201,168,76,0.08) 0%, transparent 60%);
+  background: radial-gradient(ellipse at 50% 40%, rgba(201,168,76,0.07) 0%, transparent 65%);
+  pointer-events: none;
 }}
-.hero-logo {{ width: 200px; height: 200px; object-fit: cover; border-radius: 20px; margin-bottom: 32px; box-shadow: 0 0 60px rgba(201,168,76,0.4), 0 20px 40px rgba(0,0,0,0.5); }}
-.hero-title {{ font-size: 3rem; font-weight: 900; color: #FFFFFF; letter-spacing: -1px; line-height: 1.1; margin-bottom: 16px; }}
+.hero-logo {{ width: 140px; height: 140px; object-fit: cover; border-radius: 16px; margin-bottom: 28px; box-shadow: 0 0 50px rgba(201,168,76,0.35), 0 16px 40px rgba(0,0,0,0.5); position:relative; }}
+.hero-title {{ font-size: 2.4rem; font-weight: 900; color: #FFFFFF; letter-spacing: -1px; line-height: 1.15; margin-bottom: 14px; position:relative; }}
 .hero-title span {{ color: #C9A84C; }}
-.hero-sub {{ font-size: 1.15rem; color: #8899AA; max-width: 560px; line-height: 1.7; margin-bottom: 40px; }}
-.hero-cta {{ display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }}
-.btn-cta-primary {{ padding: 16px 40px; background: #C9A84C; color: #0A1628; border: none; border-radius: 8px; font-size: 1.05rem; font-weight: 800; cursor: pointer; text-decoration: none; letter-spacing: 0.5px; }}
-.btn-cta-primary:hover {{ background: #E0BF6A; text-decoration: none; }}
-.btn-cta-secondary {{ padding: 16px 40px; background: transparent; color: #C9A84C; border: 2px solid #C9A84C; border-radius: 8px; font-size: 1.05rem; font-weight: 700; text-decoration: none; }}
-.btn-cta-secondary:hover {{ background: rgba(201,168,76,0.1); text-decoration: none; }}
-.features {{ display: grid; grid-template-columns: repeat(3,1fr); gap: 24px; max-width: 900px; margin: 60px auto 0; padding: 0 20px; }}
-.feature {{ background: #0F2035; border: 1px solid #1E3A5F; border-top: 3px solid #C9A84C; border-radius: 8px; padding: 28px 24px; text-align: left; }}
-.feature-icon {{ font-size: 2rem; margin-bottom: 12px; }}
-.feature h3 {{ color: #D4E8FF; font-size: 1rem; margin-bottom: 8px; }}
-.feature p {{ color: #6A8AA8; font-size: 0.85rem; line-height: 1.6; }}
-.section-how {{ background: #0A1628; padding: 80px 20px; border-top: 1px solid #1E3A5F; }}
-.section-how h2 {{ text-align: center; color: #C9A84C; font-size: 1.8rem; margin-bottom: 48px; }}
-.steps {{ display: flex; gap: 0; max-width: 800px; margin: 0 auto; position: relative; }}
-.step {{ flex: 1; text-align: center; padding: 0 20px; }}
-.step-num {{ width: 44px; height: 44px; background: #C9A84C; color: #0A1628; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 1.1rem; margin: 0 auto 16px; }}
-.step h4 {{ color: #D4E8FF; font-size: 0.95rem; margin-bottom: 8px; }}
-.step p  {{ color: #6A8AA8; font-size: 0.82rem; line-height: 1.6; }}
-.section-cta {{ background: linear-gradient(135deg,#0F2035,#1A3A5E); padding: 80px 20px; text-align: center; border-top: 1px solid #1E3A5F; }}
-.section-cta h2 {{ color: #FFFFFF; font-size: 1.8rem; margin-bottom: 16px; }}
-.section-cta p {{ color: #8899AA; font-size: 1rem; margin-bottom: 32px; }}
+.hero-sub {{ font-size: 1rem; color: #8899AA; max-width: 440px; line-height: 1.65; margin-bottom: 36px; position:relative; }}
+.hero-cta {{ display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; position:relative; }}
+.btn-accedi {{ padding: 14px 36px; background: #C9A84C; color: #0A1628; border: none; border-radius: 7px; font-size: 1rem; font-weight: 800; cursor: pointer; text-decoration: none; }}
+.btn-accedi:hover {{ background: #E0BF6A; text-decoration: none; }}
+.btn-registrati {{ padding: 14px 36px; background: transparent; color: #C9A84C; border: 2px solid #C9A84C; border-radius: 7px; font-size: 1rem; font-weight: 700; text-decoration: none; }}
+.btn-registrati:hover {{ background: rgba(201,168,76,0.1); text-decoration: none; }}
+@media (max-width: 480px) {{
+  .hero-title {{ font-size: 1.8rem; }}
+  .hero-logo {{ width: 100px; height: 100px; }}
+  .btn-accedi, .btn-registrati {{ padding: 12px 28px; font-size: 0.95rem; width: 100%; text-align: center; }}
+  .hero-cta {{ flex-direction: column; align-items: center; }}
+}}
 </style>
 </head><body>
-<nav class="navbar">
-  <a href="/" style="display:flex;align-items:center;gap:12px;text-decoration:none">
-    <img src="/logo" alt="ItalBandi" style="height:60px;width:60px;object-fit:cover;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.4)">
-    <span class="navbar-brand">ITAL<span>BANDI</span></span>
-  </a>
-  <div class="navbar-links">
-    <a href="/chi-siamo">Chi siamo</a>
-    <a href="/login">Accedi</a>
-    <a href="/registrati" style="background:#C9A84C;color:#0A1628;padding:7px 18px;border-radius:5px;font-weight:700">Registrati gratis</a>
-  </div>
-</nav>
-
 <div class="hero-landing">
   <img src="/logo" class="hero-logo" alt="ItalBandi">
-  <h1 class="hero-title">Trova il bando.<br><span>Trova il consulente.</span></h1>
-  <p class="hero-sub">ItalBandi raccoglie tutti i bandi italiani ed europei in un unico posto.
-  Registrati gratis, cerca le opportunità per la tua impresa e scarica la scheda PDF professionale.
-  I nostri consulenti sono pronti ad aiutarti.</p>
+  <h1 class="hero-title">Bandi e incentivi<br><span>per la tua impresa.</span></h1>
+  <p class="hero-sub">Cerca tra migliaia di opportunità di finanziamento europee, nazionali e regionali. Scarica la scheda PDF e contatta i nostri consulenti.</p>
   <div class="hero-cta">
-    <a href="/registrati" class="btn-cta-primary">Registrati gratis →</a>
-    <a href="/chi-siamo" class="btn-cta-secondary">Chi siamo</a>
+    <a href="/login" class="btn-accedi">Accedi</a>
+    <a href="/registrati" class="btn-registrati">Registrati gratis →</a>
   </div>
 </div>
-
-<div class="features">
-  <div class="feature">
-    <div class="feature-icon">🗂️</div>
-    <h3>Tutti i bandi in un posto</h3>
-    <p>Bandi europei, nazionali e regionali sempre aggiornati. Filtri per regione, settore e stato del bando.</p>
-  </div>
-  <div class="feature">
-    <div class="feature-icon">📄</div>
-    <h3>Schede PDF professionali</h3>
-    <p>Per ogni bando generiamo una scheda sintetica professionale pronta da condividere con il tuo commercialista o cliente.</p>
-  </div>
-  <div class="feature">
-    <div class="feature-icon">🤝</div>
-    <h3>Consulenti qualificati</h3>
-    <p>Dietro ItalBandi c'è Energelia S.r.l., dal 2006 specializzata in finanza agevolata. Siamo a tua disposizione.</p>
-  </div>
-</div>
-
-<div class="section-how">
-  <h2>Come funziona</h2>
-  <div class="steps">
-    <div class="step">
-      <div class="step-num">1</div>
-      <h4>Registrati</h4>
-      <p>Crea il tuo account gratuito in 30 secondi. Solo nome, email e password.</p>
-    </div>
-    <div class="step">
-      <div class="step-num">2</div>
-      <h4>Cerca</h4>
-      <p>Filtra per regione, livello e parola chiave. Trova i bandi pertinenti alla tua impresa.</p>
-    </div>
-    <div class="step">
-      <div class="step-num">3</div>
-      <h4>Scarica la scheda</h4>
-      <p>Genera e scarica la scheda PDF professionale del bando che ti interessa.</p>
-    </div>
-    <div class="step">
-      <div class="step-num">4</div>
-      <h4>Contattaci</h4>
-      <p>I nostri consulenti valutano gratuitamente la tua candidatura al bando.</p>
-    </div>
-  </div>
-</div>
-
-<div class="section-cta">
-  <h2>È completamente gratuito</h2>
-  <p>Registrarsi, cercare bandi e scaricare schede PDF non costa nulla.<br>
-  Il nostro guadagno è aiutarti concretamente a ottenere finanziamenti.</p>
-  <a href="/registrati" class="btn-cta-primary">Inizia adesso →</a>
-  <p style="margin-top:24px;font-size:0.85rem;color:#4A6A8A">
-    Hai già un account? <a href="/login">Accedi qui</a>
-  </p>
-</div>
-
 {FOOTER_HTML}
 </body></html>"""
 
