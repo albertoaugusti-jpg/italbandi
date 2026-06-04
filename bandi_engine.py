@@ -328,12 +328,13 @@ TESTO DEL BANDO:
 {testo[:8000]}
 
 REGOLE OBBLIGATORIE:
-- Ogni bullet deve essere una frase COMPLETA e SPECIFICA con dati reali
+- Ogni bullet deve essere una frase COMPLETA e SPECIFICA (80-160 caratteri) con dati reali
 - MAI scrivere "verificare sul bando", "non specificato", "vedi bando"
-- Se un dato non e esplicitamente nel testo, DEDUCILO dal contesto del bando
-- Usa <b>etichetta:</b> per evidenziare etichette dentro i bullet
-- Minimo 3 bullet per sezione, MAI lasciare array vuoti
-- Le metriche devono essere sintetiche (max 16 caratteri)
+- Usa <b>etichetta:</b> per evidenziare etichette dentro i bullet (non per l'intero bullet)
+- Minimo 3 bullet per sezione, ideale 4
+- Se un dato non e esplicito nel testo, DEDUCILO dal tipo di bando e dal contesto
+- MAI lasciare array vuoti
+- Le metriche devono essere sintetiche (max 16 caratteri per riga)
 - tabella_contributi: usa null se non ci sono tipologie/scaglioni distinti
 
 Genera la scheda in JSON con questa struttura ESATTA:
