@@ -663,7 +663,7 @@ def index_page(user):
     <option value="Associazione-Ente Non profit/Terzo settore/Impresa e Cooperativa sociale">Terzo settore / No profit</option>
   </select>
   <span id="regione-wrap" style="display:none">
-    <select id="regione" onchange="aggiornaProvince()">
+    <select id="regione">
       <option value="">-- Scegli regione --</option>
       <option>Abruzzo</option><option>Basilicata</option><option>Calabria</option>
       <option>Campania</option><option>Emilia-Romagna</option><option>Friuli-Venezia-Giulia</option>
@@ -674,7 +674,6 @@ def index_page(user):
       <option>Valle d'Aosta</option><option>Veneto</option>
     </select>
   </span>
-  <span id="provincia-wrap" style="display:none"></span>
   <button class="btn-cerca" onclick="cerca()">Cerca</button>
 </div>
 <div style="background:#F0F4FB;border-bottom:1px solid #D8E2EE;padding:10px 40px">
@@ -707,28 +706,6 @@ def index_page(user):
 </div>
 {FOOTER_HTML}
 <script>
-const PROVINCE = {{
-  "Liguria":["Provincia di Genova","Provincia di Imperia","Provincia di La-Spezia","Provincia di Savona"],
-  "Lombardia":["Provincia di Bergamo","Provincia di Brescia","Provincia di Como","Provincia di Cremona","Provincia di Lecco","Provincia di Lodi","Provincia di Mantova","Provincia di Milano","Provincia di Monza-Brianza","Provincia di Pavia","Provincia di Sondrio","Provincia di Varese"],
-  "Piemonte":["Provincia di Alessandria","Provincia di Asti","Provincia di Biella","Provincia di Cuneo","Provincia di Novara","Provincia di Torino","Provincia di Verbano-Cusio-Ossola","Provincia di Vercelli"],
-  "Veneto":["Provincia di Belluno","Provincia di Padova","Provincia di Rovigo","Provincia di Treviso","Provincia di Venezia","Provincia di Verona","Provincia di Vicenza"],
-  "Toscana":["Provincia di Arezzo","Provincia di Firenze","Provincia di Grosseto","Provincia di Livorno","Provincia di Lucca","Provincia di Massa-Carrara","Provincia di Pisa","Provincia di Pistoia","Provincia di Prato","Provincia di Siena"],
-  "Lazio":["Provincia di Frosinone","Provincia di Latina","Provincia di Rieti","Provincia di Roma","Provincia di Viterbo"],
-  "Campania":["Provincia di Avellino","Provincia di Benevento","Provincia di Caserta","Provincia di Napoli","Provincia di Salerno"],
-  "Emilia-Romagna":["Provincia di Bologna","Provincia di Ferrara","Provincia di Forli-Cesena","Provincia di Modena","Provincia di Parma","Provincia di Piacenza","Provincia di Ravenna","Provincia di Reggio-Emilia","Provincia di Rimini"],
-  "Puglia":["Provincia di Bari","Provincia di Barletta-Andria-Trani","Provincia di Brindisi","Provincia di Foggia","Provincia di Lecce","Provincia di Taranto"],
-  "Sicilia":["Provincia di Agrigento","Provincia di Caltanissetta","Provincia di Catania","Provincia di Enna","Provincia di Messina","Provincia di Palermo","Provincia di Ragusa","Provincia di Siracusa","Provincia di Trapani"],
-  "Sardegna":["Provincia di Cagliari","Provincia di Nuoro","Provincia di Oristano","Provincia di Sassari"],
-  "Abruzzo":["Provincia di Chieti","Provincia di L'Aquila","Provincia di Pescara","Provincia di Teramo"],
-  "Marche":["Provincia di Ancona","Provincia di Ascoli Piceno","Provincia di Fermo","Provincia di Macerata","Provincia di Pesaro Urbino"],
-  "Friuli-Venezia-Giulia":["Provincia di Gorizia","Provincia di Pordenone","Provincia di Trieste","Provincia di Udine"],
-  "Calabria":["Provincia di Catanzaro","Provincia di Cosenza","Provincia di Crotone","Provincia di Reggio-Calabria","Provincia di Vibo-Valentia"],
-  "Umbria":["Provincia di Perugia","Provincia di Terni"],
-  "Basilicata":["Provincia di Matera","Provincia di Potenza"],
-  "Molise":["Provincia di Campobasso","Provincia di Isernia"],
-  "Trentino-Alto-Adige":["Provincia di Bolzano","Provincia di Trento"],
-  "Valle d'Aosta":["Provincia di Aosta"],
-}};
 function suggerisci(kw) {{ document.getElementById('keyword').value = kw; cerca(); }}
 let _soloTitolo = 'no';
 function setRicerca(val) {{
@@ -749,26 +726,13 @@ function aggiornaFiltri() {{
   document.getElementById('provincia-wrap').style.display = 'none';
   if (livello !== 'regionale') document.getElementById('regione').value = '';
 }}
-function aggiornaProvince() {{
-  const regione = document.getElementById('regione').value;
-  const wrap = document.getElementById('provincia-wrap');
-  if (regione && PROVINCE[regione]) {{
-    let sel = document.getElementById('provincia');
-    if (!sel) {{ sel = document.createElement('select'); sel.id='provincia'; wrap.appendChild(sel); }}
-    sel.innerHTML = '<option value="">(tutte le province)</option>' +
-      PROVINCE[regione].map(p => `<option value="${{p}}">${{p}}</option>`).join('');
-    wrap.style.display = 'inline';
-  }} else {{ wrap.style.display = 'none'; }}
-}}
 let _hits = {{}};
 async function cerca() {{
-  const prov = document.getElementById('provincia');
   const params = new URLSearchParams({{
     keyword: document.getElementById('keyword').value,
     stato:   document.getElementById('stato').value,
     livello: document.getElementById('livello').value,
     regione: document.getElementById('regione').value,
-    provincia: prov ? prov.value : '',
     beneficiari: document.getElementById('beneficiari').value,
     solo_titolo: _soloTitolo,
   }});
@@ -1354,7 +1318,7 @@ async def cerca(
     request: Request,
     keyword: str = Query(""), stato: str = Query("aperto"),
     livello: str = Query(""), regione: str = Query(""),
-    provincia: str = Query(""), beneficiari: str = Query(""),
+    beneficiari: str = Query(""),
     solo_titolo: str = Query("no"),
     session_id: str = Cookie(default=None)
 ):
@@ -1378,7 +1342,7 @@ async def cerca(
     try:
         hits, totale = be.cerca_bandi_web(
             keyword=keyword, stato=stato, livello=livello,
-            regione=regione, provincia=provincia, beneficiari=beneficiari,
+            regione=regione, beneficiari=beneficiari,
             max_hits=50, solo_titolo=(solo_titolo == "si"))
         bandi = [be.hit_to_card(h) for h in hits]
         return JSONResponse({"bandi": bandi, "totale": totale})
