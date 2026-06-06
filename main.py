@@ -114,6 +114,15 @@ async def serve_logo():
             return FileResponse(path, media_type="image/png")
     return Response(status_code=404)
 
+@app.get("/video-intro")
+async def serve_video():
+    for nome in ["Script_cinematografico_–_ITALB.mp4", "Script_cinematografico___ITALB.mp4",
+                 "Script_cinematografico_%E2%80%93_ITALB.mp4"]:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), nome)
+        if os.path.exists(path):
+            return FileResponse(path, media_type="video/mp4")
+    return Response(status_code=404)
+
 DB_PATH      = "/data/italbandi.db"
 CACHE_DB     = "/data/bandi_cache.db"
 SESSIONS     = {}
@@ -624,6 +633,25 @@ def index_page(user):
     return f"""<!DOCTYPE html><html lang="it"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ItalBandi — Bandi e Incentivi per le Imprese</title>{CSS_BASE}</head><body>
+<div id="splash" style="position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:99999;display:flex;align-items:center;justify-content:center;flex-direction:column">
+  <video id="splash-video" autoplay muted playsinline style="max-width:100%;max-height:100%;object-fit:contain">
+    <source src="/video-intro" type="video/mp4">
+  </video>
+  <button onclick="chiudiSplash()" style="position:absolute;top:20px;right:28px;background:rgba(255,255,255,0.15);color:#fff;border:1px solid rgba(255,255,255,0.4);border-radius:20px;padding:6px 18px;font-size:0.82rem;cursor:pointer;font-family:inherit">
+    Salta ›
+  </button>
+</div>
+<script>
+function chiudiSplash() {{
+  var s = document.getElementById('splash');
+  s.style.transition = 'opacity 0.6s';
+  s.style.opacity = '0';
+  setTimeout(function(){{ s.style.display='none'; }}, 600);
+}}
+document.getElementById('splash-video').addEventListener('ended', chiudiSplash);
+// Fallback: chiudi dopo 15 secondi comunque
+setTimeout(chiudiSplash, 15000);
+</script>
 {NAVBAR_LOGGED(user)}
 <div class="hero">
   <h2>Trova il bando giusto per la tua impresa</h2>
