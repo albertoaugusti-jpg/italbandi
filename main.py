@@ -1388,6 +1388,17 @@ async def cerca(
     except Exception as e:
         return JSONResponse({"error": str(e), "bandi": [], "totale": 0})
 
+# ── Debug beneficiari ────────────────────────────────────────────────────────
+@app.get("/api/debug-hit")
+async def debug_hit():
+    hits, _ = be.cerca_bandi_web(keyword="", stato="aperto", max_hits=10)
+    risultati = []
+    for h in hits:
+        taxh = h.get("taxonomies_hierarchical", {})
+        ben = taxh.get("beneficiari", {})
+        risultati.append({"titolo": h.get("post_title","")[:60], "beneficiari": ben})
+    return JSONResponse(risultati)
+
 # ── Job system asincrono ──────────────────────────────────────────────────────
 JOBS = {}
 
