@@ -654,6 +654,17 @@ def index_page(user):
     <option value="nazionale">Nazionale</option>
     <option value="regionale">Regionale</option>
   </select>
+  <select id="beneficiari">
+    <option value="">Tutti i destinatari</option>
+    <option value="Imprese">Imprese</option>
+    <option value="Startup e PMI innovative">Startup e PMI innovative</option>
+    <option value="Professionisti">Professionisti</option>
+    <option value="Enti pubblici">Enti pubblici</option>
+    <option value="Enti del Terzo Settore">Enti del Terzo Settore</option>
+    <option value="Privati cittadini">Privati cittadini</option>
+    <option value="Università e Ricerca">Università e Ricerca</option>
+    <option value="Reti di imprese">Reti di imprese</option>
+  </select>
   <span id="regione-wrap" style="display:none">
     <select id="regione" onchange="aggiornaProvince()">
       <option value="">-- Scegli regione --</option>
@@ -761,6 +772,7 @@ async function cerca() {{
     livello: document.getElementById('livello').value,
     regione: document.getElementById('regione').value,
     provincia: prov ? prov.value : '',
+    beneficiari: document.getElementById('beneficiari').value,
     solo_titolo: _soloTitolo,
   }});
   document.getElementById('risultati').innerHTML = '<div class="loader">Ricerca in corso...</div>';
@@ -1345,7 +1357,8 @@ async def cerca(
     request: Request,
     keyword: str = Query(""), stato: str = Query("aperto"),
     livello: str = Query(""), regione: str = Query(""),
-    provincia: str = Query(""), solo_titolo: str = Query("no"),
+    provincia: str = Query(""), beneficiari: str = Query(""),
+    solo_titolo: str = Query("no"),
     session_id: str = Cookie(default=None)
 ):
     user = get_session(session_id)
@@ -1368,8 +1381,8 @@ async def cerca(
     try:
         hits, totale = be.cerca_bandi_web(
             keyword=keyword, stato=stato, livello=livello,
-            regione=regione, provincia=provincia, max_hits=50,
-            solo_titolo=(solo_titolo == "si"))
+            regione=regione, provincia=provincia, beneficiari=beneficiari,
+            max_hits=50, solo_titolo=(solo_titolo == "si"))
         bandi = [be.hit_to_card(h) for h in hits]
         return JSONResponse({"bandi": bandi, "totale": totale})
     except Exception as e:
