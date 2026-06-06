@@ -633,25 +633,26 @@ def index_page(user):
     return f"""<!DOCTYPE html><html lang="it"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ItalBandi — Bandi e Incentivi per le Imprese</title>{CSS_BASE}</head><body>
-<div id="splash" style="position:fixed;top:0;left:0;width:100%;height:100%;background:#0A1628;z-index:99999;display:flex;align-items:center;justify-content:center;flex-direction:column">
-  <div id="splash-intro" style="text-align:center">
-    <img src="/logo" style="height:80px;border-radius:10px;margin-bottom:32px;box-shadow:0 4px 24px rgba(0,0,0,0.5)">
-    <h1 style="color:#C9A84C;font-family:Georgia,serif;font-size:2.2rem;margin-bottom:12px;letter-spacing:1px">ItalBandi</h1>
-    <p style="color:#A8BEDD;font-size:1rem;margin-bottom:40px">Il portale dei bandi e incentivi per le imprese italiane</p>
-    <button onclick="avviaVideo()" style="background:#C9A84C;color:#1A2A4A;border:none;border-radius:30px;padding:14px 48px;font-size:1.1rem;font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 4px 16px rgba(201,168,76,0.4);letter-spacing:0.5px">
+<div id="splash" style="position:fixed;top:0;left:0;width:100%;height:100%;background:#0A1628;z-index:99999;display:flex;align-items:center;justify-content:center;flex-direction:column;overflow:hidden;touch-action:none">
+  <div id="splash-intro" style="text-align:center;padding:20px;width:100%;max-width:480px">
+    <img src="/logo" style="height:64px;border-radius:10px;margin-bottom:24px;box-shadow:0 4px 24px rgba(0,0,0,0.5)">
+    <h1 style="color:#C9A84C;font-family:Georgia,serif;font-size:clamp(1.5rem,5vw,2.2rem);margin-bottom:10px;letter-spacing:1px">ItalBandi</h1>
+    <p style="color:#A8BEDD;font-size:clamp(0.85rem,3vw,1rem);margin-bottom:36px;line-height:1.5">Il portale dei bandi e incentivi per le imprese italiane</p>
+    <button onclick="avviaVideo()" style="background:#C9A84C;color:#1A2A4A;border:none;border-radius:30px;padding:14px 48px;font-size:clamp(1rem,4vw,1.1rem);font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 4px 16px rgba(201,168,76,0.4);letter-spacing:0.5px;-webkit-tap-highlight-color:transparent">
       ▶ &nbsp;Entra
     </button>
   </div>
   <div id="splash-video-wrap" style="display:none;width:100%;height:100%;position:absolute;top:0;left:0;background:#000;align-items:center;justify-content:center">
-    <video id="splash-video" playsinline style="max-width:100%;max-height:100%;object-fit:contain">
+    <video id="splash-video" playsinline webkit-playsinline style="width:100%;height:100%;object-fit:contain">
       <source src="/video-intro" type="video/mp4">
     </video>
-    <button onclick="chiudiSplash()" style="position:absolute;top:20px;right:28px;background:rgba(255,255,255,0.15);color:#fff;border:1px solid rgba(255,255,255,0.4);border-radius:20px;padding:6px 18px;font-size:0.82rem;cursor:pointer;font-family:inherit">
+    <button onclick="chiudiSplash()" style="position:absolute;top:16px;right:16px;background:rgba(255,255,255,0.15);color:#fff;border:1px solid rgba(255,255,255,0.4);border-radius:20px;padding:8px 20px;font-size:0.82rem;cursor:pointer;font-family:inherit;-webkit-tap-highlight-color:transparent;z-index:10">
       Salta ›
     </button>
   </div>
 </div>
 <script>
+document.body.style.overflow = 'hidden';
 function avviaVideo() {{
   document.getElementById('splash-intro').style.display = 'none';
   var wrap = document.getElementById('splash-video-wrap');
@@ -661,6 +662,7 @@ function avviaVideo() {{
   v.addEventListener('ended', chiudiSplash);
 }}
 function chiudiSplash() {{
+  document.body.style.overflow = '';
   var s = document.getElementById('splash');
   s.style.transition = 'opacity 0.6s';
   s.style.opacity = '0';
