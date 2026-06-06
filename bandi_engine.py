@@ -19,7 +19,7 @@ ALGOLIA_HEADERS = {
 
 # ── Algolia: ricerca bandi ────────────────────────────────────────────────────
 
-def build_filters(scadenza_vals, livello, regione, provincia):
+def build_filters(scadenza_vals, livello, regione, provincia, beneficiari=""):
     parts = []
     if scadenza_vals:
         sc = " OR ".join(f'scadenza_testo:"{v}"' for v in scadenza_vals)
@@ -33,13 +33,15 @@ def build_filters(scadenza_vals, livello, regione, provincia):
             parts.append(f'taxonomies_hierarchical.area_geografica.lvl1:"{provincia}"')
         elif regione:
             parts.append(f'taxonomies_hierarchical.area_geografica.lvl0:"{regione}"')
+    if beneficiari:
+        parts.append(f'taxonomies_hierarchical.beneficiari.lvl0:"{beneficiari}"')
     return " AND ".join(parts)
 
 
-def cerca_bandi_web(keyword="", stato="aperto", livello="", regione="", provincia="", max_hits=50, solo_titolo=False):
+def cerca_bandi_web(keyword="", stato="aperto", livello="", regione="", provincia="", beneficiari="", max_hits=50, solo_titolo=False):
     stato_map   = {"aperto": ["Bandi aperti"], "prossimo": ["Bandi prossima apertura"], "tutti": ["Bandi aperti","Bandi prossima apertura"]}
     livello_map = {"europeo": "Bandi europei", "nazionale": "Bandi nazionali", "regionale": "Bandi regionali"}
-    filters = build_filters(stato_map.get(stato, ["Bandi aperti"]), livello_map.get(livello, livello), regione, provincia)
+    filters = build_filters(stato_map.get(stato, ["Bandi aperti"]), livello_map.get(livello, livello), regione, provincia, beneficiari)
     payload = {"query": keyword, "hitsPerPage": max_hits, "page": 0,
                "filters": filters, "attributesToRetrieve": ["*"]}
     if solo_titolo and keyword:
