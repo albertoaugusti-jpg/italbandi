@@ -656,14 +656,11 @@ def index_page(user):
   </select>
   <select id="beneficiari">
     <option value="">Tutti i destinatari</option>
-    <option value="Imprese">Imprese</option>
-    <option value="Startup e PMI innovative">Startup e PMI innovative</option>
-    <option value="Professionisti">Professionisti</option>
-    <option value="Enti pubblici">Enti pubblici</option>
-    <option value="Enti del Terzo Settore">Enti del Terzo Settore</option>
-    <option value="Privati cittadini">Privati cittadini</option>
-    <option value="Università e Ricerca">Università e Ricerca</option>
-    <option value="Reti di imprese">Reti di imprese</option>
+    <option value="Micro impresa">Micro impresa</option>
+    <option value="PMI">PMI</option>
+    <option value="Grande Impresa">Grande Impresa</option>
+    <option value="Ente pubblico">Ente pubblico</option>
+    <option value="Associazione-Ente Non profit/Terzo settore/Impresa e Cooperativa sociale">Terzo settore / No profit</option>
   </select>
   <span id="regione-wrap" style="display:none">
     <select id="regione" onchange="aggiornaProvince()">
@@ -1398,6 +1395,17 @@ async def debug_hit():
         ben = taxh.get("beneficiari", {})
         risultati.append({"titolo": h.get("post_title","")[:60], "beneficiari": ben})
     return JSONResponse(risultati)
+
+@app.get("/api/debug-province")
+async def debug_province(regione: str = Query("")):
+    hits, _ = be.cerca_bandi_web(keyword="", stato="tutti", livello="regionale", regione=regione, max_hits=20)
+    valori = set()
+    for h in hits:
+        taxh = h.get("taxonomies_hierarchical", {})
+        ag = taxh.get("area_geografica", {}) or {}
+        for v in (ag.get("lvl1") or []):
+            valori.add(v)
+    return JSONResponse(sorted(valori))
 
 # ── Job system asincrono ──────────────────────────────────────────────────────
 JOBS = {}
