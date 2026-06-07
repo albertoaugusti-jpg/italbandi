@@ -157,6 +157,19 @@ def _db_conn():
         return pg.Connection(**_pg_params)
     return sqlite3.connect(DB_PATH)
 
+# ── Stripe (disattivato finché non si inseriscono le API key) ─────────────────
+STRIPE_SECRET_KEY      = os.environ.get("STRIPE_SECRET_KEY", "")
+STRIPE_PUBLISHABLE_KEY = os.environ.get("STRIPE_PUBLISHABLE_KEY", "")
+STRIPE_WEBHOOK_SECRET  = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+STRIPE_ATTIVO          = bool(STRIPE_SECRET_KEY and STRIPE_SECRET_KEY.startswith("sk_"))
+
+PACCHETTI = {
+    "pack_s": {"nome": "Pack S — 10 ricerche", "ricerche": 10, "prezzo_cent": 750,  "prezzo_str": "€7,50"},
+    "pack_m": {"nome": "Pack M — 20 ricerche", "ricerche": 20, "prezzo_cent": 1200, "prezzo_str": "€12,00"},
+    "pdf_1":  {"nome": "Scheda PDF bando",     "ricerche": 0,  "prezzo_cent": 100,  "prezzo_str": "€1,00"},
+}
+RICERCHE_FREE = 5
+
 def init_db():
     if _USE_PG:
         import pg8000.native as pg
@@ -200,6 +213,28 @@ def init_db():
         except: pass
         try: con.execute("ALTER TABLE utenti ADD COLUMN account_type TEXT DEFAULT 'normale'")
         except: pass
+        try: con.execute("ALTER TABLE utenti ADD COLUMN ricerche_acquistate INTEGER DEFAULT 0")
+        except: pass
+        try: con.execute("ALTER TABLE utenti ADD COLUMN pdf_acquistati INTEGER DEFAULT 0")
+        except: pass
+        con.execute("""CREATE TABLE IF NOT EXISTS eventi (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            utente_id INTEGER,
+            tipo TEXT,
+            dettaglio TEXT,
+            ip TEXT,
+            ts TEXT DEFAULT CURRENT_TIMESTAMP
+        )""")
+        con.execute("""CREATE TABLE IF NOT EXISTS pagamenti (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            utente_id INTEGER,
+            tipo TEXT,
+            stripe_session_id TEXT,
+            importo_cent INTEGER,
+            stato TEXT DEFAULT 'pending',
+            oggetto_id TEXT,
+            ts TEXT DEFAULT CURRENT_TIMESTAMP
+        )""")
         pw_hash = hashlib.sha256("Samp1946,".encode()).hexdigest()
         con.execute("INSERT OR REPLACE INTO utenti (nome,cognome,email,password_hash,is_admin,verificato) VALUES (?,?,?,?,?,?)",
                     ("Admin","ItalBandi","admin@italbandi.it", pw_hash, 1, 1))
@@ -750,16 +785,26 @@ async function cerca() {{
   const resp = await fetch('/api/cerca?' + params);
   const data = await resp.json();
   if (data.error === 'limite') {{
+    const stripeAttivo = data.stripe_attivo;
+    const btnAcquisto = stripeAttivo ? `
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:16px">
+        <button onclick="acquistaPacchetto('pack_s')" style="background:#1A2A4A;color:#C9A84C;border:2px solid #C9A84C;padding:12px 20px;border-radius:8px;font-weight:700;font-size:0.88rem;cursor:pointer;text-align:center">
+          Pack S<br><span style="font-size:0.78rem;font-weight:400;color:#A8BEDD">10 ricerche · €7,50</span>
+        </button>
+        <button onclick="acquistaPacchetto('pack_m')" style="background:#C9A84C;color:#1A2A4A;border:2px solid #C9A84C;padding:12px 20px;border-radius:8px;font-weight:700;font-size:0.88rem;cursor:pointer;text-align:center">
+          Pack M<br><span style="font-size:0.78rem;font-weight:400">20 ricerche · €12,00</span>
+        </button>
+      </div>
+      <p style="font-size:0.78rem;color:#8899AA;margin-bottom:12px">Vuoi un piano personalizzato? Chiamaci.</p>` : `
+      <p style="color:#6A8AA8;font-size:0.88rem;line-height:1.6;margin-bottom:16px">Contatta Energelia per sbloccare ricerche aggiuntive.</p>`;
     document.getElementById('risultati').innerHTML = `
       <div style="background:#fff;border:1px solid #D0DCF0;border-left:4px solid #C9A84C;border-radius:8px;padding:28px 32px;text-align:center;max-width:560px;margin:40px auto">
         <div style="font-size:2rem;margin-bottom:12px">&#128274;</div>
-        <h3 style="color:#1A2A4A;font-size:1.1rem;margin-bottom:8px">Hai esaurito le ricerche gratuite</h3>
-        <p style="color:#6A8AA8;font-size:0.88rem;line-height:1.6;margin-bottom:20px">
-          Hai utilizzato tutte le 10 ricerche incluse nel tuo account gratuito.<br>
-          Contatta Energelia per sbloccare ricerche illimitate.
-        </p>
+        <h3 style="color:#1A2A4A;font-size:1.1rem;margin-bottom:8px">Hai esaurito le ricerche</h3>
+        <p style="color:#6A8AA8;font-size:0.88rem;line-height:1.6;margin-bottom:20px">${{data.messaggio}}</p>
+        ${{btnAcquisto}}
         <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-          <span style="background:#C9A84C;color:#1A2A4A;padding:10px 22px;border-radius:6px;font-weight:700;font-size:0.9rem">010 8078800</span>
+          <span style="background:#EEF2F8;color:#1A2A4A;padding:10px 22px;border-radius:6px;font-weight:700;font-size:0.9rem">010 8078800</span>
           <button onclick="mostraCtaDownload()" style="background:#1A2A4A;color:#fff;border:none;padding:10px 22px;border-radius:6px;font-weight:700;font-size:0.9rem;cursor:pointer">Scrivici</button>
         </div>
       </div>`;
@@ -894,6 +939,18 @@ function chiudiCta() {{ document.getElementById('cta-modal').style.display='none
 function mostraFormMsg() {{
   document.getElementById('cta-main').style.display='none';
   document.getElementById('cta-form').style.display='block';
+}}
+async function acquistaPacchetto(tipo) {{
+  try {{
+    const r = await fetch('/api/stripe/checkout', {{
+      method: 'POST',
+      headers: {{'Content-Type': 'application/json'}},
+      body: JSON.stringify({{tipo}})
+    }});
+    const d = await r.json();
+    if (d.url) {{ window.location.href = d.url; }}
+    else {{ alert(d.error || 'Errore nel checkout'); }}
+  }} catch(e) {{ alert('Errore di rete'); }}
 }}
 async function inviaMessaggio() {{
   const nome=document.getElementById('msg-nome').value.trim();
@@ -1382,15 +1439,24 @@ async def cerca(
 
     if not user.get("is_admin"):
         con = sqlite3.connect(DB_PATH)
-        row = con.execute("SELECT ricerche_count, COALESCE(account_type,'normale') FROM utenti WHERE id=?", (user["id"],)).fetchone()
+        row = con.execute("SELECT ricerche_count, COALESCE(account_type,'normale'), COALESCE(ricerche_acquistate,0) FROM utenti WHERE id=?", (user["id"],)).fetchone()
         count = row[0] if row else 0
         atype = row[1] if row else 'normale'
-        if atype == 'normale' and count >= 10:
+        acquistate = row[2] if row else 0
+        limite = RICERCHE_FREE if atype == 'normale' else (acquistate if atype == 'pack' else 999999)
+        if atype in ('normale', 'pack') and count >= limite:
             con.close()
-            return JSONResponse({"error": "limite", "messaggio": "Hai esaurito le tue 10 ricerche gratuite."}, status_code=429)
-        if atype == 'normale':
+            msg = f"Hai esaurito le tue {RICERCHE_FREE} ricerche gratuite." if atype == 'normale' else "Hai esaurito le ricerche del tuo pacchetto."
+            return JSONResponse({"error": "limite", "messaggio": msg, "stripe_attivo": STRIPE_ATTIVO}, status_code=429)
+        if atype in ('normale', 'pack'):
             con.execute("UPDATE utenti SET ricerche_count = ricerche_count + 1 WHERE id=?", (user["id"],))
-            con.commit()
+        # Log evento
+        try:
+            ip = request.client.host if request.client else ""
+            con.execute("INSERT INTO eventi (utente_id,tipo,dettaglio,ip) VALUES (?,?,?,?)",
+                (user["id"], "ricerca", f"kw={keyword}|livello={livello}|regione={regione}|ben={beneficiari}", ip))
+        except: pass
+        con.commit()
         con.close()
 
     try:
@@ -1424,6 +1490,119 @@ async def debug_province(regione: str = Query("")):
         for v in (ag.get("lvl1") or []):
             valori.add(v)
     return JSONResponse(sorted(valori))
+
+# ── Stripe Checkout ───────────────────────────────────────────────────────────
+
+@app.post("/api/stripe/checkout")
+async def stripe_checkout(request: Request, session_id: str = Cookie(default=None)):
+    user = get_session(session_id)
+    if not user:
+        return JSONResponse({"error": "Non autenticato"}, status_code=401)
+    if not STRIPE_ATTIVO:
+        return JSONResponse({"error": "Pagamenti non ancora attivi. Contattaci per info."}, status_code=503)
+
+    body = await request.json()
+    tipo = body.get("tipo", "")  # pack_s | pack_m | pdf_1
+    oggetto_id = body.get("oggetto_id", "")  # per pdf: objectID del bando
+
+    if tipo not in PACCHETTI:
+        return JSONResponse({"error": "Prodotto non valido"}, status_code=400)
+
+    pack = PACCHETTI[tipo]
+    try:
+        import stripe
+        stripe.api_key = STRIPE_SECRET_KEY
+        checkout = stripe.checkout.Session.create(
+            payment_method_types=["card"],
+            line_items=[{
+                "price_data": {
+                    "currency": "eur",
+                    "product_data": {"name": pack["nome"]},
+                    "unit_amount": pack["prezzo_cent"],
+                },
+                "quantity": 1,
+            }],
+            mode="payment",
+            success_url=f"{BASE_URL}/stripe/success?session_id={{CHECKOUT_SESSION_ID}}&tipo={tipo}&oggetto_id={oggetto_id}",
+            cancel_url=f"{BASE_URL}/home",
+            metadata={"utente_id": str(user["id"]), "tipo": tipo, "oggetto_id": oggetto_id},
+        )
+        # Salva pagamento pending
+        con = sqlite3.connect(DB_PATH)
+        con.execute("INSERT INTO pagamenti (utente_id,tipo,stripe_session_id,importo_cent,stato,oggetto_id) VALUES (?,?,?,?,?,?)",
+            (user["id"], tipo, checkout.id, pack["prezzo_cent"], "pending", oggetto_id))
+        con.commit(); con.close()
+        return JSONResponse({"url": checkout.url})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/stripe/success", response_class=HTMLResponse)
+async def stripe_success(request: Request, session_id: str = Cookie(default=None)):
+    user = get_session(session_id)
+    if not user:
+        return RedirectResponse("/login")
+
+    tipo = request.query_params.get("tipo", "")
+    oggetto_id = request.query_params.get("oggetto_id", "")
+    stripe_session = request.query_params.get("session_id", "")
+
+    if STRIPE_ATTIVO and tipo in PACCHETTI:
+        try:
+            import stripe
+            stripe.api_key = STRIPE_SECRET_KEY
+            sess = stripe.checkout.Session.retrieve(stripe_session)
+            if sess.payment_status == "paid":
+                con = sqlite3.connect(DB_PATH)
+                con.execute("UPDATE pagamenti SET stato='pagato' WHERE stripe_session_id=?", (stripe_session,))
+                if tipo == "pack_s":
+                    con.execute("UPDATE utenti SET account_type='pack', ricerche_acquistate=10, ricerche_count=0 WHERE id=?", (user["id"],))
+                elif tipo == "pack_m":
+                    con.execute("UPDATE utenti SET account_type='pack', ricerche_acquistate=20, ricerche_count=0 WHERE id=?", (user["id"],))
+                elif tipo == "pdf_1":
+                    con.execute("UPDATE utenti SET pdf_acquistati=COALESCE(pdf_acquistati,0)+1 WHERE id=?", (user["id"],))
+                # Log evento
+                con.execute("INSERT INTO eventi (utente_id,tipo,dettaglio,ip) VALUES (?,?,?,?)",
+                    (user["id"], "pagamento", f"tipo={tipo}|stripe={stripe_session}", ""))
+                con.commit(); con.close()
+        except Exception as e:
+            print(f"[STRIPE SUCCESS ERROR] {e}", flush=True)
+
+    if tipo == "pdf_1" and oggetto_id:
+        return RedirectResponse(f"/home?pdf_ready={oggetto_id}")
+    return RedirectResponse("/home?pagamento=ok")
+
+@app.post("/api/stripe/webhook")
+async def stripe_webhook(request: Request):
+    if not STRIPE_ATTIVO:
+        return JSONResponse({"ok": True})
+    payload = await request.body()
+    sig = request.headers.get("stripe-signature", "")
+    try:
+        import stripe
+        stripe.api_key = STRIPE_SECRET_KEY
+        event = stripe.Webhook.construct_event(payload, sig, STRIPE_WEBHOOK_SECRET)
+        if event["type"] == "checkout.session.completed":
+            sess = event["data"]["object"]
+            meta = sess.get("metadata", {})
+            utente_id = int(meta.get("utente_id", 0))
+            tipo = meta.get("tipo", "")
+            oggetto_id = meta.get("oggetto_id", "")
+            if utente_id and tipo:
+                con = sqlite3.connect(DB_PATH)
+                con.execute("UPDATE pagamenti SET stato='pagato' WHERE stripe_session_id=?", (sess["id"],))
+                if tipo == "pack_s":
+                    con.execute("UPDATE utenti SET account_type='pack', ricerche_acquistate=10, ricerche_count=0 WHERE id=?", (utente_id,))
+                elif tipo == "pack_m":
+                    con.execute("UPDATE utenti SET account_type='pack', ricerche_acquistate=20, ricerche_count=0 WHERE id=?", (utente_id,))
+                elif tipo == "pdf_1":
+                    con.execute("UPDATE utenti SET pdf_acquistati=COALESCE(pdf_acquistati,0)+1 WHERE id=?", (utente_id,))
+                con.execute("INSERT INTO eventi (utente_id,tipo,dettaglio,ip) VALUES (?,?,?,?)",
+                    (utente_id, "pagamento_webhook", f"tipo={tipo}|stripe={sess['id']}", ""))
+                con.commit(); con.close()
+    except Exception as e:
+        print(f"[WEBHOOK ERROR] {e}", flush=True)
+        return JSONResponse({"error": str(e)}, status_code=400)
+    return JSONResponse({"ok": True})
 
 # ── Job system asincrono ──────────────────────────────────────────────────────
 JOBS = {}
@@ -1520,14 +1699,36 @@ async def area_riservata(session_id: str = Cookie(default=None)):
 
     n_verificati = sum(1 for u in utenti if u[7])
     n_non_verif  = len(utenti) - n_verificati
+
+    # Analytics
+    con2 = sqlite3.connect(DB_PATH)
+    n_ricerche_oggi = con2.execute("SELECT COUNT(*) FROM eventi WHERE tipo='ricerca' AND ts >= date('now')").fetchone()[0]
+    n_pdf_oggi = con2.execute("SELECT COUNT(*) FROM eventi WHERE tipo='pagamento' AND dettaglio LIKE '%pdf_1%' AND ts >= date('now')").fetchone()[0]
+    n_pagamenti_totali = con2.execute("SELECT COUNT(*) FROM pagamenti WHERE stato='pagato'").fetchone()[0]
+    ricavi_totali = con2.execute("SELECT COALESCE(SUM(importo_cent),0) FROM pagamenti WHERE stato='pagato'").fetchone()[0]
+    ultime_ricerche = con2.execute("""SELECT e.ts, u.email, e.dettaglio FROM eventi e
+        LEFT JOIN utenti u ON u.id=e.utente_id WHERE e.tipo='ricerca'
+        ORDER BY e.ts DESC LIMIT 20""").fetchall()
+    con2.close()
+
     righe_html = ""
     for u in utenti:
         id_, nome, cognome, email, impresa, ruolo, tel, verif, created, ricerche, atype = u
         stato = '<span style="color:#15803D;font-weight:700">&#10003;</span>' if verif else '<span style="color:#DC2626">&#10007;</span>'
         is_servizio = atype == 'servizio'
-        badge_tipo = '<span style="background:#1A2A4A;color:#C9A84C;font-size:0.65rem;font-weight:700;padding:2px 6px;border-radius:10px;margin-left:4px">SERVIZIO</span>' if is_servizio else ''
-        colore_r = '#059669' if is_servizio else ('#DC2626' if ricerche >= 10 else '#1A2A4A')
-        ricerche_txt = 'infinito' if is_servizio else f'{ricerche}/10'
+        is_pack = atype == 'pack'
+        if is_servizio:
+            badge_tipo = '<span style="background:#1A2A4A;color:#C9A84C;font-size:0.65rem;font-weight:700;padding:2px 6px;border-radius:10px;margin-left:4px">SERVIZIO</span>'
+            colore_r = '#059669'
+            ricerche_txt = 'illimitate'
+        elif is_pack:
+            badge_tipo = '<span style="background:#7C3AED;color:#fff;font-size:0.65rem;font-weight:700;padding:2px 6px;border-radius:10px;margin-left:4px">PACK</span>'
+            colore_r = '#7C3AED'
+            ricerche_txt = f'{ricerche} usate'
+        else:
+            badge_tipo = ''
+            colore_r = '#DC2626' if ricerche >= RICERCHE_FREE else '#1A2A4A'
+            ricerche_txt = f'{ricerche}/{RICERCHE_FREE}'
         btn_reset = f'<button onclick="resetRicerche({id_},\'{email}\')" style="margin-left:4px;background:none;border:1px solid #C8D4E4;border-radius:4px;padding:2px 6px;font-size:0.68rem;color:#5A7A9A;cursor:pointer">reset</button>' if not is_servizio else ''
         righe_html += f"""<tr>
           <td>{nome} {cognome}{badge_tipo}</td>
@@ -1542,12 +1743,24 @@ async def area_riservata(session_id: str = Cookie(default=None)):
             Elimina</button></td>
         </tr>"""
 
+    righe_ricerche = ""
+    for ts, email, dettaglio in ultime_ricerche:
+        kw = ""
+        for part in dettaglio.split("|"):
+            if part.startswith("kw="):
+                kw = part[3:] or "—"
+        righe_ricerche += f'<tr><td style="color:#8899AA;font-size:0.73rem">{ts[:16]}</td><td>{email or "?"}</td><td>{kw}</td></tr>'
+
+    stripe_banner = ""
+    if not STRIPE_ATTIVO:
+        stripe_banner = '<div style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:6px;padding:10px 14px;font-size:0.78rem;color:#92400E;margin-bottom:20px">⚠️ <strong>Stripe non attivo.</strong> Aggiungi STRIPE_SECRET_KEY e STRIPE_PUBLISHABLE_KEY nelle variabili d\'ambiente di Render per attivare i pagamenti.</div>'
+
     return HTMLResponse(f"""<!DOCTYPE html><html lang="it"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Area Riservata — ItalBandi</title>{CSS_BASE}
 <style>
 .ar-wrap {{ max-width:1100px;margin:32px auto;padding:0 24px 60px }}
-.ar-grid {{ display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:32px }}
+.ar-grid {{ display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px }}
 .ar-card {{ background:#fff;border:1px solid #D0DCF0;border-radius:10px;padding:20px 24px;box-shadow:0 2px 8px rgba(26,42,74,0.06) }}
 .ar-card h3 {{ font-size:0.72rem;text-transform:uppercase;letter-spacing:0.1em;color:#8899AA;margin-bottom:6px }}
 .ar-card .val {{ font-size:2rem;font-weight:800;color:#1A2A4A }}
@@ -1567,7 +1780,8 @@ tr:hover td {{ background:#F8FAFF }}
 </head><body>
 {NAVBAR_LOGGED(user)}
 <div class="ar-wrap">
-  <h1 style="font-size:1.4rem;font-weight:800;color:#1A2A4A;margin-bottom:24px">&#9881; Area Riservata</h1>
+  <h1 style="font-size:1.4rem;font-weight:800;color:#1A2A4A;margin-bottom:20px">&#9881; Area Riservata</h1>
+  {stripe_banner}
   <div class="ar-grid">
     <div class="ar-card">
       <h3>Utenti totali</h3>
@@ -1575,17 +1789,27 @@ tr:hover td {{ background:#F8FAFF }}
       <div class="sub">{n_verificati} verificati · {n_non_verif} in attesa</div>
     </div>
     <div class="ar-card">
+      <h3>Ricerche oggi</h3>
+      <div class="val">{n_ricerche_oggi}</div>
+      <div class="sub">ricerche effettuate</div>
+    </div>
+    <div class="ar-card">
+      <h3>Pagamenti totali</h3>
+      <div class="val">{n_pagamenti_totali}</div>
+      <div class="sub">€{ricavi_totali/100:.2f} incassati</div>
+    </div>
+    <div class="ar-card">
       <h3>Cache bandi</h3>
       <div class="val" id="n-cache">...</div>
       <div class="sub">bandi in cache</div>
     </div>
-    <div class="ar-card">
-      <h3>Azioni rapide</h3>
-      <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
-        <button class="btn-ar btn-ar-primary" onclick="window.location='/area-riservata/cache'">Aggiorna cache bandi</button>
-        <button class="btn-ar btn-ar-gold" onclick="window.location='/area-riservata/utenti/export'">Scarica CSV utenti</button>
-      </div>
-    </div>
+  </div>
+  <div class="ar-section">
+    <h2>Ultime ricerche</h2>
+    <table>
+      <thead><tr><th>Quando</th><th>Utente</th><th>Keyword</th></tr></thead>
+      <tbody>{righe_ricerche or '<tr><td colspan="3" style="color:#8899AA;text-align:center">Nessuna ricerca ancora</td></tr>'}</tbody>
+    </table>
   </div>
   <div class="ar-section">
     <h2>Utenti registrati ({len(utenti)})
@@ -1623,8 +1847,11 @@ tr:hover td {{ background:#F8FAFF }}
     <div id="sv-esito" style="display:none;margin-top:12px;font-size:0.82rem;padding:8px 12px;border-radius:6px"></div>
   </div>
   <div class="ar-section">
-    <h2>Cache bandi</h2>
-    <button class="btn-ar btn-ar-primary" onclick="window.location='/area-riservata/cache'">Vai alla gestione cache</button>
+    <h2>Azioni rapide</h2>
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <button class="btn-ar btn-ar-primary" onclick="window.location='/area-riservata/cache'">Aggiorna cache bandi</button>
+      <button class="btn-ar btn-ar-gold" onclick="window.location='/area-riservata/utenti/export'">Scarica CSV utenti</button>
+    </div>
   </div>
 </div>
 <script>
