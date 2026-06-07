@@ -1044,7 +1044,7 @@ async def index(session_id: str = Cookie(default=None)):
 @app.get("/login", response_class=HTMLResponse)
 async def login_get(session_id: str = Cookie(default=None)):
     if get_session(session_id):
-        return RedirectResponse("/")
+        return RedirectResponse("/home")
     return login_page()
 
 @app.post("/login")
@@ -1058,7 +1058,7 @@ async def login_post(email: str = Form(""), password: str = Form("")):
     if len(user_row) > 5 and not user_row[5]:
         return HTMLResponse(login_page("Email non ancora verificata. Controlla la tua casella di posta."))
     sid = create_session(user_row)
-    resp = RedirectResponse("/", status_code=302)
+    resp = RedirectResponse("/home", status_code=302)
     resp.set_cookie("session_id", sid, max_age=86400*7, httponly=True)
     return resp
 
