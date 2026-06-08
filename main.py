@@ -71,6 +71,67 @@ def conta_cache():
         return n
     except: return 0
 
+# ── Modalità CACHE — endpoint completamente separati da Algolia ───────────────
+
+@app.get("/api/cerca-cache")
+async def api_cerca_cache(keyword: str = Query(""), session_id: str = Cookie(default=None)):
+    """Full-text search su SQLite bandi_cache. NON tocca Algolia."""
+    if not get_session(session_id):
+        return JSONResponse({"error": "Non autenticato"}, status_code=401)
+    keyword = keyword.strip()
+    if not keyword or len(keyword) < 2:
+        return JSONResponse({"hits": [], "nbHits": 0, "source": "cache"})
+    try:
+        con = sqlite3.connect(CACHE_DB)
+        con.row_factory = sqlite3.Row
+        like = f"%{keyword}%"
+        rows = con.execute(
+            "SELECT object_id, titolo, permalink, aggiornato "
+            "FROM bandi_cache WHERE testo_pagina LIKE ? OR titolo LIKE ? LIMIT 50",
+            (like, like)
+        ).fetchall()
+        con.close()
+        hits = [dict(r) for r in rows]
+        return JSONResponse({"hits": hits, "nbHits": len(hits), "source": "cache"})
+    except Exception as e:
+        return JSONResponse({"hits": [], "nbHits": 0, "error": str(e), "source": "cache"})
+
+
+@app.post("/api/scheda-cache/{object_id}")
+async def api_scheda_cache(object_id: str, session_id: str = Cookie(default=None)):
+    """
+    Genera scheda PDF usando testo_pagina da SQLite.
+    NON chiama /api/fetch-testo né Algolia.
+    """
+    if not get_session(session_id):
+        return JSONResponse({"error": "Non autenticato"}, status_code=401)
+    try:
+        con = sqlite3.connect(CACHE_DB)
+        con.row_factory = sqlite3.Row
+        row = con.execute(
+            "SELECT object_id, titolo, testo_pagina FROM bandi_cache WHERE object_id=?",
+            (object_id,)
+        ).fetchone()
+        con.close()
+        if not row:
+            return JSONResponse({"error": "Bando non trovato in cache"}, status_code=404)
+        testo  = row["testo_pagina"] or ""
+        titolo = row["titolo"] or "Bando"
+        if len(testo) < 100:
+            return JSONResponse({"error": "Testo in cache insufficiente per generare la scheda"}, status_code=422)
+        content, titolo_out = be.genera_scheda_cache_only(object_id, titolo, testo)
+        content.pop("_api_error", "")
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            tmp_path = tmp.name
+        ENGINE.generate(content, tmp_path, None)
+        titolo_corto = re.sub(r'[^\w\s]', '', titolo_out)[:40].strip().replace(' ', '_')
+        nome_file = f"Energelia_{titolo_corto}_{datetime.now().strftime('%Y%m%d')}.pdf"
+        return FileResponse(path=tmp_path, media_type="application/pdf", filename=nome_file)
+    except Exception as e:
+        traceback.print_exc()
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @app.post("/api/messaggio")
 async def api_messaggio(body: dict, session_id: str = Cookie(default=None)):
     user = get_session(session_id)
@@ -692,6 +753,13 @@ def index_page(user):
     <option value="prossimo">In apertura</option>
     <option value="tutti">Tutti i bandi</option>
   </select>
+  <button id="btn-toggle-cache" onclick="toggleCache()"
+    style="padding:8px 14px;background:#1A2A4A;color:#C9A84C;border:2px solid #C9A84C;
+           border-radius:5px;font-size:0.72rem;font-weight:700;cursor:pointer;
+           letter-spacing:1px;white-space:nowrap;font-family:inherit"
+    title="Commuta tra ricerca Live (Algolia) e Cache locale">
+    &#128190; LIVE
+  </button>
   <select id="livello" onchange="aggiornaFiltri()">
     <option value="">Qualsiasi livello</option>
     <option value="europeo">Europeo</option>
@@ -752,6 +820,127 @@ def index_page(user):
 <script>
 function suggerisci(kw) {{ document.getElementById('keyword').value = kw; cerca(); }}
 let _soloTitolo = 'no';
+// ── Modalità CACHE — completamente separata da Algolia ────────────────────────
+let _modalitaCache = false;
+function toggleCache() {{
+  _modalitaCache = !_modalitaCache;
+  const btn = document.getElementById('btn-toggle-cache');
+  const stati   = document.getElementById('stato');
+  const livello = document.getElementById('livello');
+  const benefic = document.getElementById('beneficiari');
+  if (_modalitaCache) {{
+    btn.textContent = '💾 CACHE';
+    btn.style.background = '#8B1A1A';
+    btn.style.color = '#FFDDDD';
+    btn.style.borderColor = '#FF6B6B';
+    btn.title = 'Modalità CACHE attiva — ricerca nel database locale';
+    stati.disabled = true; livello.disabled = true; benefic.disabled = true;
+  }} else {{
+    btn.textContent = '💾 LIVE';
+    btn.style.background = '#1A2A4A';
+    btn.style.color = '#C9A84C';
+    btn.style.borderColor = '#C9A84C';
+    btn.title = 'Modalità LIVE attiva — ricerca su Algolia';
+    stati.disabled = false; livello.disabled = false; benefic.disabled = false;
+  }}
+  document.getElementById('risultati').innerHTML = '';
+  document.getElementById('risultati-header').textContent = '';
+}}
+async function cercaCache() {{
+  const keyword = document.getElementById('keyword').value.trim();
+  if (!keyword || keyword.length < 2) {{
+    document.getElementById('risultati').innerHTML = '<p style="color:#F87171;padding:16px">Inserisci almeno 2 caratteri.</p>';
+    return;
+  }}
+  document.getElementById('risultati').innerHTML = '<div class="loader">Ricerca in cache locale...</div>';
+  document.getElementById('risultati-header').textContent = '';
+  try {{
+    const resp = await fetch('/api/cerca-cache?keyword=' + encodeURIComponent(keyword));
+    const data = await resp.json();
+    if (data.error && !data.hits) {{
+      document.getElementById('risultati').innerHTML = '<p style="color:#F87171;padding:16px">Errore: ' + data.error + '</p>';
+      return;
+    }}
+    if (!data.hits || data.hits.length === 0) {{
+      document.getElementById('risultati-header').textContent = 'Nessun risultato in cache per "' + keyword + '"';
+      document.getElementById('risultati').innerHTML = '';
+      return;
+    }}
+    document.getElementById('risultati-header').textContent = data.nbHits + ' risultati dalla cache locale';
+    const CATS = {{
+      agric:    {{ r:/agric|rurale|biolog|animale|zootec|vitivin|vino|olio|forest/, t2:'#166534', l:'Agricoltura' }},
+      energy:   {{ r:/energia|rinnovab|fotovolt|efficienza energet|solare|eolico|idrogeno/, t2:'#1D4ED8', l:'Energia' }},
+      turismo:  {{ r:/turismo|albergo|hotel|agriturismo|ristorant|ricettiv/, t2:'#9D174D', l:'Turismo' }},
+      digital:  {{ r:/digital|tecnolog|software|innovaz|startup|ricerca|sviluppo|cloud|cyber/, t2:'#5B21B6', l:'Digitale' }},
+      industria:{{ r:/macchin|impianti|manifattur|industria|produzion|artigian/, t2:'#92400E', l:'Industria' }},
+      lavoro:   {{ r:/formazion|lavoro|occupaz|welfare|dipendenti|personale/, t2:'#1E40AF', l:'Formazione' }},
+      intl:     {{ r:/internazion|export|estero|simest/, t2:'#4C1D95', l:'Export' }},
+      sociale:  {{ r:/sociale|terzo settore|onlus|cooperat|inclusione|disabil/, t2:'#064E3B', l:'Sociale' }},
+    }};
+    const DEFCAT = {{ t2:'#1A2A4A', l:'Finanza Agevolata' }};
+    function getCatCache(titolo) {{
+      const t = (titolo||'').toLowerCase();
+      for (const v of Object.values(CATS)) {{ if (v.r.test(t)) return v; }}
+      return DEFCAT;
+    }}
+    document.getElementById('risultati').innerHTML = data.hits.map(h => {{
+      const cat = getCatCache(h.titolo);
+      const ag  = h.aggiornato ? h.aggiornato.substring(0,10) : '';
+      const oid = h.object_id;
+      const safe_oid = encodeURIComponent(oid);
+      const safe_titolo = (h.titolo||'').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+      return `<div class="bando-card">
+        <div class="card-top">
+          <span class="card-cat-tag" style="color:${{cat.t2}}">${{cat.l}}</span>
+          <div style="display:flex;gap:6px;align-items:center">
+            <span class="badge badge-aperto" style="background:#5C1A1A;color:#FFAAAA">&#128190; CACHE</span>
+            ${{ag ? '<span style="font-size:10px;color:#6A8AA8">aggiornato '+ag+'</span>' : ''}}
+          </div>
+        </div>
+        <div class="card-titolo">${{h.titolo||'Bando senza titolo'}}</div>
+        <div class="card-info">
+          ${{h.permalink ? '<div class="card-info-item"><a href="'+h.permalink+'" target="_blank" style="color:#C9A84C">&#128279; Vai alla fonte</a></div>' : ''}}
+        </div>
+        <hr class="card-divider">
+        <div class="card-actions">
+          <button class="btn-scheda" id="btn-cache-${{oid}}"
+            onclick="generaSchedaCache('${{safe_oid}}', '${{safe_titolo}}')">
+            Genera Scheda PDF
+          </button>
+          <span class="spinner" id="sp-cache-${{oid}}">elaborazione...</span>
+        </div>
+      </div>`;
+    }}).join('');
+  }} catch(e) {{
+    document.getElementById('risultati').innerHTML = '<p style="color:#F87171;padding:16px">Errore di rete: ' + e.message + '</p>';
+  }}
+}}
+async function generaSchedaCache(objectId, titolo) {{
+  const btn = document.getElementById('btn-cache-' + decodeURIComponent(objectId));
+  const sp  = document.getElementById('sp-cache-'  + decodeURIComponent(objectId));
+  if (!btn) return;
+  btn.disabled = true; sp.style.display = 'inline'; sp.textContent = 'Generazione scheda...';
+  try {{
+    const r = await fetch('/api/scheda-cache/' + objectId, {{method:'POST'}});
+    if (!r.ok) {{
+      const d = await r.json().catch(()=>({{error:'Errore server'}}));
+      alert('Errore: ' + (d.error||r.status));
+      btn.disabled=false; sp.style.display='none';
+      return;
+    }}
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'Energelia_' + decodeURIComponent(objectId).substring(0,15) + '.pdf';
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    sp.style.display='none'; btn.disabled=false;
+    setTimeout(()=>mostraCtaDownload(), 800);
+  }} catch(e) {{
+    alert('Errore: ' + e.message);
+    btn.disabled=false; sp.style.display='none';
+  }}
+}}
+// ── Fine modalità CACHE ───────────────────────────────────────────────────────
 function setRicerca(val) {{
   _soloTitolo = val;
   const btnA = document.getElementById('btn-ampia');
@@ -772,6 +961,9 @@ function aggiornaFiltri() {{
 }}
 let _hits = {{}};
 async function cerca() {{
+  // ── ROUTING: se modalità cache, va su cercaCache() ───────────────────────
+  if (_modalitaCache) {{ cercaCache(); return; }}
+  // ── LIVE: flusso Algolia invariato ─────────────────────────────────────
   const params = new URLSearchParams({{
     keyword: document.getElementById('keyword').value,
     stato:   document.getElementById('stato').value,
