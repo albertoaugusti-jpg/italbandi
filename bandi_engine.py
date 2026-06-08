@@ -504,21 +504,3 @@ def genera_scheda_da_testo(hit, testo_cache):
         "_api_error": api_error,
     }
     return content, titolo
-
-
-# ── Modalità CACHE: genera scheda senza hit Algolia ──────────────────────────
-
-def genera_scheda_cache_only(object_id: str, titolo: str, testo: str):
-    """
-    Genera scheda PDF usando solo dati da SQLite (object_id, titolo, testo_pagina).
-    NON chiama Algolia, NON fa web_search.
-    Usato dall'endpoint /api/scheda-cache/{object_id}.
-    """
-    # Costruiamo un hit fittizio minimo per riusare _chiedi_a_claude_da_testo
-    hit_finto = {
-        "objectID":      object_id,
-        "post_title":    titolo,
-        "scadenza_testo": "Bandi aperti",
-    }
-    # Riusa la funzione esistente che prende hit + testo
-    return genera_scheda_da_testo(hit_finto, testo)
