@@ -79,17 +79,21 @@ async def api_cerca_cache(keyword: str = Query(""), session_id: str = Cookie(def
     if not get_session(session_id):
         return JSONResponse({"error": "Non autenticato"}, status_code=401)
     keyword = keyword.strip()
-    if not keyword or len(keyword) < 2:
-        return JSONResponse({"hits": [], "nbHits": 0, "source": "cache"})
     try:
         con = sqlite3.connect(CACHE_DB)
         con.row_factory = sqlite3.Row
-        like = f"%{keyword}%"
-        rows = con.execute(
-            "SELECT object_id, titolo, permalink, aggiornato "
-            "FROM bandi_cache WHERE testo_pagina LIKE ? OR titolo LIKE ? LIMIT 50",
-            (like, like)
-        ).fetchall()
+        if not keyword or len(keyword) < 2:
+            # standby: mostra tutti i bandi in cache
+            rows = con.execute(
+                "SELECT object_id, titolo, permalink, aggiornato FROM bandi_cache ORDER BY aggiornato DESC LIMIT 50"
+            ).fetchall()
+        else:
+            like = f"%{keyword}%"
+            rows = con.execute(
+                "SELECT object_id, titolo, permalink, aggiornato "
+                "FROM bandi_cache WHERE testo_pagina LIKE ? OR titolo LIKE ? LIMIT 50",
+                (like, like)
+            ).fetchall()
         con.close()
         hits = [dict(r) for r in rows]
         return JSONResponse({"hits": hits, "nbHits": len(hits), "source": "cache"})
@@ -753,13 +757,7 @@ def index_page(user):
     <option value="prossimo">In apertura</option>
     <option value="tutti">Tutti i bandi</option>
   </select>
-  <button id="btn-toggle-cache" onclick="toggleCache()"
-    style="padding:8px 14px;background:#1A2A4A;color:#C9A84C;border:2px solid #C9A84C;
-           border-radius:5px;font-size:0.72rem;font-weight:700;cursor:pointer;
-           letter-spacing:1px;white-space:nowrap;font-family:inherit"
-    title="Commuta tra ricerca Live (Algolia) e Cache locale">
-    &#128190; LIVE
-  </button>
+  {'<button id="btn-toggle-cache" onclick="toggleCache()" style="padding:8px 14px;background:#1A2A4A;color:#C9A84C;border:2px solid #C9A84C;border-radius:5px;font-size:0.72rem;font-weight:700;cursor:pointer;letter-spacing:1px;white-space:nowrap;font-family:inherit" title="Commuta tra ricerca Live (Algolia) e Cache locale">&#128190; LIVE</button>' if user.get('is_admin') else ''}
   <select id="livello" onchange="aggiornaFiltri()">
     <option value="">Qualsiasi livello</option>
     <option value="europeo">Europeo</option>
@@ -825,26 +823,26 @@ let _modalitaCache = false;
 function toggleCache() {{
   _modalitaCache = !_modalitaCache;
   const btn = document.getElementById('btn-toggle-cache');
-  const stati   = document.getElementById('stato');
-  const livello = document.getElementById('livello');
-  const benefic = document.getElementById('beneficiari');
+  if (!btn) return;
   if (_modalitaCache) {{
     btn.textContent = '💾 CACHE';
     btn.style.background = '#8B1A1A';
     btn.style.color = '#FFDDDD';
     btn.style.borderColor = '#FF6B6B';
-    btn.title = 'Modalità CACHE attiva — ricerca nel database locale';
-    stati.disabled = true; livello.disabled = true; benefic.disabled = true;
+    btn.title = 'Modalità CACHE attiva — clicca per tornare a LIVE';
+    // Mostra subito tutti i bandi in cache (standby)
+    cercaCache();
   }} else {{
     btn.textContent = '💾 LIVE';
     btn.style.background = '#1A2A4A';
     btn.style.color = '#C9A84C';
     btn.style.borderColor = '#C9A84C';
-    btn.title = 'Modalità LIVE attiva — ricerca su Algolia';
-    stati.disabled = false; livello.disabled = false; benefic.disabled = false;
+    btn.title = 'Modalità LIVE attiva — clicca per passare a CACHE';
+    // Torna alla ricerca live
+    document.getElementById('risultati').innerHTML = '';
+    document.getElementById('risultati-header').textContent = '';
+    cerca();
   }}
-  document.getElementById('risultati').innerHTML = '';
-  document.getElementById('risultati-header').textContent = '';
 }}
 async function cercaCache() {{
   const keyword = document.getElementById('keyword').value.trim();
