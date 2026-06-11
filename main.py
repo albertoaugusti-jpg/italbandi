@@ -1344,11 +1344,16 @@ _ce_session.headers.update({
     "Accept-Language": "it-IT,it;q=0.9",
 })
 _ce_logged_in = False
+_ce_login_time = 0  # timestamp ultimo login riuscito
 
 def _ce_login():
-    global _ce_logged_in
-    if _ce_logged_in:
+    global _ce_logged_in, _ce_login_time
+    import time
+    # Ri-autentica se: mai loggato, o sessione scaduta (> 20 minuti)
+    if _ce_logged_in and (time.time() - _ce_login_time) < 1200:
         return True
+    # Reset per forzare nuovo login
+    _ce_logged_in = False
     try:
         _ce_session.get("https://www.contributieuropa.com/login/", timeout=15)
         r = _ce_session.post("https://www.contributieuropa.com/wp-login.php", data={
@@ -1359,6 +1364,8 @@ def _ce_login():
             "testcookie": "1",
         }, timeout=15, allow_redirects=True)
         _ce_logged_in = "area-riservata" in r.url or "logout" in r.text.lower()
+        if _ce_logged_in:
+            _ce_login_time = time.time()  # salva timestamp login riuscito
         print(f"[CE LOGIN] {'OK' if _ce_logged_in else 'FAILED'} — {r.url[:60]}", flush=True)
         return _ce_logged_in
     except Exception as e:
@@ -1610,16 +1617,34 @@ JOBS = {}
 def _esegui_job(job_id, hit, testo_ce=""):
     try:
         object_id = hit.get("objectID", "")
-        if testo_ce and len(testo_ce) > 200:
+
+        # Controlla se testo_ce è contenuto reale del bando (non pagina login/redirect)
+        def _testo_valido(t):
+            if not t or len(t) < 300:
+                return False
+            t_lower = t[:800].lower()
+            # Scarta se sembra una pagina di login o redirect CE
+            if any(k in t_lower for k in ("inserisci la tua email", "accedi al tuo account",
+                                           "username or email", "lost your password",
+                                           "wp-login", "effettua il login")):
+                return False
+            return True
+
+        if testo_ce and _testo_valido(testo_ce):
             print(f"[TESTO CE] {object_id} — {len(testo_ce)} chars", flush=True)
             content, titolo = be.genera_scheda_da_testo(hit, testo_ce)
         else:
+            if testo_ce and not _testo_valido(testo_ce):
+                print(f"[TESTO CE] {object_id} — testo non valido (login/redirect?), uso cache/web", flush=True)
             testo_cache = leggi_da_cache(object_id) if object_id else None
-            if testo_cache and len(testo_cache) > 200 and "allowlist" not in testo_cache:
+            if testo_cache and _testo_valido(testo_cache) and "allowlist" not in testo_cache:
                 print(f"[CACHE HIT] {object_id}", flush=True)
                 content, titolo = be.genera_scheda_da_testo(hit, testo_cache)
             else:
-                print(f"[CACHE MISS] {object_id} — uso web_search", flush=True)
+                if testo_cache and not _testo_valido(testo_cache):
+                    print(f"[CACHE] {object_id} — testo cache non valido, uso web_search", flush=True)
+                else:
+                    print(f"[CACHE MISS] {object_id} — uso web_search", flush=True)
                 content, titolo = be.genera_scheda_web(hit)
 
         api_error = content.pop("_api_error", "")
