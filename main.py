@@ -215,6 +215,9 @@ def init_db():
         except: pass
         try: con.execute("ALTER TABLE utenti ADD COLUMN ricerche_acquistate INTEGER DEFAULT 0")
         except: pass
+        try: con.execute("ALTER TABLE utenti ADD COLUMN ricerche_limite INTEGER DEFAULT -2")
+        except: pass
+        # ricerche_limite: -2 = non impostato (usa default tipo account), -1 = illimitato, N>0 = tetto personalizzato
         try: con.execute("ALTER TABLE utenti ADD COLUMN pdf_acquistati INTEGER DEFAULT 0")
         except: pass
         con.execute("""CREATE TABLE IF NOT EXISTS eventi (
@@ -1446,16 +1449,37 @@ async def cerca(
 
     if not user.get("is_admin"):
         con = sqlite3.connect(DB_PATH)
-        row = con.execute("SELECT ricerche_count, COALESCE(account_type,'normale'), COALESCE(ricerche_acquistate,0) FROM utenti WHERE id=?", (user["id"],)).fetchone()
-        count = row[0] if row else 0
-        atype = row[1] if row else 'normale'
+        row = con.execute("SELECT ricerche_count, COALESCE(account_type,'normale'), COALESCE(ricerche_acquistate,0), COALESCE(ricerche_limite,-2) FROM utenti WHERE id=?", (user["id"],)).fetchone()
+        count      = row[0] if row else 0
+        atype      = row[1] if row else 'normale'
         acquistate = row[2] if row else 0
-        limite = RICERCHE_FREE if atype == 'normale' else (acquistate if atype == 'pack' else 999999)
-        if atype in ('normale', 'pack') and count >= limite:
+        rlimite    = row[3] if row else -2
+
+        # Calcola tetto effettivo
+        if rlimite == -1:
+            # admin ha impostato illimitato su questo utente
+            limite = 999999
+        elif rlimite > 0:
+            # admin ha impostato un numero personalizzato
+            limite = rlimite
+            atype  = 'custom'
+        elif atype == 'servizio':
+            limite = 999999
+        elif atype == 'pack':
+            limite = acquistate
+        else:
+            limite = RICERCHE_FREE
+
+        if atype not in ('servizio',) and rlimite != -1 and count >= limite:
             con.close()
-            msg = f"Hai esaurito le tue {RICERCHE_FREE} ricerche gratuite." if atype == 'normale' else "Hai esaurito le ricerche del tuo pacchetto."
+            if atype == 'normale':
+                msg = f"Hai esaurito le tue {RICERCHE_FREE} ricerche gratuite."
+            elif atype == 'custom':
+                msg = f"Hai esaurito le {limite} ricerche assegnate al tuo account."
+            else:
+                msg = "Hai esaurito le ricerche del tuo pacchetto."
             return JSONResponse({"error": "limite", "messaggio": msg, "stripe_attivo": STRIPE_ATTIVO}, status_code=429)
-        if atype in ('normale', 'pack'):
+        if rlimite != -1 and atype not in ('servizio',):
             con.execute("UPDATE utenti SET ricerche_count = ricerche_count + 1 WHERE id=?", (user["id"],))
         # Log evento
         try:
@@ -1718,7 +1742,8 @@ async def area_riservata(session_id: str = Cookie(default=None)):
 
     con = sqlite3.connect(DB_PATH)
     utenti = con.execute("""SELECT id, nome, cognome, email, impresa, ruolo, telefono,
-            verificato, created_at, COALESCE(ricerche_count,0), COALESCE(account_type,'normale')
+            verificato, created_at, COALESCE(ricerche_count,0), COALESCE(account_type,'normale'),
+            COALESCE(ricerche_limite,-2)
             FROM utenti ORDER BY created_at DESC""").fetchall()
     con.close()
 
@@ -1738,30 +1763,36 @@ async def area_riservata(session_id: str = Cookie(default=None)):
 
     righe_html = ""
     for u in utenti:
-        id_, nome, cognome, email, impresa, ruolo, tel, verif, created, ricerche, atype = u
+        id_, nome, cognome, email, impresa, ruolo, tel, verif, created, ricerche, atype, rlimite = u
         stato = '<span style="color:#15803D;font-weight:700">&#10003;</span>' if verif else '<span style="color:#DC2626">&#10007;</span>'
         is_servizio = atype == 'servizio'
         is_pack = atype == 'pack'
-        if is_servizio:
-            badge_tipo = '<span style="background:#1A2A4A;color:#C9A84C;font-size:0.65rem;font-weight:700;padding:2px 6px;border-radius:10px;margin-left:4px">SERVIZIO</span>'
+        is_custom = rlimite > 0 or rlimite == -1  # admin ha impostato qualcosa
+        if is_servizio or rlimite == -1:
+            badge_tipo = '<span style="background:#1A2A4A;color:#C9A84C;font-size:0.65rem;font-weight:700;padding:2px 6px;border-radius:10px;margin-left:4px">SERVIZIO</span>' if is_servizio else '<span style="background:#059669;color:#fff;font-size:0.65rem;font-weight:700;padding:2px 6px;border-radius:10px;margin-left:4px">ILLIMITATO</span>'
             colore_r = '#059669'
             ricerche_txt = 'illimitate'
         elif is_pack:
             badge_tipo = '<span style="background:#7C3AED;color:#fff;font-size:0.65rem;font-weight:700;padding:2px 6px;border-radius:10px;margin-left:4px">PACK</span>'
             colore_r = '#7C3AED'
             ricerche_txt = f'{ricerche} usate'
+        elif rlimite > 0:
+            badge_tipo = '<span style="background:#D97706;color:#fff;font-size:0.65rem;font-weight:700;padding:2px 6px;border-radius:10px;margin-left:4px">CUSTOM</span>'
+            colore_r = '#D97706' if ricerche < rlimite else '#DC2626'
+            ricerche_txt = f'{ricerche}/{rlimite}'
         else:
             badge_tipo = ''
             colore_r = '#DC2626' if ricerche >= RICERCHE_FREE else '#1A2A4A'
             ricerche_txt = f'{ricerche}/{RICERCHE_FREE}'
         btn_reset = f'<button onclick="resetRicerche({id_},\'{email}\')" style="margin-left:4px;background:none;border:1px solid #C8D4E4;border-radius:4px;padding:2px 6px;font-size:0.68rem;color:#5A7A9A;cursor:pointer">reset</button>' if not is_servizio else ''
+        btn_assegna = f'<button onclick="assegnaRicerche({id_},\'{email}\',{rlimite})" style="margin-left:4px;background:#D97706;color:#fff;border:none;border-radius:4px;padding:2px 6px;font-size:0.68rem;cursor:pointer">assegna</button>' if not is_servizio and not is_pack else ''
         righe_html += f"""<tr>
           <td>{nome} {cognome}{badge_tipo}</td>
           <td style="color:#1A3A6A">{email}</td>
           <td>{impresa or '—'}</td>
           <td>{tel or '—'}</td>
           <td style="text-align:center">{stato}</td>
-          <td style="text-align:center;font-weight:700;color:{colore_r}">{ricerche_txt}{btn_reset}</td>
+          <td style="text-align:center;font-weight:700;color:{colore_r}">{ricerche_txt}{btn_reset}{btn_assegna}</td>
           <td style="color:#8899AA;font-size:0.75rem">{(created or '')[:10]}</td>
           <td><button onclick="eliminaUtente({id_},'{email}')"
             style="background:#FEF2F2;color:#DC2626;border:1px solid #FECACA;border-radius:4px;padding:3px 10px;font-size:0.73rem;cursor:pointer">
@@ -1891,6 +1922,61 @@ async function creaAccountServizio() {{
   if (d.ok) {{ esito.style.display='block'; esito.style.background='#F0FDF4'; esito.style.color='#15803D'; esito.textContent='Account creato per '+email; setTimeout(()=>location.reload(),1500); }}
   else {{ esito.style.display='block'; esito.style.background='#FEF2F2'; esito.style.color='#DC2626'; esito.textContent=d.error||'Errore'; }}
 }}
+async function assegnaRicerche(id, email, limiteAttuale) {{
+  // Costruisce il dialog
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:10px;padding:32px;min-width:340px;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
+      <h3 style="color:#1A2A4A;margin-bottom:6px;font-size:1rem">Assegna ricerche</h3>
+      <p style="color:#6A8AA8;font-size:0.82rem;margin-bottom:20px">${{email}}</p>
+      <label style="display:flex;align-items:center;gap:10px;margin-bottom:14px;cursor:pointer">
+        <input type="checkbox" id="ar-illimitato" style="width:16px;height:16px">
+        <span style="font-size:0.88rem;color:#1A2A4A;font-weight:600">Ricerche illimitate</span>
+      </label>
+      <div id="ar-numero-wrap">
+        <label style="display:block;font-size:0.78rem;font-weight:600;color:#8899AA;text-transform:uppercase;margin-bottom:4px">Numero ricerche</label>
+        <input id="ar-numero" type="number" min="1" max="99999"
+          value="${{limiteAttuale > 0 ? limiteAttuale : 10}}"
+          style="width:100%;padding:8px 12px;border:1px solid #D0DCF0;border-radius:6px;font-size:0.92rem;outline:none">
+        <p style="font-size:0.75rem;color:#8899AA;margin-top:4px">Il contatore viene azzerato automaticamente.</p>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:20px">
+        <button id="ar-ok" style="flex:1;padding:10px;background:#1A2A4A;color:#fff;border:none;border-radius:6px;font-weight:700;cursor:pointer">Salva</button>
+        <button id="ar-cancel" style="padding:10px 16px;background:none;color:#6A8AA8;border:1px solid #D0DCF0;border-radius:6px;cursor:pointer">Annulla</button>
+      </div>
+      <div id="ar-esito" style="display:none;margin-top:10px;font-size:0.82rem;padding:8px;border-radius:5px"></div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const chk = overlay.querySelector('#ar-illimitato');
+  const wrap = overlay.querySelector('#ar-numero-wrap');
+  chk.addEventListener('change', () => {{ wrap.style.display = chk.checked ? 'none' : 'block'; }});
+  overlay.querySelector('#ar-cancel').onclick = () => overlay.remove();
+
+  overlay.querySelector('#ar-ok').onclick = async () => {{
+    const illimitato = chk.checked;
+    const numero = illimitato ? -1 : parseInt(overlay.querySelector('#ar-numero').value);
+    if (!illimitato && (isNaN(numero) || numero < 1)) {{
+      const es = overlay.querySelector('#ar-esito');
+      es.style.display='block'; es.style.background='#FEF2F2'; es.style.color='#DC2626';
+      es.textContent='Inserisci un numero valido maggiore di 0.'; return;
+    }}
+    const r = await fetch('/admin/utenti/' + id + '/assegna-ricerche', {{
+      method: 'POST',
+      headers: {{'Content-Type': 'application/json'}},
+      body: JSON.stringify({{limite: numero}})
+    }});
+    const d = await r.json();
+    if (d.ok) {{ overlay.remove(); location.reload(); }}
+    else {{
+      const es = overlay.querySelector('#ar-esito');
+      es.style.display='block'; es.style.background='#FEF2F2'; es.style.color='#DC2626';
+      es.textContent = d.error || 'Errore';
+    }}
+  }};
+}}
+
 async function resetRicerche(id, email) {{
   if (!confirm('Azzerare le ricerche per ' + email + '?')) return;
   const r = await fetch('/admin/utenti/' + id + '/reset-ricerche', {{method:'POST'}});
@@ -1965,6 +2051,31 @@ async def admin_reset_ricerche(user_id: int, session_id: str = Cookie(default=No
     con.execute("UPDATE utenti SET ricerche_count=0 WHERE id=?", (user_id,))
     con.commit(); con.close()
     return JSONResponse({"ok": True})
+
+
+@app.post("/admin/utenti/{user_id}/assegna-ricerche")
+async def admin_assegna_ricerche(user_id: int, body: dict, session_id: str = Cookie(default=None)):
+    user = get_session(session_id)
+    if not user or not user.get("is_admin"):
+        return JSONResponse({"error": "Non autorizzato"}, status_code=403)
+    limite = body.get("limite")
+    if limite is None or not isinstance(limite, int):
+        return JSONResponse({"error": "Parametro limite mancante o non valido"})
+    if limite != -1 and limite < 1:
+        return JSONResponse({"error": "Limite deve essere -1 (illimitato) o un numero >= 1"})
+    try:
+        con = sqlite3.connect(DB_PATH)
+        # Imposta il limite e azzera il contatore
+        con.execute(
+            "UPDATE utenti SET ricerche_limite=?, ricerche_count=0, "
+            "account_type=CASE WHEN account_type NOT IN ('servizio','pack') THEN 'custom' ELSE account_type END "
+            "WHERE id=? AND is_admin=0",
+            (limite, user_id)
+        )
+        con.commit(); con.close()
+        return JSONResponse({"ok": True})
+    except Exception as e:
+        return JSONResponse({"error": str(e)})
 
 @app.delete("/admin/utenti/{user_id}")
 async def admin_elimina_utente(user_id: int, session_id: str = Cookie(default=None)):
