@@ -38,18 +38,69 @@ def build_filters(scadenza_vals, livello, regione, provincia, beneficiari=""):
     return " AND ".join(parts)
 
 
+import unicodedata
+
+def _norm(s):
+    """Lowercase + rimozione accenti, per confronto robusto sul titolo."""
+    if not s:
+        return ""
+    s = unicodedata.normalize("NFKD", str(s))
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    return s.lower()
+
+
+def _titolo_hit(hit):
+    """Il titolo 'vero' di un hit può stare in post_title o, per alcuni
+    post-type dell'indice ContributiEuropa, solo in title."""
+    return hit.get("post_title") or hit.get("title") or ""
+
+
+def _match_in_titolo(hit, keyword):
+    """True se TUTTI i token della keyword compaiono nel titolo (normalizzato)."""
+    titolo_norm = _norm(_titolo_hit(hit))
+    if not titolo_norm:
+        return False
+    tokens = [t for t in _norm(keyword).split() if t]
+    if not tokens:
+        return False
+    return all(tok in titolo_norm for tok in tokens)
+
+
 def cerca_bandi_web(keyword="", stato="aperto", livello="", regione="", provincia="", beneficiari="", max_hits=50, solo_titolo=False):
     stato_map   = {"aperto": ["Bandi aperti"], "prossimo": ["Bandi prossima apertura"], "tutti": ["Bandi aperti","Bandi prossima apertura"]}
     livello_map = {"europeo": "Bandi europei", "nazionale": "Bandi nazionali", "regionale": "Bandi regionali"}
     filters = build_filters(stato_map.get(stato, ["Bandi aperti"]), livello_map.get(livello, livello), regione, provincia, beneficiari)
-    payload = {"query": keyword, "hitsPerPage": max_hits, "page": 0,
+
+    # NB: NON usiamo piu' restrictSearchableAttributes — vedi nota sotto.
+    # E' poco affidabile perche' (a) dipende dai searchableAttributes
+    # configurati sull'indice Algolia di terzi (ContributiEuropa), che non
+    # controlliamo, e (b) alcuni bandi hanno il titolo effettivo in "title"
+    # invece che in "post_title" (vedi fallback hit.post_title||hit.title
+    # già presente nel frontend). Restringere la ricerca a un solo attributo
+    # poteva quindi restituire 0 risultati anche quando la parola era
+    # visibilmente nel titolo mostrato a schermo.
+    #
+    # Strategia robusta: facciamo la ricerca ampia (come "Nel testo"), con
+    # una pagina di hit più ampia per non perdere candidati, poi filtriamo
+    # lato server tenendo solo i bandi la cui parola compare davvero nel
+    # titolo (post_title o title), case/accent-insensitive.
+    fetch_hits = max_hits if not (solo_titolo and keyword) else max(max_hits * 5, 200)
+
+    payload = {"query": keyword, "hitsPerPage": fetch_hits, "page": 0,
                "filters": filters, "attributesToRetrieve": ["*"]}
-    if solo_titolo and keyword:
-        payload["restrictSearchableAttributes"] = ["post_title"]
+
     r = requests.post(ALGOLIA_URL, headers=ALGOLIA_HEADERS, json=payload, timeout=15)
     r.raise_for_status()
     data = r.json()
-    return data.get("hits", []), data.get("nbHits", 0)
+    hits = data.get("hits", [])
+    nb_hits = data.get("nbHits", 0)
+
+    if solo_titolo and keyword:
+        hits = [h for h in hits if _match_in_titolo(h, keyword)]
+        nb_hits = len(hits)
+        hits = hits[:max_hits]
+
+    return hits, nb_hits
 
 
 # ── Dati dall'hit ─────────────────────────────────────────────────────────────
@@ -115,6 +166,42 @@ def _livello_da_hit(hit):
     return f"Regionale · {geo}"
 
 
+# Campi semplici dell'hit Algolia effettivamente usati a valle (frontend +
+# genera_scheda_da_testo). Tutto il resto (_snippetResult, _highlightResult,
+# campi WP/SEO extra, ecc.) viene scartato perché non letto da nessuna parte.
+_HIT_FIELDS_ESSENZIALI = (
+    "objectID", "post_title", "title",          # identificazione / titolo
+    "permalink", "link", "url",                  # usati da togglePreview() e generaScheda() in main.py
+    "scadenza_testo",                             # stato bando (badge + genera_scheda_da_testo)
+    "scadenza", "data_scadenza", "deadline", "data_chiusura", "fine", "end_date",          # candidati _scadenza_da_hit
+    "dotazione", "dotazione_finanziaria", "budget", "importo", "importo_totale",
+    "risorse", "finanziamento",                  # candidati _dotazione_da_hit
+)
+
+
+def _slim_hit(hit):
+    """
+    Versione 'leggera' dell'hit Algolia da rimandare al frontend e da
+    riusare in generaScheda()/genera_scheda_da_testo(). Elimina
+    _snippetResult, _highlightResult e i duplicati di taxonomies_hierarchical,
+    mantenendo solo i campi che main.py e bandi_engine.py leggono davvero.
+    """
+    slim = {k: hit[k] for k in _HIT_FIELDS_ESSENZIALI if hit.get(k) not in (None, "")}
+
+    # Di taxonomies_hierarchical serve solo area_geografica (lvl0/lvl1),
+    # usata da _livello_da_hit() e da genera_scheda_da_testo() per il "sottotitolo".
+    # Il resto dell'albero (beneficiari, altre tassonomie) non viene mai letto.
+    ag = (hit.get("taxonomies_hierarchical") or {}).get("area_geografica") or {}
+    if ag.get("lvl0") or ag.get("lvl1"):
+        slim["taxonomies_hierarchical"] = {
+            "area_geografica": {
+                "lvl0": ag.get("lvl0", []),
+                "lvl1": ag.get("lvl1", []),
+            }
+        }
+    return slim
+
+
 def hit_to_card(hit):
     sc_str, _ = _scadenza_da_hit(hit)
     return {
@@ -125,7 +212,7 @@ def hit_to_card(hit):
         "dotazione":   _dotazione_da_hit(hit) or "—",
         "scadenza":    sc_str or "—",
         "beneficiari": _beneficiari_da_hit(hit) or "—",
-        "_hit":        hit,
+        "_hit":        _slim_hit(hit),
     }
 
 
