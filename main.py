@@ -519,10 +519,9 @@ FOOTER_HTML = """
 <footer class="site-footer">
   <strong style="color:#C9A84C">ItalBandi</strong> — un servizio di
   <strong style="color:#D4E8FF">Energelia S.r.l.</strong><br>
-  Largo XII Ottobre 1/3, Torre WTC · 16121 Genova · P.IVA 01806600991<br>
-  Tel. <a href="tel:+390108078800">010 8078800</a> ·
-  <a href="mailto:a.augusti@energelia.it">a.augusti@energelia.it</a> ·
-  <a href="mailto:b.legger@energelia.it">b.legger@energelia.it</a> ·
+  Piazza Giacomo Matteotti, 2 · 16123 Genova · P.IVA 01806600991<br>
+  Tel. <a href="tel:+390107776530">010 7776530</a> ·
+  <a href="mailto:bandieincentivi@energelia.it">bandieincentivi@energelia.it</a> ·
   <a href="mailto:a.castagnaro@energelia.it">a.castagnaro@energelia.it</a><br>
   <a href="/privacy">Privacy Policy</a> · <a href="/cookie">Cookie Policy</a> ·
   Responsabile Privacy: Bruno Massimo Legger
@@ -807,7 +806,7 @@ async function cerca() {{
         <p style="color:#6A8AA8;font-size:0.88rem;line-height:1.6;margin-bottom:20px">${{data.messaggio}}</p>
         ${{btnAcquisto}}
         <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-          <span style="background:#EEF2F8;color:#1A2A4A;padding:10px 22px;border-radius:6px;font-weight:700;font-size:0.9rem">010 8078800</span>
+          <span style="background:#EEF2F8;color:#1A2A4A;padding:10px 22px;border-radius:6px;font-weight:700;font-size:0.9rem">010 7776530</span>
           <button onclick="mostraCtaDownload()" style="background:#1A2A4A;color:#fff;border:none;padding:10px 22px;border-radius:6px;font-weight:700;font-size:0.9rem;cursor:pointer">Scrivici</button>
         </div>
       </div>`;
@@ -965,7 +964,7 @@ async function inviaMessaggio() {{
     const d=await r.json();
     if (d.ok) {{ esito.style.display='block'; esito.style.background='#0D3321'; esito.style.color='#4ADE80'; esito.textContent='Messaggio inviato! Ti contatteremo presto.'; document.getElementById('msg-nome').value=''; document.getElementById('msg-testo').value=''; }}
     else throw new Error(d.error||'Errore');
-  }} catch(e) {{ esito.style.display='block'; esito.style.background='#2D1515'; esito.style.color='#F87171'; esito.textContent='Errore invio. Riprova o chiama il 010 8078800.'; }}
+  }} catch(e) {{ esito.style.display='block'; esito.style.background='#2D1515'; esito.style.color='#F87171'; esito.textContent='Errore invio. Riprova o chiama il 010 7776530.'; }}
 }}
 window.onload = cerca;
 </script>
@@ -979,7 +978,7 @@ window.onload = cerca;
         I nostri consulenti valuteranno <strong>gratuitamente</strong> la candidatura della tua azienda.
       </p>
       <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
-        <span style="background:#C9A84C;color:#0A1628;padding:12px 24px;border-radius:6px;font-weight:700;font-size:0.92rem">010 8078800</span>
+        <span style="background:#C9A84C;color:#0A1628;padding:12px 24px;border-radius:6px;font-weight:700;font-size:0.92rem">010 7776530</span>
         <button onclick="mostraFormMsg()" style="background:transparent;color:#C9A84C;border:1px solid #C9A84C;padding:12px 24px;border-radius:6px;font-weight:700;font-size:0.92rem;cursor:pointer">Scrivici</button>
       </div>
       <p style="color:#3A5A7A;font-size:0.75rem;margin-top:16px">a.castagnaro@energelia.it</p>
@@ -1014,7 +1013,7 @@ PRIVACY_HTML = f"""<!DOCTYPE html><html lang="it"><head>
   <h1>Privacy Policy</h1>
   <p>Ultimo aggiornamento: {datetime.now().strftime("%d/%m/%Y")}</p>
   <h2>1. Titolare del trattamento</h2>
-  <p><strong>Energelia S.r.l.</strong><br>Largo XII Ottobre 1/3, Torre WTC — 16121 Genova<br>P.IVA: 01806600991<br>Tel: 010 8078800<br>Email: <a href="mailto:b.legger@energelia.it">b.legger@energelia.it</a><br><strong>Responsabile Privacy: Bruno Massimo Legger</strong></p>
+  <p><strong>Energelia S.r.l.</strong><br>Piazza Giacomo Matteotti, 2 — 16123 Genova<br>P.IVA: 01806600991<br>Tel: 010 7776530<br>Email: <a href="mailto:bandieincentivi@energelia.it">bandieincentivi@energelia.it</a><br><strong>Responsabile Privacy: Bruno Massimo Legger</strong></p>
   <h2>2. Dati raccolti</h2>
   <ul><li>Nome e cognome</li><li>Indirizzo email</li><li>Numero di telefono (facoltativo)</li><li>Ruolo professionale (facoltativo)</li><li>Nome azienda (facoltativo)</li></ul>
   <h2>3. Finalita del trattamento</h2>
@@ -1024,7 +1023,7 @@ PRIVACY_HTML = f"""<!DOCTYPE html><html lang="it"><head>
   <h2>5. Conservazione dei dati</h2>
   <p>I dati sono conservati per il tempo necessario all'erogazione del servizio e comunque non oltre 5 anni dall'ultimo accesso.</p>
   <h2>6. Diritti dell'interessato</h2>
-  <p>Accesso, rettifica, cancellazione, portabilita e opposizione: <a href="mailto:b.legger@energelia.it">b.legger@energelia.it</a></p>
+  <p>Accesso, rettifica, cancellazione, portabilita e opposizione: <a href="mailto:bandieincentivi@energelia.it">bandieincentivi@energelia.it</a></p>
   <h2>7. Comunicazione a terzi</h2>
   <p>I dati non vengono ceduti a terzi. Possono essere condivisi con fornitori tecnici (hosting Render.com, USA) nel rispetto delle garanzie GDPR.</p>
 </div>
@@ -1043,7 +1042,7 @@ COOKIE_HTML = f"""<!DOCTYPE html><html lang="it"><head>
   <h2>Cookie analitici (con consenso)</h2>
   <p>Previo consenso, potremmo utilizzare Google Analytics per analisi aggregate degli accessi.</p>
   <h2>Contatti</h2>
-  <p><a href="mailto:b.legger@energelia.it">b.legger@energelia.it</a> — Energelia S.r.l., Largo XII Ottobre 1/3, Torre WTC, 16121 Genova.</p>
+  <p><a href="mailto:bandieincentivi@energelia.it">bandieincentivi@energelia.it</a> — Energelia S.r.l., Piazza Giacomo Matteotti, 2, 16123 Genova.</p>
 </div>
 {FOOTER_HTML}</body></html>"""
 
@@ -1290,7 +1289,7 @@ async def chi_siamo(session_id: str = Cookie(default=None)):
     <h2 style="color:#C9A84C;margin-bottom:12px">Vuoi sapere se la tua azienda puo accedere a un bando?</h2>
     <div style="display:flex;justify-content:center;gap:16px;flex-wrap:wrap;margin-top:20px">
       <a href="/registrati" style="background:#C9A84C;color:#0A1628;padding:12px 32px;border-radius:6px;font-weight:700;font-size:1rem">Registrati gratis</a>
-      <a href="tel:+390108078800" style="background:transparent;color:#C9A84C;border:1px solid #C9A84C;padding:12px 32px;border-radius:6px;font-weight:700;font-size:1rem">010 8078800</a>
+      <a href="tel:+390107776530" style="background:transparent;color:#C9A84C;border:1px solid #C9A84C;padding:12px 32px;border-radius:6px;font-weight:700;font-size:1rem">010 7776530</a>
     </div>
   </div>
 </div>
