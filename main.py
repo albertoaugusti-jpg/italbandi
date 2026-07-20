@@ -1906,6 +1906,7 @@ tr:hover td {{ background:#F8FAFF }}
     <div style="display:flex;gap:12px;flex-wrap:wrap">
       <button class="btn-ar btn-ar-primary" onclick="window.location='/area-riservata/cache'">Aggiorna cache bandi</button>
       <button class="btn-ar btn-ar-gold" onclick="window.location='/area-riservata/utenti/export'">Scarica CSV utenti</button>
+      <button class="btn-ar btn-ar-primary" onclick="window.location='/area-riservata/mailer'">Campagne email</button>
     </div>
   </div>
 </div>
@@ -2173,6 +2174,369 @@ async def download_job(job_id: str, session_id: str = Cookie(default=None)):
     if not job or job["status"] != "ready":
         return JSONResponse({"error": "File non pronto"}, status_code=404)
     return FileResponse(path=job["path"], media_type="application/pdf", filename=job["nome"])
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MAILER — Campagne email Energelia
+# ══════════════════════════════════════════════════════════════════════════════
+
+import csv as _csv, io as _io, time as _time, random as _random, smtplib as _smtplib
+from email.mime.multipart import MIMEMultipart as _MIMEMultipart
+from email.mime.text import MIMEText as _MIMEText
+from email.mime.base import MIMEBase as _MIMEBase
+from email import encoders as _encoders
+from fastapi import UploadFile, File
+
+MAILER_DB       = "/data/mailer_invii.db"
+POSTMARK_SMTP   = "smtp.postmarkapp.com"
+POSTMARK_PORT   = 587
+POSTMARK_TOKEN  = os.environ.get("POSTMARK_TOKEN", "") or POSTMARK_KEY
+
+MITTENTI = {
+    "antonio": {"nome": "Antonio Castagnaro — Energelia", "email": "a.castagnaro@energelia.it"},
+    "bruno":   {"nome": "Bruno Legger — Energelia",       "email": "b.legger@energelia.it"},
+}
+CC_MAILER        = "bandieincentivi@energelia.it"
+MAX_GIORNO       = 500
+BLOCCO           = 12
+PAUSA_BLOCCO_MIN = 60
+PAUSA_BLOCCO_MAX = 120
+PAUSA_MAIL_MIN   = 1
+PAUSA_MAIL_MAX   = 3
+ORA_INIZIO       = 8
+ORA_FINE         = 18
+
+MAILER_JOBS = {}
+
+def init_mailer_db():
+    con = sqlite3.connect(MAILER_DB)
+    con.execute("""CREATE TABLE IF NOT EXISTS invii (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT NOT NULL, nome TEXT, campagna TEXT NOT NULL,
+        mittente TEXT NOT NULL, inviato_il TEXT DEFAULT (datetime('now')),
+        esito TEXT, errore TEXT)""")
+    con.execute("CREATE INDEX IF NOT EXISTS idx_mail_email ON invii(email)")
+    con.commit(); con.close()
+
+init_mailer_db()
+
+def mailer_registra(email, nome, campagna, mittente, esito, errore=""):
+    try:
+        con = sqlite3.connect(MAILER_DB)
+        con.execute("INSERT INTO invii (email,nome,campagna,mittente,esito,errore) VALUES (?,?,?,?,?,?)",
+                    (email, nome, campagna, mittente, esito, errore))
+        con.commit(); con.close()
+    except Exception as e:
+        print(f"[MAILER] errore registrazione: {e}", flush=True)
+
+def mailer_gia_inviato(email, campagna):
+    try:
+        con = sqlite3.connect(MAILER_DB)
+        r = con.execute("SELECT 1 FROM invii WHERE email=? AND campagna=? AND esito='OK' LIMIT 1",
+                        (email, campagna)).fetchone()
+        con.close()
+        return r is not None
+    except:
+        return False
+
+def mailer_inviati_oggi():
+    try:
+        con = sqlite3.connect(MAILER_DB)
+        n = con.execute("SELECT COUNT(*) FROM invii WHERE esito='OK' AND inviato_il >= date('now')").fetchone()[0]
+        con.close()
+        return n
+    except:
+        return 0
+
+def mailer_parse_csv(contenuto):
+    try:
+        testo = contenuto.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        testo = contenuto.decode("latin-1")
+    sep = ";" if testo.count(";") > testo.count(",") else ","
+    reader = _csv.DictReader(_io.StringIO(testo), delimiter=sep)
+    dest, visti = [], set()
+    for riga in reader:
+        low = {(k or "").strip().lower(): (v or "").strip() for k, v in riga.items()}
+        email = ""
+        for c in ("email", "e-mail", "mail", "indirizzo email"):
+            if low.get(c):
+                email = low[c].lower(); break
+        if not email or "@" not in email or email in visti:
+            continue
+        nome = ""
+        for c in ("nome", "nome_attivita", "nome attivita", "azienda", "ragione sociale", "attivita"):
+            if low.get(c):
+                nome = low[c]; break
+        visti.add(email)
+        dest.append({"email": email, "nome": nome})
+    return dest
+
+def mailer_esegui(job_id, destinatari, oggetto, corpo_html, mittente_key, campagna, allegato):
+    job = MAILER_JOBS[job_id]
+    mitt = MITTENTI[mittente_key]
+    smtp = None
+    try:
+        smtp = _smtplib.SMTP(POSTMARK_SMTP, POSTMARK_PORT, timeout=30)
+        smtp.starttls()
+        smtp.login(POSTMARK_TOKEN, POSTMARK_TOKEN)
+        job["log"].append("Connesso a Postmark.")
+    except Exception as e:
+        job["stato"] = "errore"
+        job["log"].append(f"Connessione SMTP fallita: {e}")
+        return
+
+    inviati_sess = 0
+    for i, dest in enumerate(destinatari, 1):
+        if job.get("stop"):
+            job["log"].append("Interrotto dall'utente."); break
+        if mailer_inviati_oggi() >= MAX_GIORNO:
+            job["log"].append(f"Raggiunto il limite di {MAX_GIORNO} invii giornalieri."); break
+        if not (ORA_INIZIO <= datetime.now().hour < ORA_FINE):
+            job["log"].append(f"Fuori fascia oraria {ORA_INIZIO}-{ORA_FINE}. Interrotto."); break
+        if mailer_gia_inviato(dest["email"], campagna):
+            job["saltati"] += 1
+            job["log"].append(f"[{i}/{len(destinatari)}] {dest['email']} — gia inviato, salto")
+            job["progresso"] = i
+            continue
+        try:
+            msg = _MIMEMultipart("mixed")
+            msg["From"]     = f"{mitt['nome']} <{mitt['email']}>"
+            msg["To"]       = dest["email"]
+            msg["Cc"]       = CC_MAILER
+            msg["Reply-To"] = mitt["email"]
+            msg["Subject"]  = oggetto
+            msg.attach(_MIMEText(corpo_html.replace("{nome}", dest.get("nome") or ""), "html", "utf-8"))
+            if allegato:
+                part = _MIMEBase("application", "octet-stream")
+                part.set_payload(allegato["contenuto"])
+                _encoders.encode_base64(part)
+                part.add_header("Content-Disposition", "attachment", filename=allegato["nome"])
+                msg.attach(part)
+            smtp.sendmail(f"{mitt['nome']} <{mitt['email']}>",
+                          [dest["email"], CC_MAILER], msg.as_string())
+            mailer_registra(dest["email"], dest["nome"], campagna, mittente_key, "OK")
+            job["inviati"] += 1; inviati_sess += 1
+            job["log"].append(f"[{i}/{len(destinatari)}] {dest['email']} — inviato")
+        except Exception as e:
+            mailer_registra(dest["email"], dest["nome"], campagna, mittente_key, "ERRORE", str(e))
+            job["errori"] += 1
+            job["log"].append(f"[{i}/{len(destinatari)}] {dest['email']} — ERRORE: {e}")
+            try: smtp.quit()
+            except: pass
+            try:
+                smtp = _smtplib.SMTP(POSTMARK_SMTP, POSTMARK_PORT, timeout=30)
+                smtp.starttls(); smtp.login(POSTMARK_TOKEN, POSTMARK_TOKEN)
+                job["log"].append("Riconnesso.")
+            except Exception as e2:
+                job["log"].append(f"Riconnessione fallita: {e2}"); break
+        job["progresso"] = i
+        if inviati_sess > 0 and inviati_sess % BLOCCO == 0:
+            pausa = _random.randint(PAUSA_BLOCCO_MIN, PAUSA_BLOCCO_MAX)
+            job["log"].append(f"Pausa di {pausa}s dopo {BLOCCO} invii...")
+            for _ in range(pausa):
+                if job.get("stop"): break
+                _time.sleep(1)
+        else:
+            _time.sleep(_random.uniform(PAUSA_MAIL_MIN, PAUSA_MAIL_MAX))
+
+    try:
+        if smtp: smtp.quit()
+    except: pass
+    job["stato"] = "finito"
+    job["log"].append(f"FINE — inviati: {job['inviati']}, errori: {job['errori']}, saltati: {job['saltati']}")
+
+@app.get("/area-riservata/mailer", response_class=HTMLResponse)
+async def mailer_page(session_id: str = Cookie(default=None)):
+    user = get_session(session_id)
+    if not user or not user.get("is_admin"):
+        return RedirectResponse("/login")
+    n_oggi = mailer_inviati_oggi()
+    stato_tok = "configurato" if POSTMARK_TOKEN else "MANCANTE"
+    return HTMLResponse(f"""<!DOCTYPE html><html lang="it"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Campagne Email — ItalBandi</title>{CSS_BASE}
+<style>
+.m-wrap {{ max-width:860px;margin:32px auto;padding:0 24px 60px }}
+.m-card {{ background:#fff;border:1px solid #D0DCF0;border-radius:10px;padding:24px;margin-bottom:20px;box-shadow:0 2px 8px rgba(26,42,74,0.06) }}
+.m-card label {{ display:block;font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#8899AA;margin:16px 0 6px }}
+.m-card input[type=text], .m-card select, .m-card textarea {{
+  width:100%;padding:10px 12px;border:1px solid #D0DCF0;border-radius:6px;
+  font-size:0.9rem;font-family:inherit;outline:none;background:#F8FAFF }}
+.m-card textarea {{ min-height:200px;resize:vertical;font-family:ui-monospace,Consolas,monospace;font-size:0.83rem }}
+.m-card input[type=file] {{ font-size:0.85rem;padding:6px 0 }}
+.hint {{ font-size:0.76rem;color:#8899AA;margin-top:4px }}
+.m-warn {{ background:#FEF3C7;border:1px solid #F59E0B;border-radius:6px;padding:10px 14px;font-size:0.8rem;color:#92400E;margin-bottom:20px }}
+.m-badge {{ display:inline-block;padding:3px 10px;border-radius:12px;font-size:0.75rem;font-weight:700;background:#EEF2F8;color:#1A2A4A }}
+#m-log {{ background:#1A2A4A;color:#B8D4F0;font-family:ui-monospace,Consolas,monospace;
+  font-size:0.78rem;padding:14px;border-radius:8px;height:280px;overflow-y:auto;white-space:pre-wrap }}
+.m-stats {{ display:flex;gap:28px;margin-bottom:14px;font-size:0.8rem;color:#8899AA }}
+.m-stats b {{ font-size:1.5rem;display:block;color:#1A2A4A }}
+.btn-m {{ padding:11px 24px;border:none;border-radius:6px;font-weight:700;font-size:0.9rem;cursor:pointer;font-family:inherit }}
+.btn-m-go {{ background:#1A2A4A;color:#fff }}
+.btn-m-go:hover {{ background:#C9A84C;color:#1A2A4A }}
+.btn-m-stop {{ background:#DC2626;color:#fff }}
+.btn-m:disabled {{ opacity:0.45;cursor:not-allowed }}
+</style></head><body>
+{NAVBAR_LOGGED(user)}
+<div class="m-wrap">
+  <a href="/area-riservata" style="font-size:0.85rem">&larr; Torna all'area riservata</a>
+  <h1 style="font-size:1.4rem;font-weight:800;color:#1A2A4A;margin:12px 0 6px">Campagne Email</h1>
+  <p style="font-size:0.85rem;color:#8899AA;margin-bottom:20px">
+    Postmark: <span class="m-badge">{stato_tok}</span>&nbsp;
+    Inviate oggi: <span class="m-badge">{n_oggi} / {MAX_GIORNO}</span>&nbsp;
+    <a href="/area-riservata/mailer/storico" style="font-size:0.8rem">Scarica storico CSV</a>
+  </p>
+  <div class="m-warn">
+    Gli invii partono solo tra le {ORA_INIZIO}:00 e le {ORA_FINE}:00, con pause automatiche ogni {BLOCCO} messaggi.
+    Non chiudere la pagina se vuoi seguire il log.
+  </div>
+  <div class="m-card">
+    <label>1 · Chi invia</label>
+    <select id="m-mittente">
+      <option value="antonio">Antonio Castagnaro &lt;a.castagnaro@energelia.it&gt;</option>
+      <option value="bruno">Bruno Legger &lt;b.legger@energelia.it&gt;</option>
+    </select>
+    <label>2 · Nome campagna</label>
+    <input type="text" id="m-campagna" placeholder="es. Bando Turismo Liguria 2026">
+    <div class="hint">Evita di inviare due volte la stessa campagna allo stesso indirizzo.</div>
+    <label>3 · File CSV destinatari</label>
+    <input type="file" id="m-csv" accept=".csv">
+    <div class="hint">Serve una colonna "email". Se c'e anche "nome" o "nome_attivita" viene usata per personalizzare.</div>
+    <label>4 · Oggetto</label>
+    <input type="text" id="m-oggetto" placeholder="Oggetto della mail">
+    <label>5 · Testo (HTML)</label>
+    <textarea id="m-corpo" placeholder="&lt;p&gt;Gentile {{nome}},&lt;/p&gt;"></textarea>
+    <div class="hint">Usa <code>{{nome}}</code> dove vuoi inserire il nome del destinatario.</div>
+    <label>6 · Allegato PDF (facoltativo)</label>
+    <input type="file" id="m-allegato" accept=".pdf">
+    <div style="margin-top:22px;display:flex;gap:10px">
+      <button class="btn-m btn-m-go" id="m-btn-go" onclick="mAvvia()">Avvia invio</button>
+      <button class="btn-m btn-m-stop" id="m-btn-stop" onclick="mFerma()" disabled>Interrompi</button>
+    </div>
+  </div>
+  <div class="m-card">
+    <div class="m-stats">
+      <div>Inviati<b id="m-s-inv">0</b></div>
+      <div>Errori<b id="m-s-err">0</b></div>
+      <div>Saltati<b id="m-s-salt">0</b></div>
+    </div>
+    <div id="m-log">In attesa...</div>
+  </div>
+</div>
+<script>
+let mJob=null, mTimer=null;
+async function mAvvia() {{
+  const c=document.getElementById('m-campagna').value.trim();
+  const o=document.getElementById('m-oggetto').value.trim();
+  const b=document.getElementById('m-corpo').value.trim();
+  const f=document.getElementById('m-csv').files[0];
+  if(!c||!o||!b||!f) {{ alert('Compila campagna, oggetto, testo e carica il CSV.'); return; }}
+  if(!confirm('Avviare l\\'invio della campagna "'+c+'"?')) return;
+  const fd=new FormData();
+  fd.append('campagna',c); fd.append('oggetto',o); fd.append('corpo',b);
+  fd.append('mittente',document.getElementById('m-mittente').value);
+  fd.append('csvfile',f);
+  const a=document.getElementById('m-allegato').files[0];
+  if(a) fd.append('allegato',a);
+  const r=await fetch('/area-riservata/mailer/avvia',{{method:'POST',body:fd}});
+  const d=await r.json();
+  if(!d.ok) {{ alert('Errore: '+d.error); return; }}
+  mJob=d.job_id;
+  document.getElementById('m-btn-go').disabled=true;
+  document.getElementById('m-btn-stop').disabled=false;
+  document.getElementById('m-log').textContent='Avviato. '+d.totale+' destinatari.\\n';
+  mTimer=setInterval(mAggiorna,2000);
+}}
+async function mAggiorna() {{
+  if(!mJob) return;
+  const r=await fetch('/area-riservata/mailer/stato/'+mJob);
+  const d=await r.json();
+  if(!d.ok) return;
+  document.getElementById('m-s-inv').textContent=d.inviati;
+  document.getElementById('m-s-err').textContent=d.errori;
+  document.getElementById('m-s-salt').textContent=d.saltati;
+  const l=document.getElementById('m-log');
+  l.textContent=d.log.join('\\n'); l.scrollTop=l.scrollHeight;
+  if(d.stato==='finito'||d.stato==='errore') {{
+    clearInterval(mTimer);
+    document.getElementById('m-btn-go').disabled=false;
+    document.getElementById('m-btn-stop').disabled=true;
+  }}
+}}
+async function mFerma() {{
+  if(!mJob) return;
+  if(!confirm('Interrompere l\\'invio?')) return;
+  await fetch('/area-riservata/mailer/stop/'+mJob,{{method:'POST'}});
+}}
+</script>
+{FOOTER_HTML}
+</body></html>""")
+
+@app.post("/area-riservata/mailer/avvia")
+async def mailer_avvia(
+    session_id: str = Cookie(default=None),
+    campagna: str = Form(...), oggetto: str = Form(...),
+    corpo: str = Form(...), mittente: str = Form(...),
+    csvfile: UploadFile = File(...), allegato: UploadFile = File(None),
+):
+    user = get_session(session_id)
+    if not user or not user.get("is_admin"):
+        return JSONResponse({"ok": False, "error": "Non autorizzato"}, status_code=403)
+    if not POSTMARK_TOKEN:
+        return JSONResponse({"ok": False, "error": "POSTMARK_TOKEN non configurato"})
+    if mittente not in MITTENTI:
+        return JSONResponse({"ok": False, "error": "Mittente non valido"})
+    destinatari = mailer_parse_csv(await csvfile.read())
+    if not destinatari:
+        return JSONResponse({"ok": False, "error": "Nessun indirizzo email valido nel CSV"})
+    all_data = None
+    if allegato and allegato.filename:
+        all_data = {"nome": allegato.filename, "contenuto": await allegato.read()}
+    job_id = "mail_" + secrets.token_hex(6)
+    MAILER_JOBS[job_id] = {"stato":"in corso","inviati":0,"errori":0,"saltati":0,
+                           "progresso":0,"totale":len(destinatari),"log":[],"stop":False}
+    threading.Thread(target=mailer_esegui,
+        args=(job_id, destinatari, oggetto, corpo, mittente, campagna, all_data),
+        daemon=True).start()
+    return JSONResponse({"ok": True, "job_id": job_id, "totale": len(destinatari)})
+
+@app.get("/area-riservata/mailer/stato/{job_id}")
+async def mailer_stato(job_id: str, session_id: str = Cookie(default=None)):
+    user = get_session(session_id)
+    if not user or not user.get("is_admin"):
+        return JSONResponse({"ok": False}, status_code=403)
+    job = MAILER_JOBS.get(job_id)
+    if not job:
+        return JSONResponse({"ok": False, "error": "Job non trovato"})
+    return JSONResponse({"ok":True,"stato":job["stato"],"inviati":job["inviati"],
+        "errori":job["errori"],"saltati":job["saltati"],"progresso":job["progresso"],
+        "totale":job["totale"],"log":job["log"][-200:]})
+
+@app.post("/area-riservata/mailer/stop/{job_id}")
+async def mailer_stop(job_id: str, session_id: str = Cookie(default=None)):
+    user = get_session(session_id)
+    if not user or not user.get("is_admin"):
+        return JSONResponse({"ok": False}, status_code=403)
+    if job_id in MAILER_JOBS:
+        MAILER_JOBS[job_id]["stop"] = True
+    return JSONResponse({"ok": True})
+
+@app.get("/area-riservata/mailer/storico")
+async def mailer_storico(session_id: str = Cookie(default=None)):
+    user = get_session(session_id)
+    if not user or not user.get("is_admin"):
+        return RedirectResponse("/login")
+    con = sqlite3.connect(MAILER_DB)
+    righe = con.execute("SELECT inviato_il,email,nome,campagna,mittente,esito,errore FROM invii ORDER BY id DESC").fetchall()
+    con.close()
+    out = _io.StringIO()
+    w = _csv.writer(out, delimiter=";")
+    w.writerow(["Data","Email","Nome","Campagna","Mittente","Esito","Errore"])
+    w.writerows(righe)
+    return Response(content=out.getvalue().encode("utf-8-sig"), media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=storico_invii_{datetime.now().strftime('%Y%m%d')}.csv"})
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
