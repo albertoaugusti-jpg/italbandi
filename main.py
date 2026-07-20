@@ -2248,28 +2248,116 @@ def mailer_inviati_oggi():
     except:
         return 0
 
-def mailer_parse_csv(contenuto):
+_MAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
+
+COL_EMAIL = ("email", "e-mail", "e mail", "mail", "indirizzo email", "posta elettronica", "pec")
+COL_NOME  = ("nome", "nome_attivita", "nome attivita", "nome attività", "azienda",
+             "ragione sociale", "attivita", "attività", "denominazione", "impresa", "cliente")
+
+def _mailer_riga_to_dest(low):
+    """Da un dizionario colonna->valore estrae email e nome."""
+    email = ""
+    for c in COL_EMAIL:
+        if low.get(c):
+            email = low[c].strip().lower(); break
+    if not email:
+        # nessuna colonna riconosciuta: cerca la prima cella che contiene una mail
+        for v in low.values():
+            m = _MAIL_RE.search(v or "")
+            if m:
+                email = m.group(0).lower(); break
+    if not email or "@" not in email:
+        return None
+    nome = ""
+    for c in COL_NOME:
+        if low.get(c):
+            nome = low[c].strip(); break
+    return {"email": email, "nome": nome}
+
+def mailer_parse_csv(contenuto, filename=""):
+    """Legge destinatari da CSV, TXT o Excel. Restituisce lista di dict email/nome."""
+    ext = (filename or "").lower().rsplit(".", 1)[-1] if "." in (filename or "") else ""
+    dest, visti = [], set()
+
+    def _aggiungi(d):
+        if d and d["email"] not in visti:
+            visti.add(d["email"]); dest.append(d)
+
+    # ── Excel ────────────────────────────────────────────────────────────
+    if ext in ("xlsx", "xlsm", "xls"):
+        try:
+            import openpyxl
+            wb = openpyxl.load_workbook(_io.BytesIO(contenuto), read_only=True, data_only=True)
+            ws = wb.active
+            righe = ws.iter_rows(values_only=True)
+            intest = None
+            for riga in righe:
+                valori = ["" if c is None else str(c).strip() for c in riga]
+                if not any(valori):
+                    continue
+                if intest is None:
+                    # la prima riga non vuota e' l'intestazione, se non contiene gia' una mail
+                    if not any(_MAIL_RE.search(v) for v in valori):
+                        intest = [v.strip().lower() for v in valori]
+                        continue
+                    intest = [f"col{i}" for i in range(len(valori))]
+                low = {}
+                for i, v in enumerate(valori):
+                    k = intest[i] if i < len(intest) else f"col{i}"
+                    low[k] = v
+                _aggiungi(_mailer_riga_to_dest(low))
+            wb.close()
+            return dest
+        except ImportError:
+            raise ValueError("Per leggere i file Excel serve la libreria openpyxl. "
+                             "Aggiungila a requirements.txt oppure salva il file come CSV.")
+        except Exception as e:
+            raise ValueError(
+                "Impossibile leggere questo file Excel. Riaprilo con Excel e salvalo "
+                "come 'Cartella di lavoro Excel (.xlsx)' oppure come CSV, poi riprova. "
+                f"(dettaglio tecnico: {e})")
+
+    # ── Testo (CSV / TXT) ────────────────────────────────────────────────
     try:
         testo = contenuto.decode("utf-8-sig")
     except UnicodeDecodeError:
-        testo = contenuto.decode("latin-1")
-    sep = ";" if testo.count(";") > testo.count(",") else ","
-    reader = _csv.DictReader(_io.StringIO(testo), delimiter=sep)
-    dest, visti = [], set()
-    for riga in reader:
-        low = {(k or "").strip().lower(): (v or "").strip() for k, v in riga.items()}
-        email = ""
-        for c in ("email", "e-mail", "mail", "indirizzo email"):
-            if low.get(c):
-                email = low[c].lower(); break
-        if not email or "@" not in email or email in visti:
-            continue
-        nome = ""
-        for c in ("nome", "nome_attivita", "nome attivita", "azienda", "ragione sociale", "attivita"):
-            if low.get(c):
-                nome = low[c]; break
-        visti.add(email)
-        dest.append({"email": email, "nome": nome})
+        try:
+            testo = contenuto.decode("latin-1")
+        except Exception:
+            raise ValueError("Formato file non riconosciuto. Usa CSV, TXT o Excel.")
+
+    prima_riga = testo.split("\n", 1)[0] if testo else ""
+    ha_separatori = (";" in prima_riga) or ("," in prima_riga) or ("\t" in prima_riga)
+
+    if ha_separatori:
+        conteggi = {";": testo.count(";"), ",": testo.count(","), "\t": testo.count("\t")}
+        sep = max(conteggi, key=conteggi.get)
+        reader = _csv.DictReader(_io.StringIO(testo), delimiter=sep)
+        campi = reader.fieldnames or []
+        # se l'intestazione contiene gia' una mail, non e' un'intestazione: rileggi senza
+        if any(_MAIL_RE.search(c or "") for c in campi):
+            for riga in _csv.reader(_io.StringIO(testo), delimiter=sep):
+                low = {f"col{i}": (v or "").strip() for i, v in enumerate(riga)}
+                _aggiungi(_mailer_riga_to_dest(low))
+        else:
+            for riga in reader:
+                low = {(k or "").strip().lower(): (v or "").strip()
+                       for k, v in riga.items() if k is not None}
+                _aggiungi(_mailer_riga_to_dest(low))
+    else:
+        # una mail per riga, eventualmente con nome accanto
+        for riga in testo.splitlines():
+            riga = riga.strip()
+            if not riga:
+                continue
+            m = _MAIL_RE.search(riga)
+            if not m:
+                continue
+            email = m.group(0).lower()
+            nome = riga.replace(m.group(0), "").strip(" \t,;<>-|")
+            if email not in visti:
+                visti.add(email); dest.append({"email": email, "nome": nome})
+
     return dest
 
 def mailer_esegui(job_id, destinatari, oggetto, corpo_html, mittente_key, campagna, allegato):
@@ -2400,9 +2488,10 @@ async def mailer_page(session_id: str = Cookie(default=None)):
     <label>2 · Nome campagna</label>
     <input type="text" id="m-campagna" placeholder="es. Bando Turismo Liguria 2026">
     <div class="hint">Evita di inviare due volte la stessa campagna allo stesso indirizzo.</div>
-    <label>3 · File CSV destinatari</label>
-    <input type="file" id="m-csv" accept=".csv">
-    <div class="hint">Serve una colonna "email". Se c'e anche "nome" o "nome_attivita" viene usata per personalizzare.</div>
+    <label>3 · File destinatari (CSV, Excel o TXT)</label>
+    <input type="file" id="m-csv" accept=".csv,.txt,.xlsx,.xlsm,.xls">
+    <div class="hint">Accetta CSV, Excel (.xlsx) o TXT. Serve una colonna "email" — oppure, in un TXT, una mail per riga.
+    Se c'e anche "nome", "azienda" o "ragione sociale" viene usata per personalizzare.</div>
     <label>4 · Oggetto</label>
     <input type="text" id="m-oggetto" placeholder="Oggetto della mail">
     <label>5 · Testo (HTML)</label>
@@ -2431,7 +2520,7 @@ async function mAvvia() {{
   const o=document.getElementById('m-oggetto').value.trim();
   const b=document.getElementById('m-corpo').value.trim();
   const f=document.getElementById('m-csv').files[0];
-  if(!c||!o||!b||!f) {{ alert('Compila campagna, oggetto, testo e carica il CSV.'); return; }}
+  if(!c||!o||!b||!f) {{ alert('Compila campagna, oggetto, testo e carica il file destinatari.'); return; }}
   if(!confirm('Avviare l\\'invio della campagna "'+c+'"?')) return;
   const fd=new FormData();
   fd.append('campagna',c); fd.append('oggetto',o); fd.append('corpo',b);
@@ -2487,9 +2576,16 @@ async def mailer_avvia(
         return JSONResponse({"ok": False, "error": "POSTMARK_TOKEN non configurato"})
     if mittente not in MITTENTI:
         return JSONResponse({"ok": False, "error": "Mittente non valido"})
-    destinatari = mailer_parse_csv(await csvfile.read())
+    try:
+        destinatari = mailer_parse_csv(await csvfile.read(), csvfile.filename or "")
+    except ValueError as e:
+        return JSONResponse({"ok": False, "error": str(e)})
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": f"Errore nella lettura del file: {e}"})
     if not destinatari:
-        return JSONResponse({"ok": False, "error": "Nessun indirizzo email valido nel CSV"})
+        return JSONResponse({"ok": False, "error":
+            "Nessun indirizzo email valido trovato nel file. "
+            "Controlla che ci sia una colonna 'email' oppure una mail per riga."})
     all_data = None
     if allegato and allegato.filename:
         all_data = {"nome": allegato.filename, "contenuto": await allegato.read()}
