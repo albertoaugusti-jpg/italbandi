@@ -2272,6 +2272,8 @@ def _mailer_riga_to_dest(low):
     for c in COL_NOME:
         if low.get(c):
             nome = low[c].strip(); break
+    # i nomi presi da celle multiriga possono contenere a-capo: appiattisci
+    nome = re.sub(r"\s+", " ", nome).strip()
     return {"email": email, "nome": nome}
 
 def mailer_parse_csv(contenuto, filename=""):
@@ -2326,24 +2328,49 @@ def mailer_parse_csv(contenuto, filename=""):
         except Exception:
             raise ValueError("Formato file non riconosciuto. Usa CSV, TXT o Excel.")
 
+    # normalizza i fine-riga: file Windows/Mac o celle con a-capo interni
+    # mandavano in errore il lettore CSV
+    testo = testo.replace("\r\n", "\n").replace("\r", "\n")
+
     prima_riga = testo.split("\n", 1)[0] if testo else ""
     ha_separatori = (";" in prima_riga) or ("," in prima_riga) or ("\t" in prima_riga)
 
     if ha_separatori:
         conteggi = {";": testo.count(";"), ",": testo.count(","), "\t": testo.count("\t")}
         sep = max(conteggi, key=conteggi.get)
-        reader = _csv.DictReader(_io.StringIO(testo), delimiter=sep)
-        campi = reader.fieldnames or []
-        # se l'intestazione contiene gia' una mail, non e' un'intestazione: rileggi senza
-        if any(_MAIL_RE.search(c or "") for c in campi):
-            for riga in _csv.reader(_io.StringIO(testo), delimiter=sep):
-                low = {f"col{i}": (v or "").strip() for i, v in enumerate(riga)}
-                _aggiungi(_mailer_riga_to_dest(low))
-        else:
-            for riga in reader:
-                low = {(k or "").strip().lower(): (v or "").strip()
-                       for k, v in riga.items() if k is not None}
-                _aggiungi(_mailer_riga_to_dest(low))
+        try:
+            reader = _csv.DictReader(_io.StringIO(testo, newline=""), delimiter=sep)
+            campi = reader.fieldnames or []
+            # se l'intestazione contiene gia' una mail, non e' un'intestazione: rileggi senza
+            if any(_MAIL_RE.search(c or "") for c in campi):
+                for riga in _csv.reader(_io.StringIO(testo, newline=""), delimiter=sep):
+                    low = {f"col{i}": (v or "").strip() for i, v in enumerate(riga)}
+                    _aggiungi(_mailer_riga_to_dest(low))
+            else:
+                for riga in reader:
+                    low = {(k or "").strip().lower(): (v or "").strip()
+                           for k, v in riga.items() if k is not None}
+                    _aggiungi(_mailer_riga_to_dest(low))
+        except Exception:
+            # CSV malformato (virgolette non chiuse, a-capo dentro le celle):
+            # ripiega sull'estrazione riga per riga
+            dest.clear(); visti.clear()
+            for riga in testo.splitlines():
+                if not riga.strip():
+                    continue
+                trovate = _MAIL_RE.findall(riga)
+                if not trovate:
+                    continue
+                celle = [c.strip().strip('"').strip() for c in riga.split(sep)]
+                nome = ""
+                for c in celle:
+                    if c and "@" not in c and not c.replace(" ", "").replace("+", "").isdigit():
+                        nome = c; break
+                for mail in trovate:
+                    email = mail.lower()
+                    if email not in visti:
+                        visti.add(email)
+                        dest.append({"email": email, "nome": nome if len(trovate) == 1 else ""})
     else:
         # una mail per riga, eventualmente con nome accanto
         for riga in testo.splitlines():
