@@ -168,7 +168,7 @@ PACCHETTI = {
     "pack_m": {"nome": "Pack M — 20 ricerche", "ricerche": 20, "prezzo_cent": 1200, "prezzo_str": "€12,00"},
     "pdf_1":  {"nome": "Scheda PDF bando",     "ricerche": 0,  "prezzo_cent": 100,  "prezzo_str": "€1,00"},
 }
-RICERCHE_FREE = 5
+RICERCHE_FREE = 10   # ricerche garantite a QUALSIASI utente registrato (alla 11a deve contattarci)
 
 def init_db():
     if _USE_PG:
@@ -788,32 +788,49 @@ async function cerca() {{
   const data = await resp.json();
   if (data.error === 'limite') {{
     const stripeAttivo = data.stripe_attivo;
-    const btnAcquisto = stripeAttivo ? `
-      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:16px">
-        <button onclick="acquistaPacchetto('pack_s')" style="background:#1A2A4A;color:#C9A84C;border:2px solid #C9A84C;padding:12px 20px;border-radius:8px;font-weight:700;font-size:0.88rem;cursor:pointer;text-align:center">
-          Pack S<br><span style="font-size:0.78rem;font-weight:400;color:#A8BEDD">10 ricerche · €7,50</span>
-        </button>
-        <button onclick="acquistaPacchetto('pack_m')" style="background:#C9A84C;color:#1A2A4A;border:2px solid #C9A84C;padding:12px 20px;border-radius:8px;font-weight:700;font-size:0.88rem;cursor:pointer;text-align:center">
-          Pack M<br><span style="font-size:0.78rem;font-weight:400">20 ricerche · €12,00</span>
-        </button>
-      </div>
-      <p style="font-size:0.78rem;color:#8899AA;margin-bottom:12px">Vuoi un piano personalizzato? Chiamaci.</p>` : `
-      <p style="color:#6A8AA8;font-size:0.88rem;line-height:1.6;margin-bottom:16px">Contatta Energelia per sbloccare ricerche aggiuntive.</p>`;
+    const boxPacchetti = stripeAttivo ? `
+      <div style="border-top:1px solid #E4EBF5;margin-top:22px;padding-top:16px">
+        <p style="font-size:0.78rem;color:#8899AA;margin-bottom:12px">Oppure prosegui subito in autonomia:</p>
+        <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+          <button onclick="acquistaPacchetto('pack_s')" style="background:#fff;color:#1A2A4A;border:1px solid #C8D4E4;padding:10px 18px;border-radius:8px;font-weight:700;font-size:0.82rem;cursor:pointer;text-align:center">
+            Pack S<br><span style="font-size:0.75rem;font-weight:400;color:#6A8AA8">10 ricerche · €7,50</span>
+          </button>
+          <button onclick="acquistaPacchetto('pack_m')" style="background:#fff;color:#1A2A4A;border:1px solid #C8D4E4;padding:10px 18px;border-radius:8px;font-weight:700;font-size:0.82rem;cursor:pointer;text-align:center">
+            Pack M<br><span style="font-size:0.75rem;font-weight:400;color:#6A8AA8">20 ricerche · €12,00</span>
+          </button>
+        </div>
+      </div>` : ``;
     document.getElementById('risultati').innerHTML = `
       <div style="background:#fff;border:1px solid #D0DCF0;border-left:4px solid #C9A84C;border-radius:8px;padding:28px 32px;text-align:center;max-width:560px;margin:40px auto">
-        <div style="font-size:2rem;margin-bottom:12px">&#128274;</div>
-        <h3 style="color:#1A2A4A;font-size:1.1rem;margin-bottom:8px">Hai esaurito le ricerche</h3>
-        <p style="color:#6A8AA8;font-size:0.88rem;line-height:1.6;margin-bottom:20px">${{data.messaggio}}</p>
-        ${{btnAcquisto}}
+        <div style="font-size:2rem;margin-bottom:12px">&#128222;</div>
+        <h3 style="color:#1A2A4A;font-size:1.1rem;margin-bottom:8px">Da qui in avanti ci pensiamo noi</h3>
+        <p style="color:#6A8AA8;font-size:0.88rem;line-height:1.6;margin-bottom:8px">${{data.messaggio}}</p>
+        <p style="color:#6A8AA8;font-size:0.88rem;line-height:1.6;margin-bottom:20px">
+          Contatta Energelia: ti aiutiamo a individuare i bandi giusti per la tua impresa e sblocchiamo le ricerche sul tuo account.
+        </p>
         <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-          <span style="background:#EEF2F8;color:#1A2A4A;padding:10px 22px;border-radius:6px;font-weight:700;font-size:0.9rem">010 7776530</span>
-          <button onclick="mostraCtaDownload()" style="background:#1A2A4A;color:#fff;border:none;padding:10px 22px;border-radius:6px;font-weight:700;font-size:0.9rem;cursor:pointer">Scrivici</button>
+          <a href="tel:0107776530" style="background:#C9A84C;color:#1A2A4A;text-decoration:none;padding:12px 26px;border-radius:6px;font-weight:700;font-size:0.95rem">&#9742; 010 7776530</a>
+          <button onclick="mostraCtaDownload()" style="background:#1A2A4A;color:#fff;border:none;padding:12px 26px;border-radius:6px;font-weight:700;font-size:0.95rem;cursor:pointer">Scrivici</button>
         </div>
+        ${{boxPacchetti}}
       </div>`;
     return;
   }}
   if (data.error) {{ document.getElementById('risultati').innerHTML = `<p style="color:#F87171">${{data.error}}</p>`; return; }}
-  document.getElementById('risultati-header').textContent = `${{data.totale}} bandi trovati`;
+  let _hdr = `${{data.totale}} bandi trovati`;
+  if (data.residue !== null && data.residue !== undefined) {{
+    _hdr += (data.residue > 0)
+      ? ` — ti restano ${{data.residue}} ricerche`
+      : ` — era la tua ultima ricerca: contattaci allo 010 7776530`;
+  }}
+  document.getElementById('risultati-header').textContent = _hdr;
+  if (data.totale === 0) {{
+    document.getElementById('risultati').innerHTML =
+      '<div style="background:#fff;border:1px solid #D0DCF0;border-radius:8px;padding:24px;text-align:center;max-width:560px;margin:30px auto;color:#6A8AA8;font-size:0.88rem;line-height:1.6">'
+      + 'Nessun bando trovato con questi criteri. Questa ricerca non ti e stata conteggiata: prova con una sola parola chiave, oppure allarga i filtri (stato "Tutti i bandi", nessun destinatario).'
+      + '</div>';
+    return;
+  }}
   _hits = {{}};
   data.bandi.forEach(b => {{ _hits[b.id] = b._hit; }});
   const CATS = {{
@@ -1446,48 +1463,50 @@ async def cerca(
     if not user:
         return JSONResponse({"error": "Non autenticato"}, status_code=401)
 
+    scala = False      # se True, a fine ricerca scaliamo 1 dal contatore
+    count, limite = 0, 999999
+
     if not user.get("is_admin"):
         con = sqlite3.connect(DB_PATH)
         row = con.execute("SELECT ricerche_count, COALESCE(account_type,'normale'), COALESCE(ricerche_acquistate,0), COALESCE(ricerche_limite,-2) FROM utenti WHERE id=?", (user["id"],)).fetchone()
+        con.close()
         count      = row[0] if row else 0
         atype      = row[1] if row else 'normale'
         acquistate = row[2] if row else 0
         rlimite    = row[3] if row else -2
 
+        illimitato = (rlimite == -1) or (atype == 'servizio')
+
         # Calcola tetto effettivo
-        if rlimite == -1:
-            # admin ha impostato illimitato su questo utente
+        if illimitato:
             limite = 999999
         elif rlimite > 0:
             # admin ha impostato un numero personalizzato
             limite = rlimite
             atype  = 'custom'
-        elif atype == 'servizio':
-            limite = 999999
         elif atype == 'pack':
             limite = acquistate
         else:
             limite = RICERCHE_FREE
 
-        if atype not in ('servizio',) and rlimite != -1 and count >= limite:
-            con.close()
-            if atype == 'normale':
-                msg = f"Hai esaurito le tue {RICERCHE_FREE} ricerche gratuite."
+        # GARANZIA: chiunque sia registrato ha almeno RICERCHE_FREE ricerche
+        if not illimitato:
+            limite = max(limite, RICERCHE_FREE)
+
+        if not illimitato and count >= limite:
+            if atype == 'pack':
+                msg = f"Hai esaurito le {limite} ricerche del tuo pacchetto."
             elif atype == 'custom':
                 msg = f"Hai esaurito le {limite} ricerche assegnate al tuo account."
             else:
-                msg = "Hai esaurito le ricerche del tuo pacchetto."
-            return JSONResponse({"error": "limite", "messaggio": msg, "stripe_attivo": STRIPE_ATTIVO}, status_code=429)
-        if rlimite != -1 and atype not in ('servizio',):
-            con.execute("UPDATE utenti SET ricerche_count = ricerche_count + 1 WHERE id=?", (user["id"],))
-        # Log evento
-        try:
-            ip = request.client.host if request.client else ""
-            con.execute("INSERT INTO eventi (utente_id,tipo,dettaglio,ip) VALUES (?,?,?,?)",
-                (user["id"], "ricerca", f"kw={keyword}|livello={livello}|regione={regione}|ben={beneficiari}", ip))
-        except: pass
-        con.commit()
-        con.close()
+                msg = f"Hai usato tutte le {limite} ricerche gratuite comprese nella registrazione."
+            return JSONResponse({
+                "error": "limite", "messaggio": msg,
+                "usate": count, "limite": limite,
+                "stripe_attivo": STRIPE_ATTIVO
+            }, status_code=429)
+
+        scala = not illimitato
 
     try:
         hits, totale = be.cerca_bandi_web(
@@ -1495,9 +1514,30 @@ async def cerca(
             regione=regione, beneficiari=beneficiari,
             max_hits=50, solo_titolo=(solo_titolo == "si"))
         bandi = [be.hit_to_card(h) for h in hits]
-        return JSONResponse({"bandi": bandi, "totale": totale})
     except Exception as e:
+        # Ricerca fallita: NON consuma nulla
         return JSONResponse({"error": str(e), "bandi": [], "totale": 0})
+
+    residue = None
+    # Si scala solo se la ricerca ha prodotto risultati: le ricerche a vuoto sono gratis
+    if scala and bandi:
+        try:
+            con = sqlite3.connect(DB_PATH)
+            con.execute("UPDATE utenti SET ricerche_count = ricerche_count + 1 WHERE id=?", (user["id"],))
+            try:
+                ip = request.client.host if request.client else ""
+                con.execute("INSERT INTO eventi (utente_id,tipo,dettaglio,ip) VALUES (?,?,?,?)",
+                    (user["id"], "ricerca", f"kw={keyword}|livello={livello}|regione={regione}|ben={beneficiari}|hits={len(bandi)}", ip))
+            except: pass
+            con.commit(); con.close()
+            count += 1
+        except Exception as e:
+            print(f"[RICERCHE] update contatore fallito: {e}", flush=True)
+
+    if scala:
+        residue = max(0, limite - count)
+
+    return JSONResponse({"bandi": bandi, "totale": totale, "residue": residue})
 
 # ── Debug beneficiari ────────────────────────────────────────────────────────
 @app.get("/api/debug-hit")
