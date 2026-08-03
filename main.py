@@ -342,7 +342,32 @@ def get_session(session_id: str = None):
     if not session_id: return None
     return SESSIONS.get(session_id)
 
-CSS_BASE = """
+# ── Google Analytics 4 ────────────────────────────────────────────────────────
+# Proprieta' GA4 "ItalBandi" (account ALBERTO). Il tag rispetta il consenso
+# cookie: analytics_storage parte DENIED e passa a GRANTED solo se l'utente ha
+# scelto "Accetta tutti" nel banner (localStorage cookie_consent === 'all').
+GA_MEASUREMENT_ID = os.environ.get("GA_MEASUREMENT_ID", "G-D8W5XFMB51")
+
+GA_TAG = f"""
+<script async src="https://www.googletagmanager.com/gtag/js?id={GA_MEASUREMENT_ID}"></script>
+<script>
+window.dataLayer = window.dataLayer || [];
+function gtag(){{dataLayer.push(arguments);}}
+gtag('consent','default',{{
+  'ad_storage':'denied','ad_user_data':'denied',
+  'ad_personalization':'denied','analytics_storage':'denied'
+}});
+try {{
+  if (localStorage.getItem('cookie_consent') === 'all') {{
+    gtag('consent','update',{{'analytics_storage':'granted'}});
+  }}
+}} catch(e) {{}}
+gtag('js', new Date());
+gtag('config', '{GA_MEASUREMENT_ID}');
+</script>
+""" if GA_MEASUREMENT_ID else ""
+
+CSS_BASE = GA_TAG + """
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'Segoe UI', Arial, sans-serif; background: #E8EEF7; color: #1A2A3A; min-height: 100vh;
@@ -539,10 +564,16 @@ if (!localStorage.getItem('cookie_consent')) {
 function accettaCookie() {
   localStorage.setItem('cookie_consent','all');
   document.getElementById('cookie-banner').style.display = 'none';
+  if (typeof gtag === 'function') {
+    gtag('consent','update',{'analytics_storage':'granted'});
+  }
 }
 function rifiutaCookie() {
   localStorage.setItem('cookie_consent','minimal');
   document.getElementById('cookie-banner').style.display = 'none';
+  if (typeof gtag === 'function') {
+    gtag('consent','update',{'analytics_storage':'denied'});
+  }
 }
 </script>"""
 
@@ -1072,6 +1103,7 @@ async def splash(session_id: str = Cookie(default=None)):
     return HTMLResponse(f"""<!DOCTYPE html><html lang="it"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <title>ItalBandi</title>
+{GA_TAG}
 <style>
 *{{margin:0;padding:0;box-sizing:border-box}}
 html,body{{width:100%;height:100%;overflow:hidden;background:#0A1628}}
