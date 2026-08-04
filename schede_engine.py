@@ -62,7 +62,9 @@ MET_H    = 17 * mm          # fascia metriche
 FOOT_H   = 13 * mm
 GAP_TOP  = 5.6 * mm         # aria fra fascia e primo blocco
 
-TEL      = "010 7776530"
+# ── Dati societari: unico punto di verita' per testata, CTA e footer ─────────
+TEL       = "010 7776530"
+EMAIL     = "info@energelia.it"
 INDIRIZZO = "Piazza Giacomo Matteotti 2, interno 3C · 16123 Genova"
 FOOT_TXT_L = ("<b>Energelia S.r.l.</b> · Consulenza in Finanza Agevolata · "
               "Bandi &amp; Incentivi · Sostenibilita'<br/>"
@@ -321,11 +323,11 @@ def _panel(titolo, voci, q, S, kind, width):
 
 def _cta(content, q, S):
     left = Paragraph(str(content.get("cta_testo", "")), S["cta"])
-    tel = str(content.get("cta_tel", "")).replace("Tel.", "").strip()
+    tel = TEL
     right = [
         Paragraph('<font size="%.1f" color="#FFFFFF"><b>%s</b></font>' % (q["cta_tel"], tel),
                   S["cta_c"]),
-        Paragraph(str(content.get("cta_email", "")), S["cta_c"]),
+        Paragraph(EMAIL, S["cta_c"]),
     ]
     t = Table([[left, right]], colWidths=[CW * 0.68, CW * 0.32])
     t.setStyle(TableStyle([
@@ -390,6 +392,19 @@ def _prepare_logo(logo_path):
         return None, None
     base = os.path.splitext(str(logo_path))[0]
     emb, wrd = base + "_emblema.png", base + "_wordmark.png"
+    # su hosting con filesystem di sola lettura (Render, container) i ritagli
+    # vanno in cartella temporanea, altrimenti il logo sparirebbe in silenzio
+    cartella = os.path.dirname(os.path.abspath(str(logo_path)))
+    if not os.access(cartella, os.W_OK):
+        import tempfile
+        tmpd = os.path.join(tempfile.gettempdir(), "energelia_logo")
+        try:
+            os.makedirs(tmpd, exist_ok=True)
+            nome = os.path.basename(base)
+            emb = os.path.join(tmpd, nome + "_emblema.png")
+            wrd = os.path.join(tmpd, nome + "_wordmark.png")
+        except Exception:
+            pass
     if os.path.exists(emb) and os.path.exists(wrd):
         return emb, wrd
     try:
