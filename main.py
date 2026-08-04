@@ -1748,17 +1748,23 @@ def _esegui_job(job_id, hit, testo_ce=""):
 
         base = os.path.dirname(os.path.abspath(__file__))
         logo_energelia = None
-        for nome_logo in ["Logo_Energelia_realistico.png", "Logo Energelia realistico.png", "logo_energelia.png"]:
+        for nome_logo in ["nuovo_logo_Energelia.png", "nuovo logo Energelia.png",
+                          "Logo_Energelia_realistico.png", "Logo Energelia realistico.png",
+                          "logo_energelia.png"]:
             candidato = os.path.join(base, nome_logo)
             if os.path.exists(candidato):
                 logo_energelia = candidato
                 break
+        if not logo_energelia:
+            # in locale il PNG puo' stare nella cartella di gestione del sito
+            logo_energelia = base
+        print(f"[PDF] logo: {logo_energelia}", flush=True)
 
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
             tmp_path = tmp.name
 
         print(f"[PDF] generazione avviata", flush=True)
-        ENGINE.generate(content, tmp_path, None)
+        ENGINE.generate(content, tmp_path, logo_energelia)
         print(f"[PDF] generazione completata", flush=True)
 
         titolo_corto = re.sub(r'[^\w\s]', '', titolo)[:40].strip().replace(' ', '_')
