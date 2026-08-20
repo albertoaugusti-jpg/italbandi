@@ -26,6 +26,7 @@ Requisiti: reportlab, pypdf (opzionale), pillow (opzionale, per il logo)
 """
 
 import os
+import re
 
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
@@ -59,6 +60,7 @@ HDR1_H   = 30 * mm          # testata pagina 1
 HDR2_H   = 17 * mm          # testata pagine successive
 RULE_H   = 0.7 * mm         # filetto oro
 MET_H    = 17 * mm          # fascia metriche
+TITLE_MAXLINES = 3          # righe max per il titolo in testata
 FOOT_H   = 13 * mm
 GAP_TOP  = 5.6 * mm         # aria fra fascia e primo blocco
 
@@ -173,6 +175,116 @@ def _wrap(text, font, size, maxw, maxlines):
     if cur and len(lines) < maxlines:
         lines.append(cur)
     return lines or [str(text)]
+
+
+def _wrap_all(text, font, size, maxw):
+    """Come _wrap ma SENZA limite di righe: non perde mai parole."""
+    words, lines, cur = str(text).split(), [], ""
+    for w in words:
+        trial = (cur + " " + w).strip()
+        if stringWidth(trial, font, size) <= maxw or not cur:
+            cur = trial
+        else:
+            lines.append(cur)
+            cur = w
+    if cur:
+        lines.append(cur)
+    return lines or [str(text)]
+
+
+def _wrap_fit(text, font, size_max, maxw, maxlines, size_min=8.4, step=0.2):
+    """Trova il corpo piu' grande che fa stare il titolo INTERO in 'maxlines'
+    righe. Restituisce (righe, corpo). Solo se nemmeno al corpo minimo il testo
+    entra si tronca, e comunque all'ultima parola intera con ellissi."""
+    text = " ".join(str(text).split())
+    if not text:
+        return [], size_max
+    s = size_max
+    while s >= size_min:
+        lines = _wrap_all(text, font, s, maxw)
+        if len(lines) <= maxlines:
+            return lines, s
+        s -= step
+    lines = _wrap_all(text, font, size_min, maxw)[:maxlines]
+    if lines:
+        last = lines[-1]
+        while last and stringWidth(last + " ...", font, size_min) > maxw:
+            last = last.rsplit(" ", 1)[0] if " " in last else last[:-1]
+        lines[-1] = last + " ..."
+    return lines, size_min
+
+
+def _cut_words(text, font, size, maxw, suffix=" ..."):
+    """Accorcia su una riga sola tagliando all'ultima parola intera."""
+    t = " ".join(str(text).split())
+    if stringWidth(t, font, size) <= maxw:
+        return t
+    while t and stringWidth(t + suffix, font, size) > maxw:
+        t = t.rsplit(" ", 1)[0] if " " in t else t[:-1]
+    return (t + suffix) if t else ""
+
+
+_MET_MAXCH = 18
+_RE_DATA = re.compile(r"\b(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{2,4})\b")
+
+
+def _metric_value(label, valore):
+    """Riduce il valore dei box metriche a un dato da colpo d'occhio.
+    Il testo esteso resta nelle card: qui serve solo il numero chiave.
+      "80% fondo perduto delle spese ammissibili"  -> "80%"
+      "EUR 100.000 (EUR 110.000 con premialita')"  -> "EUR 100.000"
+      "2 milioni di euro"                          -> "EUR 2 MLN"
+    """
+    v = " ".join(str(valore or "").split())
+    if not v or v.strip(" .-\u2013\u2014") == "":
+        return "\u2014"
+    # ripulisce eventuali troncature gia' fatte a monte
+    v = re.sub(r"\s*(?:\u2026|\.{3})\s*$", "", v).strip()
+    v = re.sub(r"\s*\($", "", v).strip()
+    lab = str(label or "")
+
+    e_data = re.search(r"scaden|apertur|chiusur|termin|\bdata\b", lab, re.I)
+    md = _RE_DATA.search(v)
+    if md and e_data:
+        return "%s/%s/%s" % md.groups()
+
+    # percentuale (anche intervallo), purche' all'inizio del valore
+    mr = re.match(r"^\D{0,14}?(\d{1,3})\s*%\D{0,18}?(\d{1,3})\s*%", v)
+    if mr:
+        return "%s%%-%s%%" % mr.groups()
+    ms = re.match(r"^\D{0,14}?(\d{1,3})\s*%", v)
+    if ms:
+        return ms.group(1) + "%"
+
+    # milioni / miliardi
+    for rx, suf in ((r"([\d]+(?:[.,][\d]+)?)\s*(?:mln|milion\w*)\b", "MLN"),
+                    (r"([\d]+(?:[.,][\d]+)?)\s*(?:mld|miliard\w*)\b", "MLD")):
+        m = re.search(rx, v, re.I)
+        if m:
+            n = m.group(1).replace(",", ".")
+            try:
+                n = "%g" % float(n)
+            except ValueError:
+                pass
+            return "EUR %s %s" % (n, suf)
+
+    # primo importo in euro
+    m = re.search(r"(?:EUR|\u20ac|euro)\s*([\d][\d.,]*)", v, re.I)
+    if m:
+        return "EUR " + m.group(1).rstrip(".,")
+    m = re.search(r"\b(\d{1,3}(?:\.\d{3})+(?:,\d{2})?)\b", v)
+    if m:
+        return "EUR " + m.group(1)
+
+    if md:
+        return "%s/%s/%s" % md.groups()
+
+    if len(v) <= _MET_MAXCH:
+        return v
+    out = v[:_MET_MAXCH]
+    if " " in out and not v[_MET_MAXCH:_MET_MAXCH + 1].isspace():
+        out = out.rsplit(" ", 1)[0]
+    return out.rstrip(" ,;.:-") or v[:_MET_MAXCH]
 
 
 # ── FLOWABLE: barra titolo card ───────────────────────────────────────────────
@@ -509,10 +621,24 @@ def _draw_header(c, content, emb, wrd, first, page_no, n_pages):
 
     if first:
         eyebrow = content.get("eyebrow") or ""
-        title = str(content.get("titolo", ""))
-        sub = str(content.get("sottotitolo", ""))
+        title = " ".join(str(content.get("titolo", "")).split())
+        sub = " ".join(str(content.get("sottotitolo", "")).split())
         refl = content.get("refline") or ""
-        y = cy + hh * 0.30
+
+        # Il titolo non viene mai tagliato: si cerca il corpo piu' grande che
+        # lo faccia stare per intero in un massimo di TITLE_MAXLINES righe.
+        lines, fs = _wrap_fit(title, "Helvetica-Bold", 15.0, avail, TITLE_MAXLINES)
+
+        # Blocco testo centrato verticalmente nella testata
+        blk = (5.6 * mm if eyebrow else 1.5 * mm)
+        blk += fs * 1.16 * max(1, len(lines)) + 1.6 * mm
+        if sub:
+            blk += 4.4 * mm
+        if refl:
+            blk += 3.0 * mm
+        y = cy + max(blk / 2 - 2.0 * mm, hh * 0.18)
+        y = min(y, cy + hh * 0.34)
+
         if eyebrow:
             _tracked(c, tx, y, eyebrow.upper(), "Helvetica-Bold",
                      _fit(c, eyebrow.upper(), "Helvetica-Bold", 6.4, avail, 1.5),
@@ -520,11 +646,6 @@ def _draw_header(c, content, emb, wrd, first, page_no, n_pages):
             y -= 5.6 * mm
         else:
             y -= 1.5 * mm
-        lines = _wrap(title, "Helvetica-Bold", 15.0, avail, 2)
-        fs = 15.0 if len(lines) > 1 else _fit(c, title, "Helvetica-Bold", 15.0, avail)
-        if len(lines) > 1:
-            fs = min(13.2, fs)
-            lines = _wrap(title, "Helvetica-Bold", fs, avail, 2)
         c.setFont("Helvetica-Bold", fs)
         c.setFillColor(WHITE)
         for ln in lines:
@@ -533,6 +654,9 @@ def _draw_header(c, content, emb, wrd, first, page_no, n_pages):
         y -= 1.6 * mm
         if sub:
             sfs = _fit(c, sub, "Helvetica", 9.5, avail)
+            if sfs < 7.4:
+                sfs = 7.4
+                sub = _cut_words(sub, "Helvetica", sfs, avail)
             c.setFont("Helvetica", sfs)
             c.setFillColor(colors.HexColor("#C9D6E8"))
             c.drawString(tx, y, sub)
@@ -541,14 +665,21 @@ def _draw_header(c, content, emb, wrd, first, page_no, n_pages):
             rfs = _fit(c, refl, "Helvetica", 6.2, avail)
             _tracked(c, tx, y, refl, "Helvetica", rfs, colors.HexColor("#93A8C4"), 0.25)
     else:
-        title = str(content.get("titolo", ""))
-        fs = _fit(c, title, "Helvetica-Bold", 10.6, avail - 24 * mm)
+        title = " ".join(str(content.get("titolo", "")).split())
+        wmax = avail - 24 * mm
+        fs = _fit(c, title, "Helvetica-Bold", 10.6, wmax)
+        if fs <= 7.6:
+            fs = 7.6
+            title = _cut_words(title, "Helvetica-Bold", fs, wmax)
         c.setFont("Helvetica-Bold", fs)
         c.setFillColor(WHITE)
         c.drawString(tx, cy + 0.6 * mm, title)
-        sub = str(content.get("sottotitolo", ""))
+        sub = " ".join(str(content.get("sottotitolo", "")).split())
         if sub:
-            sfs = _fit(c, sub, "Helvetica", 7.4, avail - 24 * mm)
+            sfs = _fit(c, sub, "Helvetica", 7.4, wmax)
+            if sfs <= 6.0:
+                sfs = 6.0
+                sub = _cut_words(sub, "Helvetica", sfs, wmax)
             c.setFont("Helvetica", sfs)
             c.setFillColor(colors.HexColor("#C9D6E8"))
             c.drawString(tx, cy - 3.4 * mm, sub)
@@ -578,8 +709,11 @@ def _draw_metrics(c, metriche):
         lab = str(m.get("label", "")).upper()
         _tracked(c, tx, top - 5.4 * mm, lab, "Helvetica-Bold",
                  _fit(c, lab, "Helvetica-Bold", 5.6, maxw, 1.3), MUTED, 1.3)
-        val = " ".join(str(m.get("valore", "")).split())
+        val = _metric_value(m.get("label", ""), m.get("valore", ""))
         vfs = _fit(c, val, "Helvetica-Bold", 12.0, maxw)
+        if vfs <= 7.8:
+            vfs = 7.8
+            val = _cut_words(val, "Helvetica-Bold", vfs, maxw)
         c.setFont("Helvetica-Bold", vfs)
         c.setFillColor(NAVY)
         c.drawString(tx, top - 10.6 * mm, val)
