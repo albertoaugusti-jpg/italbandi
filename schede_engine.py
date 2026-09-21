@@ -788,8 +788,14 @@ def _layout(content, scale, log=None):
 
     tail = sum(h for _p_, h in panels) + (q["card_gap"] * len(panels)) + cta_h + q["card_gap"]
 
-    # distribuzione: partizione ottima dell'elenco ordinato di card in
-    # colonne contigue, minimizzando il riempimento massimo relativo.
+    # distribuzione: riempimento greedy dell'elenco ordinato di card,
+    # colonna per colonna. Si passa alla colonna successiva solo quando
+    # la prossima card non ci entra piu': cosi' nessuna colonna resta
+    # sguarnita mentre c'e' ancora contenuto in coda (a differenza di una
+    # spartizione che minimizzi solo il riempimento massimo, che a parita'
+    # di risultato puo' scegliere un taglio squilibrato e lasciare vuota
+    # meta' di una pagina). Ogni colonna tiene comunque almeno una card,
+    # anche se la supera, per non perdere contenuto in silenzio.
     def capacities(npages):
         caps = []
         for i in range(2 * npages):
@@ -801,38 +807,26 @@ def _layout(content, scale, log=None):
         return caps
 
     def partition(caps):
-        """DP: ritorna (riempimento_massimo, [indici di taglio])."""
-        n, k = len(heights), len(caps)
-        if n == 0:
-            return 0.0, [0] * (k + 1)
-        pre = [0.0]
-        for h in heights:
-            pre.append(pre[-1] + h)
-
-        def blocco(i, j):                      # card i..j-1
-            if j <= i:
-                return 0.0
-            return pre[j] - pre[i] + q["card_gap"] * (j - i - 1)
-
-        INF = float("inf")
-        dp = [[INF] * (n + 1) for _ in range(k + 1)]
-        cut = [[0] * (n + 1) for _ in range(k + 1)]
-        dp[0][0] = 0.0
-        for c in range(1, k + 1):
-            for i in range(n + 1):
-                for j in range(i + 1):
-                    if dp[c - 1][j] == INF:
-                        continue
-                    val = max(dp[c - 1][j], blocco(j, i) / caps[c - 1])
-                    if val < dp[c][i]:
-                        dp[c][i] = val
-                        cut[c][i] = j
-        tagli, i = [n], n
-        for c in range(k, 0, -1):
-            i = cut[c][i]
-            tagli.append(i)
-        tagli.reverse()
-        return dp[k][n], tagli
+        """Ritorna (riempimento_massimo, [indici di taglio])."""
+        n = len(heights)
+        tagli, idx = [0], 0
+        fills = []
+        for cap in caps:
+            used, prese = 0.0, 0
+            while idx < n:
+                extra = (q["card_gap"] if prese else 0.0) + heights[idx]
+                if prese == 0 or used + extra <= cap:
+                    used += extra
+                    idx += 1
+                    prese += 1
+                else:
+                    break
+            fills.append(used / cap if cap else 0.0)
+            tagli.append(idx)
+        fill_max = max(fills) if fills else 0.0
+        if idx < n:                     # card avanzate: non ci sta a queste pagine
+            fill_max = max(fill_max, 999.0)
+        return fill_max, tagli
 
     def build(npages):
         caps = capacities(npages)
@@ -950,10 +944,9 @@ def generate(content, output_path, logo_path=None, log_fn=None, strict=False):
                 break
         return best_l
 
-    # preferenza: meno pagine possibile, purche' il corpo resti leggibile
+    # preferenza: contenuto pieno, usando quante pagine servono (nel limite
+    # del tetto) prima di rinunciare a qualunque voce
     tetto = max(2, int(content.get("max_pagine", 2)))
-    # Sempre una pagina se il contenuto ci sta senza scendere sotto FS_MIN.
-    # Due pagine solo quando non c'e' alternativa leggibile.
     def sfoltisci(cont, quante):
         """Toglie le ultime `quante` voci di ogni sezione."""
         d = dict(cont)
@@ -965,11 +958,13 @@ def generate(content, output_path, logo_path=None, log_fn=None, strict=False):
         return d
 
     originale, best = content, None
-    # Per ogni numero di pagine, prima il contenuto pieno, poi via l'ultima
-    # voce di ogni sezione: meglio una voce in meno che una pagina in piu'.
-    for npg in range(1, tetto + 1):
-        for taglio in (0, 1, 2):
-            content = originale if taglio == 0 else sfoltisci(originale, taglio)
+    # Prima il contenuto pieno su tutte le pagine disponibili (1, poi 2, ...
+    # fino al tetto): meglio una pagina in piu' che una voce in meno. Si
+    # comincia a sfoltire solo se anche al tetto massimo di pagine il
+    # contenuto pieno non ci sta a un corpo leggibile.
+    for taglio in (0, 1, 2):
+        content = originale if taglio == 0 else sfoltisci(originale, taglio)
+        for npg in range(1, tetto + 1):
             cand = search(npg)
             if cand:
                 best = cand
