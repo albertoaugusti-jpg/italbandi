@@ -229,15 +229,6 @@ def _chiedi_a_claude(titolo, url_bando, stato_bando):
 
     url_info = f"\nURL della pagina del bando: {url_bando}" if url_bando else ""
 
-    is_prossima = "prossima" in stato_bando.lower()
-    istruz_prossima = """
-5. Questo bando è "in prossima apertura": il testo ufficiale potrebbe non essere ancora
-   pubblicato. Cerca ANCHE le edizioni precedenti (2022, 2023, 2024) dello stesso bando
-   per trovare dotazione, intensità e contributo max storici, e usali come stima indicando
-   esplicitamente "(stima ed. prec.)" — ad es. "EUR 5 MLN (stima ed. prec.)".
-6. MAI restituire null per dotazione, intensita o contributo_max se esiste anche solo
-   un'edizione precedente con dati comparabili — usa sempre una stima contestuale.""" if is_prossima else ""
-
     prompt = f"""Sei un esperto di finanza agevolata italiana di Energelia S.r.l.
 
 BANDO DA ANALIZZARE:
@@ -248,14 +239,14 @@ ISTRUZIONI:
 1. Usa web_search per cercare questo bando e trovare informazioni complete
 2. Se trovi un link a documentazione ufficiale (decreto, PDF su .gov.it o .regione.it), leggilo
 3. Raccogli TUTTI i dati numerici reali: importi, percentuali, date, limiti
-4. Non usare mai "verificare sul bando" o placeholder — solo dati reali trovati{istruz_prossima}
+4. Usa SOLO dati trovati nelle fonti. Se un dato non lo trovi, restituisci null: non stimare, non dedurre, non usare edizioni precedenti
 
 Genera la scheda in JSON con questa struttura ESATTA:
 {{
   "sottotitolo": "Ente erogatore · riferimento normativo · tipo agevolazione · {stato_bando}",
-  "dotazione": "importo totale fondo es. EUR 5 MLN; per bandi in apertura usa stima da edizioni precedenti come 'EUR 5 MLN (stima ed. prec.)'; null SOLO se zero informazioni storiche",
-  "intensita": "es. 60% fondo perduto; per bandi in apertura deduci dal tipo (es. 'ca. 50% fondo perduto (stima)'); null SOLO se davvero impossibile stimare",
-  "contributo_max": "es. EUR 150.000; per bandi in apertura stima da edizioni precedenti; null SOLO se zero informazioni",
+  "dotazione": "importo totale fondo es. EUR 5 MLN (null se non trovato)",
+  "intensita": "es. 60% fondo perduto (null se non trovato)",
+  "contributo_max": "es. EUR 150.000 (null se non trovato)",
   "data_scadenza": "DD/MM/YYYY se nota; per bandi in apertura scrivi 'In apertura' o la data prevista se trovata",
   "ente_finalita": ["Ente erogatore preciso", "Obiettivo del bando", "Riferimento normativo"],
   "chi_partecipa": ["Beneficiari principali", "Requisiti chiave", "Eventuali esclusioni"],
@@ -321,7 +312,7 @@ def _pulisci(lst):
 
 
 def _sintetizza(val, max_len=16):
-    if not val or str(val).strip() in ("—","-","","null","None"): return "—"
+    if not val or str(val).strip() in ("—","-","","null","None"): return "Da definire"
     v = str(val).strip()
     # Normalizza testi lunghi sullo stato bando in qualcosa di leggibile in 16 chars
     if "prossima" in v.lower() or "apertura" in v.lower() and len(v) > max_len:
@@ -426,25 +417,23 @@ Titolo: {titolo}
 Stato: {stato_bando}
 
 TESTO DEL BANDO:
-{testo[:8000]}
+{testo[:20000]}
 
 REGOLE OBBLIGATORIE:
 - Ogni bullet deve essere una frase COMPLETA e SPECIFICA (80-160 caratteri) con dati reali
-- MAI scrivere "verificare sul bando", "non specificato", "vedi bando"
+- Ogni numero (importi, percentuali, soglie, date) deve comparire nel TESTO DEL BANDO: se non c'e', usa null o ometti il bullet
 - Usa <b>etichetta:</b> per evidenziare etichette dentro i bullet (non per l'intero bullet)
-- Minimo 3 bullet per sezione, ideale 4
-- Se un dato non è esplicito nel testo, DEDUCILO dal tipo di bando e dal contesto (normativa, ente, categoria beneficiari, programma PR/PNRR/L.488 ecc.)
-- MAI lasciare array vuoti
+- Massimo 4 bullet per sezione: meglio un bullet in meno che un bullet inventato
+- Se un dato non è esplicito nel testo NON dedurlo e NON stimarlo: scrivi "da definire nel provvedimento attuativo" o omettilo
 - Le metriche devono essere sintetiche (max 16 caratteri per riga)
 - tabella_contributi: usa null se non ci sono tipologie/scaglioni distinti
-- Per bandi "in prossima apertura": dotazione, intensita e contributo_max NON devono essere null — se il testo non riporta cifre, usa valori tipici del tipo di bando (es. "ca. 40% fondo perduto (stima)" o "EUR 5 MLN (stima)"); null è accettato solo per data_scadenza se davvero non indicata
 
 Genera la scheda in JSON con questa struttura ESATTA:
 {{
   "sottotitolo": "Ente erogatore · riferimento normativo · tipo agevolazione · {stato_bando}",
-  "dotazione": "es. EUR 45 MLN; se non nel testo, stima dal contesto come 'ca. EUR 10 MLN (stima)'; null SOLO se impossibile anche per deduzione",
-  "intensita": "es. 35% fondo perduto; se non nel testo, deduci dal tipo come 'ca. 40-50% fp (stima)'; null SOLO se impossibile",
-  "contributo_max": "es. EUR 250.000; se non nel testo, deduci come 'ca. EUR 200.000 (stima)'; null SOLO se impossibile",
+  "dotazione": "es. EUR 45 MLN (null se non presente nel testo)",
+  "intensita": "es. 35% fondo perduto (null se non presente nel testo)",
+  "contributo_max": "es. EUR 250.000 (null se non presente nel testo)",
   "data_scadenza": "DD/MM/YYYY se presente; per bandi in prossima apertura scrivi 'In apertura' se la data non è indicata",
   "ente_finalita": [
     "Nome ente erogatore con riferimento normativo preciso",
