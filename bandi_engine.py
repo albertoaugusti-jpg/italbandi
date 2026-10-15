@@ -246,7 +246,7 @@ Genera la scheda in JSON con questa struttura ESATTA:
   "sottotitolo": "Ente erogatore · riferimento normativo · tipo agevolazione · {stato_bando}",
   "dotazione": "importo totale fondo es. EUR 5 MLN (null se non trovato)",
   "intensita": "es. 60% fondo perduto (null se non trovato)",
-  "contributo_max": "es. EUR 150.000 (null se non trovato)",
+  "contributo_max": "massimo contributo per beneficiario, NON l'investimento massimo: es. EUR 150.000 (null se non trovato)",
   "data_scadenza": "DD/MM/YYYY se nota; per bandi in apertura scrivi 'In apertura' o la data prevista se trovata",
   "ente_finalita": ["Ente erogatore preciso", "Obiettivo del bando", "Riferimento normativo"],
   "chi_partecipa": ["Beneficiari principali", "Requisiti chiave", "Eventuali esclusioni"],
@@ -273,8 +273,8 @@ Rispondi SOLO con JSON valido. Nessun testo prima o dopo."""
                          "anthropic-version": "2023-06-01",
                          "content-type": "application/json"},
                 json={"model":    "claude-haiku-4-5-20251001",
-                      "max_tokens": 2500,
-                      "tools":    [{"type": "web_search_20250305", "name": "web_search"}],
+                      "max_tokens": 6000,
+                      "tools":    [{"type": "web_search_20250305", "name": "web_search", "max_uses": 3}],
                       "messages": [{"role": "user", "content": prompt}]},
                 timeout=120,
             )
@@ -312,7 +312,7 @@ def _pulisci(lst):
 
 
 def _sintetizza(val, max_len=16):
-    if not val or str(val).strip() in ("—","-","","null","None"): return "Da definire"
+    if not val or str(val).strip() in ("—","-","","null","None") or str(val).strip().lower().startswith("da definire"): return "Da definire"
     v = str(val).strip()
     # Normalizza testi lunghi sullo stato bando in qualcosa di leggibile in 16 chars
     if "prossima" in v.lower() or "apertura" in v.lower() and len(v) > max_len:
@@ -433,7 +433,7 @@ Genera la scheda in JSON con questa struttura ESATTA:
   "sottotitolo": "Ente erogatore · riferimento normativo · tipo agevolazione · {stato_bando}",
   "dotazione": "es. EUR 45 MLN (null se non presente nel testo)",
   "intensita": "es. 35% fondo perduto (null se non presente nel testo)",
-  "contributo_max": "es. EUR 250.000 (null se non presente nel testo)",
+  "contributo_max": "massimo contributo per beneficiario, NON l'investimento massimo: es. EUR 250.000 (null se non presente nel testo)",
   "data_scadenza": "DD/MM/YYYY se presente; per bandi in prossima apertura scrivi 'In apertura' se la data non è indicata",
   "ente_finalita": [
     "Nome ente erogatore con riferimento normativo preciso",
