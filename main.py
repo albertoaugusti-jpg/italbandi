@@ -27,6 +27,10 @@ if _extra_routers:
 
 # ── Cache bandi via SQLite ────────────────────────────────────────────────────
 CACHE_DB = "/data/bandi_cache.db"
+
+# Arricchimento schede: solo bandi in prossima apertura con dati insufficienti
+ARRICCHISCI_PROSSIMA_APERTURA = True   # False = comportamento di prima
+TIMEOUT_ARRICCHIMENTO = 40             # secondi massimi per il tentativo con ricerca web
 os.makedirs("/data", exist_ok=True)
 
 def init_cache_db():
@@ -1709,8 +1713,34 @@ async def stripe_webhook(request: Request):
 # ── Job system asincrono ──────────────────────────────────────────────────────
 JOBS = {}
 
+def _caselle_vuote(content):
+    return sum(1 for m in content.get("metriche", [])[:3] if m.get("valore") in ("Da definire", "—", "", None))
+
+
+def _arricchisci_con_web(hit, content):
+    """Prova la scheda via web_search entro TIMEOUT_ARRICCHIMENTO; se non migliora, tiene quella originale."""
+    risultato = {}
+    def _run():
+        try:
+            risultato["c"] = be.genera_scheda_web(hit)[0]
+        except Exception as e:
+            print(f"[ARRICCHIMENTO] errore: {e}", flush=True)
+    t = threading.Thread(target=_run, daemon=True)
+    t.start(); t.join(TIMEOUT_ARRICCHIMENTO)
+    nuovo = risultato.get("c")
+    if not nuovo:
+        print(f"[ARRICCHIMENTO] nessun risultato entro {TIMEOUT_ARRICCHIMENTO}s, tengo la scheda originale", flush=True)
+        return content
+    if _caselle_vuote(nuovo) < _caselle_vuote(content):
+        print("[ARRICCHIMENTO] scheda web con piu' dati, uso quella", flush=True)
+        return nuovo
+    print("[ARRICCHIMENTO] scheda web non migliore, tengo la scheda originale", flush=True)
+    return content
+
+
 def _esegui_job(job_id, hit, testo_ce=""):
     try:
+        da_web = False
         object_id = hit.get("objectID", "")
 
         # Controlla se testo_ce è contenuto reale del bando (non pagina login/redirect)
@@ -1741,6 +1771,12 @@ def _esegui_job(job_id, hit, testo_ce=""):
                 else:
                     print(f"[CACHE MISS] {object_id} — uso web_search", flush=True)
                 content, titolo = be.genera_scheda_web(hit)
+                da_web = True
+
+        if (ARRICCHISCI_PROSSIMA_APERTURA and not da_web
+                and "prossima" in (hit.get("scadenza_testo") or "").lower()
+                and _caselle_vuote(content) >= 2):
+            content = _arricchisci_con_web(hit, content)
 
         api_error = content.pop("_api_error", "")
         if api_error:
